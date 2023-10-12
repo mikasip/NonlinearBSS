@@ -2,7 +2,7 @@
 % Please edit documentation in R/VAE.R
 \name{VAE}
 \alias{VAE}
-\title{Trains a variational autoencoder (VAE) using the input data.}
+\title{Variational Autoencoder}
 \usage{
 VAE(
   data,

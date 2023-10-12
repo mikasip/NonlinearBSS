@@ -2,7 +2,7 @@
 % Please edit documentation in R/helpers.R
 \name{mix_data_over_determinated}
 \alias{mix_data_over_determinated}
-\title{Creates overdeterminated mixed data based on the input data.}
+\title{Create Overdeterminated Mixed Data}
 \usage{
 mix_data_over_determinated(data, dim_mixed, n_layers = 1, nonlinearity = "elu")
 }

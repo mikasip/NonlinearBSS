@@ -1,4 +1,5 @@
-#' Trains an identifiable variational autoencoder (iVAE) using the input data.
+#' Identifiable Variational Autoencoder
+#' @description Trains an identifiable variational autoencoder (iVAE) using the input data.
 #' @import tensorflow
 #' @import keras
 #' @importFrom Rdpack reprompt
@@ -310,293 +311,64 @@ iVAE <- function(
   return(iVAE_object)
 }
 
-#' Trains an identifiable variational autoencoder (iVAE) using the input data
-#' and the segmented spatial domain as auxiliary data.
-#' @import tensorflow
-#' @import keras
-#' @importFrom Rdpack reprompt
-#' @param data A matrix with P columns and N rows containing the observed data.
-#' @param locations A matrix with spatial locations.
-#' @param segment_sizes A vector providing sizes for segments.
-#' The dimension should match the spatial dimenstion.
-#' @param joint_segment_inds A vector indicating which segments.
-#' are considered jointly. See more in details.
-#' @param latent_dim A latent dimension for iVAE.
-#' @param test_inds A vector giving the indices of the data, which
-#' are used as a test data.
-#' @param epochs A number of epochs for iVAE training.
-#' @param batch_size A batch size for iVAE training.
-#' @param ... Further parameters for \code{iVAE}.
-#' @return
-#' An object of class iVAESpatial, inherits from class iVAE.
-#' Additionally, the object has a property
-#' \code{spatial_dim} which gives the dimension of the given locations.
-#' For more details, see [iVAE()].
+#' Plotting an Object of Class iVAE
+#' @description \code{plot} method for the class \code{iVAE}.
+#' @param obj Object of class \code{iVAE}
+#' @param IC_inds A vector providing indices of ICs which are plotted.
+#' @param sample_inds A vector providing sample indices which are plotted.
+#' @param unscaled A boolean determining if the unscaled ICs are plotted
+#' or not.
+#' @param type linetype for plot.default function.
+#' @param xlab xlab for the bottom most plot.
+#' @param ylabs A vector providing ylab params for the plots.
+#' @param colors A vector providing colors for the plots.
+#' @param oma A \code{oma} parameter for the function \code{par}.
+#' See \code{\link[base]{par}}
+#' @param mar A \code{mar} parameter for the function \code{par}.
+#' See \code{\link[base]{par}}
+#' @param ... Further parameters for all plot.default methods.
+#' @returns
+#' No return value.
 #' @details
-#' The method creates the auxiliary data as spatial segments based on
-#' the given input parameters.
-#' The vector \code{segment_sizes} defines the size of the segments for
-#' each spatial dimension separately. The segmentation is then created
-#' based on the \code{joint_segment_inds}, which defines dimensions are
-#' considered jointly. For example, \code{joint_segment_inds = c(1, 1)}
-#' for two dimensional spatial data, defines that the dimensions are
-#' considered jointly. This means that the auxiliary variable is vector
-#' giving the two dimensional segment that the observations belongs in.
-#' For \code{joint_segment_inds = c(1, 2)}, the auxiliary variable would
-#' consist of two vectors, first giving one dimensional segment that
-#' the observation belongs in the first spatial dimension, and the second
-#' giving one dimensional segment that the observation belongs in the
-#' secoun spatial dimension. All dimensions are considered jointly as
-#' default.
-#'
-#' After the segmentation, the method calls the function \code{iVAE}
-#' using the created auxiliary variables.
-#'
-#' @references \insertAllCited{}
+#' Plots the components provided by the parameter \code{IC_inds}. A sample
+#' subset can be provided by parameter \code{sample_inds}.
 #' @seealso
-#' [iVAE()]
+#' \code{\link{iVAE}}
 #' @examples
-#' # TODO
+#' p <- 3
+#' n_segments <- 10
+#' n_per_segment <- 100
+#' n <- n_segments * n_per_segment
+#' latent_data <- matrix(NA, ncol = p, nrow = n)
+#' aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+#' # Create artificial data with variance and mean varying over the segments.
+#' for (i in 1:p) {
+#'   for (seg in 1:n_segments) {
+#'     start_ind <- (seg - 1) * n_per_segment + 1
+#'     end_ind <- seg * n_per_segment
+#'     latent_data[start_ind:end_ind, i] <- rnorm(
+#'       n_per_segment,
+#'       runif(1, -5, 5), runif(1, 0.1, 5)
+#'     )
+#'   }
+#' }
+#' mixed_data <- mix_data(latent_data, 2, "elu")
+#' res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+#' plot(res)
 #' @export
-iVAE_spatial <- function(
-    data, locations, segment_sizes,
-    joint_segment_inds = rep(1, length(segment_sizes)), latent_dim,
-    test_inds = NULL, epochs, batch_size, ...) {
-  n <- nrow(data)
-  location_mins <- apply(locations, 2, min)
-  locations_zero <- sweep(locations, 2, location_mins, "-")
-  location_maxs <- apply(locations_zero, 2, max)
-  aux_data <- matrix(nrow = n, ncol = 0)
-  for (i in unique(joint_segment_inds)) {
-    inds <- which(joint_segment_inds == i)
-    labels <- rep(0, n)
-    lab <- 1
-    loop_dim <- function(j, sample_inds) {
-      ind <- inds[j]
-      seg_size <- segment_sizes[ind]
-      seg_limits <- seq(0, (location_maxs[ind]), seg_size)
-      for (coord in seg_limits) {
-        cur_inds <- which(locations[sample_inds, ind] >= coord &
-          locations[sample_inds, ind] < coord + seg_size)
-        cur_sample_inds <- sample_inds[cur_inds]
-        if (j == length(inds)) {
-          labels[cur_sample_inds] <<- lab
-          lab <<- lab + 1
-        } else {
-          loop_dim(j + 1, cur_sample_inds)
-        }
-      }
-    }
-    loop_dim(1, 1:n)
-    labels <- as.numeric(as.factor(labels)) # To ensure that
-    # empty segments are reduced
-    aux_data <- cbind(aux_data, model.matrix(~ 0 + as.factor(labels)))
-  }
-  test_data <- NULL
-  if (!is.null(test_inds)) {
-    test_data <- data[test_inds, ]
-    test_aux_data <- aux_data[test_inds, ]
-  }
-  resVAE <- iVAE(data, aux_data, latent_dim,
-    test_data = test_data,
-    test_data_aux = test_aux_data, epochs = epochs, batch_size = batch_size, ...
-  )
-  class(resVAE) <- c("iVAEspatial", class(resVAE))
-  resVAE$spatial_dim <- dim(locations)[2]
-  return(resVAE)
-}
-
-iVAE_spatial_ar <- function(
-    data, locations, segment_sizes,
-    joint_segment_inds = rep(1, length(segment_sizes)), n_prev_obs = 1,
-    latent_dim, epochs, batch_size, ...) {
-  n <- nrow(data)
-  p <- ncol(data)
-  location_mins <- apply(locations, 2, min)
-  locations_zero <- sweep(locations, 2, location_mins, "-")
-  location_maxs <- apply(locations_zero, 2, max)
-  aux_data <- matrix(nrow = n, ncol = 0)
-  for (i in unique(joint_segment_inds)) {
-    inds <- which(joint_segment_inds == i)
-    labels <- rep(0, n)
-    lab <- 1
-    loop_dim <- function(j, sample_inds) {
-      ind <- inds[j]
-      seg_size <- segment_sizes[ind]
-      seg_limits <- seq(0, (location_maxs[ind]), seg_size)
-      for (coord in seg_limits) {
-        cur_inds <- which(locations[sample_inds, ind] >= coord &
-          locations[sample_inds, ind] < coord + seg_size)
-        cur_sample_inds <- sample_inds[cur_inds]
-        if (j == length(inds)) {
-          labels[cur_sample_inds] <<- lab
-          lab <<- lab + 1
-        } else {
-          loop_dim(j + 1, cur_sample_inds)
-        }
-      }
-    }
-    loop_dim(1, 1:n)
-    labels <- as.numeric(as.factor(labels)) # To ensure
-    # that empty segments are reduced
-    aux_data <- cbind(aux_data, model.matrix(~ 0 + as.factor(labels)))
-  }
-  for (i in 1:n_prev_obs) {
-    aux_i <- data
-    for (j in 1:i) {
-      aux_i <- rbind(c(rep(0, p)), aux_i[1:(n - 1), ])
-    }
-    aux_data <- cbind(aux_data, aux_i)
-  }
-
-  resVAE <- iVAE(data, aux_data, latent_dim,
-    epochs = epochs, batch_size = batch_size, ...
-  )
-  class(resVAE) <- c("iVAEspatial", class(resVAE))
-  resVAE$spatial_dim <- dim(locations)[2]
-  return(resVAE)
-}
-
-
-gaussian_kernel <- function(d) {
-  exp(-d^2)
-}
-
-wendland_kernel <- function(d) {
-  (1 - d)^6 * (35 * d^2 + 18 * d + 3) / 3
-}
-
-iVAE_radial_basis <- function(
-    data, locations, latent_dim,
-    num_basis = c(10, 19, 37), kernel = "gaussian", epochs, batch_size, ...) {
-  kernel <- match.arg(kernel, c("gaussian", "wendland"))
-  spatial_dim <- dim(locations)[2]
-  N <- dim(data)[1]
-  min_coords <- apply(locations, 2, min)
-  locations_new <- sweep(locations, 2, min_coords, "-")
-  max_coords <- apply(locations_new, 2, max)
-  locations_new <- sweep(locations_new, 2, max_coords, "/")
-  knots_1d <- sapply(num_basis, FUN = function(i) {
-    seq(0 + (1 / (i + 2)), 1 - (1 / (i + 2)), length.out = i)
-  })
-  phi_all <- matrix(0, ncol = 0, nrow = N)
-  for (i in 1:length(num_basis)) {
-    theta <- 1 / num_basis[i] * 2.5
-    knot_list <- replicate(spatial_dim, knots_1d[[i]], simplify = FALSE)
-    knots <- as.matrix(expand.grid(knot_list))
-    phi <- cdist(locations_new, knots) / theta
-    dist_leq_1 <- phi[which(phi <= 1)]
-    dist_g_1_ind <- which(phi > 1)
-    phi[which(phi <= 1)] <- switch(kernel,
-      gaussian = gaussian_kernel(dist_leq_1),
-      wendland = wendland_kernel(dist_leq_1)
-    )
-    phi[dist_g_1_ind] <- 0
-    # ind_0 <- which(colSums(phi) == 0)
-    # if (length(ind_0) > 0) {
-    #  phi <- phi[, -which(colSums(phi) == 0)]
-    # }
-    phi_all <- cbind(phi_all, phi)
-  }
-  aux_data <- phi_all
-  resVAE <- iVAE(data, aux_data, latent_dim,
-    epochs = epochs,
-    batch_size = batch_size, get_prior_means = FALSE, ...
-  )
-  class(resVAE) <- c("iVAEradial", class(resVAE))
-  resVAE$min_coords <- min_coords
-  resVAE$max_coords <- max_coords
-  resVAE$num_basis <- num_basis
-  # resVAE$phi_maxs <- phi_maxs
-  resVAE$spatial_dim <- dim(locations)[2]
-  return(resVAE)
-}
-
-iVAE_radial_spatio_temporal <- function(
-    data, spatial_locations, time_points,
-    latent_dim, spatial_dim = 2, spatial_basis = c(5, 9, 12),
-    temporal_basis = c(10, 15, 45), spatial_kernel = "gaussian", epochs, batch_size, ...) {
-  spatial_kernel <- match.arg(spatial_kernel, c("gaussian", "wendland"))
-  N <- dim(data)[1]
-  min_coords <- apply(spatial_locations, 2, min)
-  locations_new <- sweep(spatial_locations, 2, min_coords, "-")
-  max_coords <- apply(locations_new, 2, max)
-  locations_new <- sweep(locations_new, 2, max_coords, "/")
-  knots_1d <- sapply(spatial_basis, FUN = function(i) {
-    seq(0 + (1 / (i + 2)), 1 - (1 / (i + 2)), length.out = i)
-  })
-  phi_all <- matrix(0, ncol = 0, nrow = N)
-  kappa <- abs(temporal_basis[2] - temporal_basis[1])
-  for (i in seq_along(spatial_basis)) {
-    theta <- 1 / spatial_basis[i] * 2.5
-    knot_list <- replicate(spatial_dim, knots_1d[[i]], simplify = FALSE)
-    knots <- as.matrix(expand.grid(knot_list))
-    phi <- cdist(locations_new, knots) / theta
-    dist_leq_1 <- phi[which(phi <= 1)]
-    dist_g_1_ind <- which(phi > 1)
-    phi[which(phi <= 1)] <- switch(spatial_kernel,
-      gaussian = gaussian_kernel(dist_leq_1),
-      wendland = wendland_kernel(dist_leq_1)
-    )
-    phi[dist_g_1_ind] <- 0
-    # ind_0 <- which(colSums(phi) == 0)
-    # if (length(ind_0) > 0) {
-    #  phi <- phi[, -which(colSums(phi) == 0)]
-    # }
-    phi_all <- cbind(phi_all, phi)
-  }
-  temp_knots <- unlist(sapply(temporal_basis, FUN = function(i) {
-    seq(min(time_points), max(time_points), length.out = i)
-  }))
-  for (knot in temp_knots) {
-    phi <- exp(-0.5 * (time_points - knot)^2 / kappa^2)
-    phi_all <- cbind(phi_all, phi)
-  }
-  aux_data <- phi_all
-  resVAE <- iVAE(data, aux_data, latent_dim,
-    epochs = epochs,
-    batch_size = batch_size, get_prior_means = FALSE, ...
-  )
-  class(resVAE) <- c("iVAEradial", class(resVAE))
-  resVAE$min_coords <- min_coords
-  resVAE$max_coords <- max_coords
-  resVAE$spatial_basis <- spatial_basis
-  # resVAE$phi_maxs <- phi_maxs
-  resVAE$spatial_dim <- spatial_dim
-  return(resVAE)
-}
-
-
-iVAE_coords <- function(data, locations, latent_dim, epochs, batch_size, ...) {
-  n <- nrow(data)
-  location_mins <- apply(locations, 2, min)
-  locations_zero <- sweep(locations, 2, location_mins, "-")
-  location_maxs <- apply(locations_zero, 2, max)
-  locations_norm <- sweep(locations_zero, 2, location_maxs, "/")
-  aux_data <- locations_norm
-
-  resVAE <- iVAE(data, aux_data, latent_dim,
-    epochs = epochs,
-    batch_size = batch_size, ...
-  )
-  class(resVAE) <- c("iVAEcoords", class(resVAE))
-  resVAE$spatial_dim <- dim(locations)[2]
-  resVAE$location_mins <- location_mins
-  resVAE$location_maxs <- location_maxs
-  return(resVAE)
-}
-
+#' @method plot iVAE
 plot.iVAE <- function(
-    obj, IC_inds = 1:obj$call_params$latent_dim,
-    sample_inds = 1:dim(obj$ICs)[1], unscaled = FALSE, type = "l",
-    xlab = "", ylabs = c(), colors = c(), oma = c(1, 1, 0, 0), mar = c(2, 2, 1, 1), ...) {
+    x, IC_inds = 1:x$call_params$latent_dim,
+    sample_inds = 1:dim(x$IC)[1], unscaled = FALSE, type = "l",
+    xlab = "", ylabs = c(), colors = c(), oma = c(1, 1, 0, 0),
+    mar = c(2, 2, 1, 1), ...) {
   oldpar <- par(no.readonly = TRUE)
   on.exit(par(oldpar))
 
   if (unscaled) {
-    ICs <- obj$IC_unscaled[sample_inds, IC_inds]
+    ICs <- x$IC_unscaled[sample_inds, IC_inds]
   } else {
-    ICs <- obj$IC[sample_inds, IC_inds]
+    ICs <- x$IC[sample_inds, IC_inds]
   }
   p <- dim(ICs)[2]
   par(
@@ -622,6 +394,39 @@ plot.iVAE <- function(
   }
 }
 
+#' Printing an Object of Class iVAE
+#' @description \code{print} method for the class \code{iVAE}.
+#' @param x Object of class \code{iVAE}
+#' @param ... Further parameters for \code{print.default}.
+#' @returns
+#' No return value.
+#' @details
+#' Prints details about the object of class \code{iVAE}.
+#' @seealso
+#' \code{\link{iVAE}}
+#' @examples
+#' p <- 3
+#' n_segments <- 10
+#' n_per_segment <- 100
+#' n <- n_segments * n_per_segment
+#' latent_data <- matrix(NA, ncol = p, nrow = n)
+#' aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+#' # Create artificial data with variance and mean varying over the segments.
+#' for (i in 1:p) {
+#'   for (seg in 1:n_segments) {
+#'     start_ind <- (seg - 1) * n_per_segment + 1
+#'     end_ind <- seg * n_per_segment
+#'     latent_data[start_ind:end_ind, i] <- rnorm(
+#'       n_per_segment,
+#'       runif(1, -5, 5), runif(1, 0.1, 5)
+#'     )
+#'   }
+#' }
+#' mixed_data <- mix_data(latent_data, 2, "elu")
+#' res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+#' print(res)
+#' @export
+#' @method print iVAE
 print.iVAE <- function(x, ...) {
   cat("Call:", x$call)
   cat("\nData name:", x$DNAME)
@@ -634,6 +439,39 @@ print.iVAE <- function(x, ...) {
   cat("\nError sigma: ", x$call_params$error_dist_sigma)
 }
 
+#' Summarize an Object of Class iVAE
+#' @description \code{summary} method for the class \code{iVAE}.
+#' @param object Object of class \code{iVAE}
+#' @param ... Further parameters for \code{summary.default}.
+#' @returns
+#' No return value.
+#' @details
+#' Summarizes the object of class \code{iVAE}.
+#' @seealso
+#' \code{\link{iVAE}}
+#' @examples
+#' p <- 3
+#' n_segments <- 10
+#' n_per_segment <- 100
+#' n <- n_segments * n_per_segment
+#' latent_data <- matrix(NA, ncol = p, nrow = n)
+#' aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+#' # Create artificial data with variance and mean varying over the segments.
+#' for (i in 1:p) {
+#'   for (seg in 1:n_segments) {
+#'     start_ind <- (seg - 1) * n_per_segment + 1
+#'     end_ind <- seg * n_per_segment
+#'     latent_data[start_ind:end_ind, i] <- rnorm(
+#'       n_per_segment,
+#'       runif(1, -5, 5), runif(1, 0.1, 5)
+#'     )
+#'   }
+#' }
+#' mixed_data <- mix_data(latent_data, 2, "elu")
+#' res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+#' summary(res)
+#' @export
+#' @method summary iVAE
 summary.iVAE <- function(object, ...) {
   cat("Call:", object$call)
   cat("\nData name:", object$DNAME)
@@ -646,6 +484,52 @@ summary.iVAE <- function(object, ...) {
   cat("\nError sigma: ", object$call_params$error_dist_sigma)
 }
 
+#' Predict Method for an Object of Class iVAE
+#' @description \code{predict} method for the class \code{iVAE}.
+#' @param object Object of class \code{iVAE}
+#' @param newdata A matrix containing the new data. It can contain
+#' new observations or new latent component. Choose the parameter
+#' \code{IC_to_data} accordingly.
+#' @param aux_data A matrix containing auxiliary data for new observations.
+#' Should not be provided if \code{IC_to_data} is \code{TRUE}.
+#' @param IC_to_data A boolean defining if the prediction is done from
+#' latent components to observations or from observations to latent
+#' components. If \code{IC_to_data = TRUE}, \code{newdata} should contain
+#' new latent components. Otherwise it should contain the new observations.
+#' @param ... Further parameters for \code{predict.default}.
+#' @returns
+#' A matrix containing the predictions.
+#' @details
+#' Summarizes the object of class \code{iVAE}.
+#' @seealso
+#' \code{\link{iVAE}}
+#' @examples
+#' p <- 3
+#' n_segments <- 10
+#' n_per_segment <- 100
+#' n <- n_segments * n_per_segment
+#' latent_data <- matrix(NA, ncol = p, nrow = n)
+#' aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+#' # Create artificial data with variance and mean varying over the segments.
+#' for (i in 1:p) {
+#'   for (seg in 1:n_segments) {
+#'     start_ind <- (seg - 1) * n_per_segment + 1
+#'     end_ind <- seg * n_per_segment
+#'     latent_data[start_ind:end_ind, i] <- rnorm(
+#'       n_per_segment,
+#'       runif(1, -5, 5), runif(1, 0.1, 5)
+#'     )
+#'   }
+#' }
+#' mixed_data <- mix_data(latent_data, 2, "elu")
+#' res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+#' new_data <- matrix(rnorm(p * 2), nrow = 2)
+#' new_aux_data <- rbind(c(1, rep(0, n_segments - 1)), c(1, rep(0, n_segments - 1)))
+#' pred_ICs <- predict(res, new_data, new_aux_data)
+#' new_ICs <- matrix(rnorm(p * 2), nrow = 2)
+#' pred_obs <- predict(res, new_ICs, IC_to_data = TRUE)
+#' @export
+#' @method predict iVAE
 predict.iVAE <- function(
     object, newdata, aux_data = NULL,
     IC_to_data = FALSE, ...) {
@@ -709,52 +593,79 @@ predict.iVAE <- function(
   }
 }
 
-predict.iVAEradial <- function(
-    object, newdata, locations = NULL,
-    IC_to_data = FALSE, ...) {
-  if (IC_to_data) {
-    res <- predict.iVAE(object, newdata, IC_to_data = TRUE)
-    return(res)
-  }
-  locations_new <- sweep(locations, 2, object$min_coords, "-")
-  locations_new <- sweep(locations_new, 2, object$max_coords, "/")
-  knots_1d <- sapply(object$num_basis, FUN = function(i) {
-    seq(0, 1, length.out = i)
-  })
-  phi_all <- matrix(0, ncol = 0, nrow = dim(newdata)[1])
-  for (i in seq_along(object$num_basis)) {
-    theta <- 1 / object$num_basis[i] * 2.5
-    knot_list <- replicate(object$spatial_dim, knots_1d[[i]], simplify = FALSE)
-    knots <- as.matrix(expand.grid(knot_list))
-    phi <- cdist(locations_new, knots) / theta
-    dist_leq_1 <- phi[which(phi <= 1)]
-    dist_g_1_ind <- which(phi > 1)
-    phi[which(phi <= 1)] <- (1 - dist_leq_1)^6 *
-      (35 * dist_leq_1^2 + 18 * dist_leq_1 + 3) / 3
-    phi[dist_g_1_ind] <- 0
-    # ind_0 <- which(colSums(phi) == 0)
-    # if (length(ind_0) > 0) {
-    #  phi <- phi[, -which(colSums(phi) == 0)]
-    # }
-    phi_all <- cbind(phi_all, phi)
-  }
-  # phi_scaled <- sweep(phi_all, 2, object$phi_maxs, "/")
-  aux_data <- phi_all
-  res <- predict.iVAE(object, newdata, aux_data)
-  return(res)
+#' Save iVAE Object with Trained Tensorflow Models
+#' @description Saves \code{iVAE} object including the trained
+#' tensorflow models.
+#' @inheritDotParams base::save -list
+#' @import keras
+#' @param object Object of class \code{iVAE}.
+#' @param tf_model_dir Directory, where the tensorflow.
+#' models should be saved.
+#' @param file Filename for saving the \code{iVAE} object.
+#' @return
+#' No return value.
+#' @details
+#' The function saves iVAE object correctly by saving also the trained
+#' tensorflow models. In a new session, the trained model is available
+#' by loading the \code{iVAE} object using the function
+#' \code{\link{load_with_tf}}.
+#' @seealso
+#' \code{\link{load_with_tf}}
+#' @examples
+#' p <- 3
+#' n_segments <- 10
+#' n_per_segment <- 100
+#' n <- n_segments * n_per_segment
+#' latent_data <- matrix(NA, ncol = p, nrow = n)
+#' aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+#' # Create artificial data with variance and mean varying over the segments.
+#' for (i in 1:p) {
+#'   for (seg in 1:n_segments) {
+#'     start_ind <- (seg - 1) * n_per_segment + 1
+#'     end_ind <- seg * n_per_segment
+#'     latent_data[start_ind:end_ind, i] <- rnorm(
+#'       n_per_segment,
+#'       runif(1, -5, 5), runif(1, 0.1, 5)
+#'     )
+#'   }
+#' }
+#' mixed_data <- mix_data(latent_data, 2, "elu")
+#' res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+#' save_with_tf(res, "res_dir", "res_obj.RData")
+#' loaded_obj <- load_with_tf("res_obj.RData")
+#' new_ICs <- matrix(rnorm(p * 2), nrow = 2)
+#' pred_obs <- predict(loaded_obj, new_ICs, IC_to_data = TRUE)
+#' @export
+save_with_tf <- function(object, tf_model_dir, file, ...) {
+  object$tf_model_dir <- tf_model_dir
+  save_model_tf(object$encoder, paste0(tf_model_dir, "/encoder"))
+  save_model_tf(object$decoder, paste0(tf_model_dir, "/decoder"))
+  save_model_tf(object$prior_mean_model, paste0(tf_model_dir, "/prior_mean_model"))
+  save(object, file, ...)
+  print("The model is saved successfully. Use the method
+  load_with_tf to load the model correctly.")
 }
 
-predict.iVAEcoords <- function(
-    object, newdata,
-    locations = NULL, IC_to_data = FALSE, ...) {
-  if (IC_to_data) {
-    res <- predict.iVAE(object, newdata, IC_to_data = TRUE)
-    return(res)
-  }
-  locations_new <- sweep(locations, 2, object$location_mins, "-")
-  locations_new <- sweep(locations_new, 2, object$location_maxs, "/")
 
-  aux_data <- locations_new
-  res <- predict.iVAE(object, newdata, aux_data)
-  return(res)
+#' Load iVAE Object with Trained Tensorflow Models
+#' @description Loads \code{iVAE} object including the trained
+#' tensorflow models.
+#' @import keras
+#' @param file Filename of the saved \code{iVAE} object.
+#' @return
+#' A loaded \code{iVAE} object with restored trained Tensorflow models.
+#' @details
+#' The function loads iVAE object correctly by loading also the trained
+#' tensorflow models.
+#' @seealso
+#' \code{\link{save_with_tf}}
+#' @inherit save_with_tf examples
+#' @export
+load_with_tf <- function(file, ...) {
+  obj_name <- load(file)
+  object <- get(obj_name)
+  object$encoder <- load_model_tf(paste0(object$tf_model_dir, "/encoder"))
+  object$decoder <- load_model_tf(paste0(object$tf_model_dir, "/decoder"))
+  object$prior_mean_model <- load_model_tf(paste0(object$tf_model_dir, "/prior_mean_model"))
+  return(object)
 }

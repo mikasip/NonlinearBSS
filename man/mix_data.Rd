@@ -2,7 +2,7 @@
 % Please edit documentation in R/helpers.R
 \name{mix_data}
 \alias{mix_data}
-\title{Creates mixed data based on the input data.}
+\title{Create Mixed Data}
 \usage{
 mix_data(data, n_layers = 1, nonlinearity = "elu")
 }

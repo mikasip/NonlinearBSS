@@ -2,7 +2,7 @@
 % Please edit documentation in R/helpers.R
 \name{absolute_mean_correlation}
 \alias{absolute_mean_correlation}
-\title{Calculates absolute mean correlation coefficient}
+\title{Absolute Mean Correlation Coefficient}
 \usage{
 absolute_mean_correlation(cor_mat)
 }

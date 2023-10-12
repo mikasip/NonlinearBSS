@@ -2,11 +2,11 @@
 % Please edit documentation in R/helpers.R
 \name{generate_nonstationary_spatial_data_by_segments}
 \alias{generate_nonstationary_spatial_data_by_segments}
-\title{Generates nonstationary Gaussian spatial data with
-changing mean and variance by segments.}
+\title{Generate Nonstationary Spatial Data by Segments}
 \usage{
 generate_nonstationary_spatial_data_by_segments(
   n,
+  p,
   coords,
   n_segments,
   random_mean = TRUE
@@ -14,6 +14,8 @@ generate_nonstationary_spatial_data_by_segments(
 }
 \arguments{
 \item{n}{A sample size.}
+
+\item{p}{A dimension of the data.}
 
 \item{coords}{A 2 x n matrix containing the spatial coordinates.}
 
@@ -26,7 +28,7 @@ for each segment.}
 }
 \value{
 An object with the following properties
-\item{data}{A vector containing the generated data}
+\item{data}{A p x n matrix containing the generated data.}
 \item{labels}{A vector giving numerical labels for each data point.
 The data points with same label belong in the same segment.}
 \item{coords}{A 2 x n matrix with the spatial coordinates.}
@@ -48,5 +50,5 @@ If \code{random_mean = FALSE} the constant zero mean is used for every segment.
 }
 \examples{
 coords <- matrix(runif(2000, 0, 1), ncol = 2)
-data <- generate_nonstationary_spatial_data_by_segments(1000, coords, 10)
+data_obj <- generate_nonstationary_spatial_data_by_segments(1000, 3, coords, 10)
 }

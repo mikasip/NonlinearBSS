@@ -1,4 +1,5 @@
-#' Trains a variational autoencoder (VAE) using the input data.
+#' Variational Autoencoder
+#' @description Trains a variational autoencoder (VAE) using the input data.
 #' @import tensorflow
 #' @import keras
 #' @importFrom Rdpack reprompt
@@ -70,130 +71,130 @@ VAE <- function(data, latent_dim, hidden_units = c(128, 128, 128), validation_sp
                 activation = "leaky_relu", source_dist = "gaussian", error_dist = "gaussian",
                 error_dist_sigma = 0.01, optimizer = NULL, lr_start = 0.01, lr_end = 0.0001,
                 steps = 10000, seed = NULL, epochs, batch_size) {
-  source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
-  source_log_pdf <- switch(source_dist,
-    "gaussian" = norm_log_pdf,
-    "laplace" = laplace_log_pdf
-  )
-  error_dist <- match.arg(error_dist, c("gaussian", "laplace"))
-  error_log_pdf <- switch(error_dist,
-    "gaussian" = norm_log_pdf,
-    "laplace" = laplace_log_pdf
-  )
-  call_params <- list(
-    latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
-    error_dist_sigma = error_dist_sigma, hidden_units = hidden_units,
-    activation = "leaky_relu",
-    epochs = epochs, batch_size = batch_size, lr_start = lr_start,
-    lr_end = lr_end, seed = seed, optimizer = optimizer
-  )
+    source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
+    source_log_pdf <- switch(source_dist,
+        "gaussian" = norm_log_pdf,
+        "laplace" = laplace_log_pdf
+    )
+    error_dist <- match.arg(error_dist, c("gaussian", "laplace"))
+    error_log_pdf <- switch(error_dist,
+        "gaussian" = norm_log_pdf,
+        "laplace" = laplace_log_pdf
+    )
+    call_params <- list(
+        latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
+        error_dist_sigma = error_dist_sigma, hidden_units = hidden_units,
+        activation = "leaky_relu",
+        epochs = epochs, batch_size = batch_size, lr_start = lr_start,
+        lr_end = lr_end, seed = seed, optimizer = optimizer
+    )
 
-  data_means <- colMeans(data)
-  data_sds <- apply(data, 2, sd)
-  data_cent <- sweep(data, 2, data_means, "-")
-  data_scaled <- sweep(data_cent, 2, data_sds, "/")
-  data_scaled <- data
+    data_means <- colMeans(data)
+    data_sds <- apply(data, 2, sd)
+    data_cent <- sweep(data, 2, data_means, "-")
+    data_scaled <- sweep(data_cent, 2, data_sds, "/")
+    data_scaled <- data
 
-  if (!is.null(seed)) {
-    tf$keras$utils$set_random_seed(as.integer(seed))
-  }
-  n <- as.integer(dim(data)[1])
-  p <- as.integer(dim(data)[2])
+    if (!is.null(seed)) {
+        tf$keras$utils$set_random_seed(as.integer(seed))
+    }
+    n <- as.integer(dim(data)[1])
+    p <- as.integer(dim(data)[2])
 
-  input <- layer_input(p)
-  submodel <- input
-  for (n_units in hidden_units) {
-    submodel <- submodel %>%
-      layer_dense(units = n_units, activation = activation)
-  }
-  z_mean <- submodel %>% layer_dense(latent_dim)
-  z_log_var <- submodel %>% layer_dense(latent_dim)
-  z_mean_and_var <- layer_concatenate(list(z_mean, z_log_var))
-  encoder <- keras_model(input, z_mean)
-  z_log_var_model <- keras_model(input, z_log_var)
+    input <- layer_input(p)
+    submodel <- input
+    for (n_units in hidden_units) {
+        submodel <- submodel %>%
+            layer_dense(units = n_units, activation = activation)
+    }
+    z_mean <- submodel %>% layer_dense(latent_dim)
+    z_log_var <- submodel %>% layer_dense(latent_dim)
+    z_mean_and_var <- layer_concatenate(list(z_mean, z_log_var))
+    encoder <- keras_model(input, z_mean)
+    z_log_var_model <- keras_model(input, z_log_var)
 
-  sampling_layer <- switch(source_dist,
-    "gaussian" = sampling_gaussian(p = latent_dim),
-    "laplace" = sampling_laplace(p = latent_dim)
-  )
-  z <- z_mean_and_var %>% sampling_layer()
+    sampling_layer <- switch(source_dist,
+        "gaussian" = sampling_gaussian(p = latent_dim),
+        "laplace" = sampling_laplace(p = latent_dim)
+    )
+    z <- z_mean_and_var %>% sampling_layer()
 
-  x_decoded_mean <- z
-  input_decoder <- layer_input(latent_dim)
-  output_decoder <- input_decoder
-  for (n_units in rev(hidden_units)) {
-    dense_layer <- layer_dense(units = n_units, activation = activation)
-    x_decoded_mean <- x_decoded_mean %>%
-      dense_layer()
-    output_decoder <- output_decoder %>% dense_layer()
-  }
-  out_layer <- layer_dense(units = p, activation = "sigmoid")
-  x_decoded_mean <- x_decoded_mean %>% out_layer()
-  output_decoder <- output_decoder %>% out_layer()
-  decoder <- keras_model(input_decoder, output_decoder)
-  final_output <- layer_concatenate(list(x_decoded_mean, z, z_mean_and_var))
+    x_decoded_mean <- z
+    input_decoder <- layer_input(latent_dim)
+    output_decoder <- input_decoder
+    for (n_units in rev(hidden_units)) {
+        dense_layer <- layer_dense(units = n_units, activation = activation)
+        x_decoded_mean <- x_decoded_mean %>%
+            dense_layer()
+        output_decoder <- output_decoder %>% dense_layer()
+    }
+    out_layer <- layer_dense(units = p, activation = "sigmoid")
+    x_decoded_mean <- x_decoded_mean %>% out_layer()
+    output_decoder <- output_decoder %>% out_layer()
+    decoder <- keras_model(input_decoder, output_decoder)
+    final_output <- layer_concatenate(list(x_decoded_mean, z, z_mean_and_var))
 
-  vae <- keras_model(input, final_output)
-  vae_loss <- function(x, res) {
-    x_mean <- res[, 1:p]
-    z_sample <- res[, (1 + p):(p + latent_dim)]
-    z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
-    z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
-    reconst_loss <- tf$reduce_sum(loss_binary_crossentropy(x, x_mean), -1L)
-    kl_loss <- -0.5 * (1 + z_logvar - tf$square(z_mean) - tf$exp(z_logvar))
-    kl_loss <- tf$reduce_mean(kl_loss, -1L)
+    vae <- keras_model(input, final_output)
+    vae_loss <- function(x, res) {
+        x_mean <- res[, 1:p]
+        z_sample <- res[, (1 + p):(p + latent_dim)]
+        z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
+        z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
+        reconst_loss <- tf$reduce_sum(loss_binary_crossentropy(x, x_mean), -1L)
+        kl_loss <- -0.5 * (1 + z_logvar - tf$square(z_mean) - tf$exp(z_logvar))
+        kl_loss <- tf$reduce_mean(kl_loss, -1L)
 
-    return(reconst_loss + kl_loss)
-  }
-  if (is.null(optimizer)) {
-    optimizer <- tf$keras$optimizers$legacy$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
-  }
+        return(reconst_loss + kl_loss)
+    }
+    if (is.null(optimizer)) {
+        optimizer <- tf$keras$optimizers$legacy$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
+    }
 
-  metric_reconst_accuracy <- custom_metric("metric_reconst_accuracy", function(x, res) {
-    x_mean <- res[, 1:p]
-    log_px_z <- error_log_pdf(x, x_mean, tf$constant(error_dist_sigma, "float32"))
-    return(tf$reduce_mean(log_px_z, -1L))
-  })
+    metric_reconst_accuracy <- custom_metric("metric_reconst_accuracy", function(x, res) {
+        x_mean <- res[, 1:p]
+        log_px_z <- error_log_pdf(x, x_mean, tf$constant(error_dist_sigma, "float32"))
+        return(tf$reduce_mean(log_px_z, -1L))
+    })
 
-  metric_kl_vae <- custom_metric("metric_kl_vae", function(x, res) {
-    z_sample <- res[, (1 + p):(p + latent_dim)]
-    z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
-    z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
-    log_qz_xu <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
-    log_pz_u <- source_log_pdf(z_sample, 0, 1)
-    return(-tf$reduce_mean((log_pz_u - log_qz_xu), -1L))
-  })
+    metric_kl_vae <- custom_metric("metric_kl_vae", function(x, res) {
+        z_sample <- res[, (1 + p):(p + latent_dim)]
+        z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
+        z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
+        log_qz_xu <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
+        log_pz_u <- source_log_pdf(z_sample, 0, 1)
+        return(-tf$reduce_mean((log_pz_u - log_qz_xu), -1L))
+    })
 
-  vae %>% compile(
-    optimizer = optimizer,
-    loss = vae_loss,
-    metrics = list(metric_reconst_accuracy, metric_kl_vae)
-  )
-  if (!is.null(seed)) {
-    tf$keras$utils$set_random_seed(as.integer(seed))
-  }
-  hist <- vae %>% fit(data_scaled, data_scaled,
-    shuffle = TRUE,
-    validation_split = validation_split, batchsize = batchsize,
-    epochs = epochs
-  )
+    vae %>% compile(
+        optimizer = optimizer,
+        loss = vae_loss,
+        metrics = list(metric_reconst_accuracy, metric_kl_vae)
+    )
+    if (!is.null(seed)) {
+        tf$keras$utils$set_random_seed(as.integer(seed))
+    }
+    hist <- vae %>% fit(data_scaled, data_scaled,
+        shuffle = TRUE,
+        validation_split = validation_split, batchsize = batchsize,
+        epochs = epochs
+    )
 
-  IC_estimates <- predict(encoder, data_scaled)
-  IC_log_vars <- predict(z_log_var_model, data_scaled)
-  IC_means <- colMeans(IC_estimates)
-  IC_sds <- apply(IC_estimates, 2, sd)
-  IC_estimates_cent <- sweep(IC_estimates, 2, IC_means, "-")
-  IC_estimates_scaled <- sweep(IC_estimates_cent, 2, IC_sds, "/")
+    IC_estimates <- predict(encoder, data_scaled)
+    IC_log_vars <- predict(z_log_var_model, data_scaled)
+    IC_means <- colMeans(IC_estimates)
+    IC_sds <- apply(IC_estimates, 2, sd)
+    IC_estimates_cent <- sweep(IC_estimates, 2, IC_means, "-")
+    IC_estimates_scaled <- sweep(IC_estimates_cent, 2, IC_sds, "/")
 
-  VAE_object <- list(
-    IC_unscaled = IC_estimates, IC = IC_estimates_scaled,
-    data_dim = p, metrics = hist,
-    sample_size = n, call_params = call_params,
-    encoder = encoder, decoder = decoder, IC_means = IC_means,
-    IC_sds = IC_sds, call = deparse(sys.call()),
-    D = paste(deparse(substitute(data)))
-  )
+    VAE_object <- list(
+        IC_unscaled = IC_estimates, IC = IC_estimates_scaled,
+        data_dim = p, metrics = hist,
+        sample_size = n, call_params = call_params,
+        encoder = encoder, decoder = decoder, IC_means = IC_means,
+        IC_sds = IC_sds, call = deparse(sys.call()),
+        D = paste(deparse(substitute(data)))
+    )
 
-  class(VAE_object) <- "VAE"
-  return(VAE_object)
+    class(VAE_object) <- "VAE"
+    return(VAE_object)
 }

@@ -2,7 +2,7 @@
 % Please edit documentation in R/iVAE.R
 \name{iVAE}
 \alias{iVAE}
-\title{Trains an identifiable variational autoencoder (iVAE) using the input data.}
+\title{Identifiable Variational Autoencoder}
 \usage{
 iVAE(
   data,
@@ -123,24 +123,27 @@ given by the encoder.
 }
 \examples{
 p <- 3
-n_segments <- 5
+n_segments <- 10
 n_per_segment <- 100
 n <- n_segments * n_per_segment
-data <- matrix(NA, ncol = p, nrow = n_segments * n_per_segment)
-aux_data <- matrix(NA, ncol = n_segments, nrow = n_segments * n)
+latent_data <- matrix(NA, ncol = p, nrow = n)
+aux_data <- matrix(NA, ncol = n_segments, nrow = n)
 # Create artificial data with variance and mean varying over the segments.
 for (i in 1:p) {
   for (seg in 1:n_segments) {
     start_ind <- (seg - 1) * n_per_segment + 1
     end_ind <- seg * n_per_segment
-    data[start_ind:end_ind, i] <- rnorm(
+    latent_data[start_ind:end_ind, i] <- rnorm(
       n_per_segment,
       runif(1, -5, 5), runif(1, 0.1, 5)
     )
   }
 }
-mixed_data <- mix_data(data, 3, "elu")
-res <- iVAE(data, aux_data, 3, epochs = 500, batch_size = 64)
+mixed_data <- mix_data(latent_data, 2, "elu")
+res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+cormat <- cor(res$IC, latent_data)
+cormat
+absolute_mean_correlation(cormat)
 }
 \references{
 \insertAllCited{}

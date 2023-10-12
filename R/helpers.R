@@ -5,7 +5,8 @@ library(distances)
 library(deepspat)
 library(Matrix)
 
-#' Calculates absolute mean correlation coefficient
+#' Absolute Mean Correlation Coefficient
+#' @description Calculates absolute mean correlation coefficient
 #' @import RcppHungarian
 #' @param cor_mat A correlation matrix.
 #' @return
@@ -62,7 +63,8 @@ elu <- function(a) {
     return(a)
 }
 
-#' Creates overdeterminated mixed data based on the input data.
+#' Create Overdeterminated Mixed Data
+#' @description Creates overdeterminated mixed data based on the input data.
 #' @param data A matrix containing the original data.
 #' @param dim_mixed The dimension of the mixed data.
 #' @param n_layers The number of mixing layers.
@@ -140,7 +142,8 @@ mix_data_over_determinated <- function(
     }
 }
 
-#' Creates mixed data based on the input data.
+#' Create Mixed Data
+#' @description Creates mixed data based on the input data.
 #' @param data A matrix containing the original data.
 #' @param n_layers The number of mixing layers.
 #' @param nonlinearity The function for applying nonlinearity
@@ -215,7 +218,8 @@ mix_data <- function(data, n_layers = 1, nonlinearity = "elu") {
     return(mixed_data)
 }
 
-#' Generates nonstationary Gaussian spatial data with
+#' Generate Nonstationary Spatial Data by Segments
+#' @description Generates nonstationary Gaussian spatial data with
 #' changing mean and variance by segments.
 #' @param n A sample size.
 #' @param p A dimension of the data.
