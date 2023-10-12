@@ -1,0 +1,11 @@
+Package: NonlinearBSS
+Type: Package
+Title: Nonlinear Blind Source Separation
+Version: 0.1.0
+Author: Mika Sipilä
+Maintainer: Mika Sipilä <mike.e.sipila@jyu.fi>
+Description: The package contains variational autoencoder (VAE) based methods for nonlinear blind source separation. The methods include regular VAE and multiple methods based on identifiable variational autoencoder (iVAE).
+License: GPL-3
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.2.1
