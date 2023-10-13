@@ -641,7 +641,7 @@ save_with_tf <- function(object, tf_model_dir, file, ...) {
   save_model_tf(object$encoder, paste0(tf_model_dir, "/encoder"))
   save_model_tf(object$decoder, paste0(tf_model_dir, "/decoder"))
   save_model_tf(object$prior_mean_model, paste0(tf_model_dir, "/prior_mean_model"))
-  save(object, file, ...)
+  save(object, file = file, ...)
   print("The model is saved successfully. Use the method
   load_with_tf to load the model correctly.")
 }

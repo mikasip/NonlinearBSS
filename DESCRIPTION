@@ -8,4 +8,5 @@ Description: The package contains variational autoencoder (VAE) based methods fo
 License: GPL-3
 Encoding: UTF-8
 LazyData: true
+RdMacros: Rdpack
 RoxygenNote: 7.2.1
