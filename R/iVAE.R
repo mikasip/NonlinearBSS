@@ -36,6 +36,8 @@
 #' \item{IC_unscaled}{Unscaled latent components.}
 #' \item{IC}{The latent component with
 #' zero mean and unit variance.}
+#' \item{aux_data}{A matrix containing the provided auxiliary data.}
+#' \item{original_data}{A matrix containing the original data.}
 #' \item{data_dim}{The dimension of the original data.}
 #' \item{metrics}{Metrics of the training for each epoch.}
 #' \item{sample_size}{Sample size of
@@ -298,6 +300,7 @@ iVAE <- function(
 
   iVAE_object <- list(
     IC_unscaled = IC_estimates, IC = IC_estimates_scaled,
+    aux_data = aux_data, original_data = data,
     IC_vars = IC_vars_scaled, prior_means = prior_means_scaled,
     prior_vars = prior_vars_scaled, data_dim = p, sample_size = n,
     prior_mean_model = prior_mean_model, call_params = call_params,
