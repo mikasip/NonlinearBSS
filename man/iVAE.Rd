@@ -82,6 +82,8 @@ An object of class VAE.
 \item{IC_unscaled}{Unscaled latent components.}
 \item{IC}{The latent component with
 zero mean and unit variance.}
+\item{aux_data}{A matrix containing the provided auxiliary data.}
+\item{original_data}{A matrix containing the original data.}
 \item{data_dim}{The dimension of the original data.}
 \item{metrics}{Metrics of the training for each epoch.}
 \item{sample_size}{Sample size of
@@ -110,16 +112,61 @@ Trains an identifiable variational autoencoder (iVAE) using the input data.
 }
 \details{
 The method constructs and trains an identifiable variational
-autoencoder (iVAE) \insertRef{Khemakhem2020}{NonlinearBSS}
+autoencoder (iVAE) \citeRef{Khemakhem2020}{NonlinearBSS}
 based on the given parameters.
-iVAE is composed of an encoder, a decoder and an auxiliary function.
-The encoder transforms the original data into a latent representation.
-The decoder aims to transform the latent representation back to the
+iVAE is composed of an encoder \eqn{g}, a decoder \eqn{h} and
+an auxiliary function \eqn{w}.
+The encoder transforms the original data \eqn{x} into a mean and a variace
+vectors.
+The mean and the variance are then used to sample a latent representation by
+using a reparametrization trick \citeRef{kingma2013auto}{NonlinearBSS}.
+The decoder aims to transform the latent representation \eqn{z} back to the
 original data. The auxiliary function estimates the mean and the
 variance of the data based on the auxiliary
-data. The variational approximation is obtained by using a reparametrization
-trick to sample a new value using the mean and the standard deviation
-given by the encoder.
+data.
+The functions \eqn{g}, \eqn{h} and \eqn{w} are deep neural networks
+with parameters \eqn{\lambda=(\lambda_g, \lambda_h, \lambda_w)^\top}.
+The parameters are learned by minimizing the lower bound of the data
+log-likelihood:
+\deqn{
+\mathcal{L}(\theta |  x,  u) \geq
+E_{q_{ \theta_{ g}}( z| x, u)} (
+\text{log}\, p_{ \theta_{ h}}(x | z)  +
+\text{log}\,p_{ \theta_{w}}(z | u) -
+\text{log}\,q_{\theta_{g}}(z | x, u) ).
+}
+
+In the loss function, \eqn{\text{log} p_{ \theta_{ h}}(x | z)} controls the
+reconstruction error, and have the distribution based on the
+parameter \code{error_dist} where \code{gaussian} or
+\code{laplace} are currently supported. The location of
+the distribution is the original data and the scale parameter
+is given by \code{error_dist_sigma}. The default value for
+\code{error_dist_sigma} is \code{0.02}. By decreasing the value,
+the loss function emphasizes more the reconstruction error and
+by increasing, the reconstruction error has less weight.
+The term \eqn{\text{log}\,p_{ \theta_{w}}(z | u) -
+\text{log}\,q_{\theta_{g}}(z | x, u)} tries to make the
+distributions \eqn{p_{\theta_{w}}(z | u)} and
+\eqn{q_{\theta_{g}}(z | x, u)} as similar as possible.
+This term controls the disentangling and allows the method
+to find the true latent components.
+The parameter \code{source_dist} defines the distributions
+\eqn{p_{ \theta_{w}}(z | u)} and \eqn{q_{\theta_{g}}(z | x, u)}.
+The distributions \code{gaussian} and \code{laplace} are currently
+supported.
+The parameters for \eqn{p_{ \theta_{w}}(z | u)} are given by the
+auxiliary function and the parameters for \eqn{q_{\theta_{g}}(z | x, u)}
+are given by the encoder.
+
+The method is identifiable, meaning that it finds the true latent
+representation in the limit of infinite data, if some conditions are
+satisfied. Loosely speaking, in case of gaussian and laplace distributions,
+the conditions are that the mixing
+function is differentiable and that the variance (or scale)
+of the latent sources are varying based on the auxiliary variable.
+The exact identifiability results are given in
+\citeRef{Khemakhem2020}{NonlinearBSS}.
 }
 \examples{
 p <- 3
@@ -133,6 +180,7 @@ for (i in 1:p) {
   for (seg in 1:n_segments) {
     start_ind <- (seg - 1) * n_per_segment + 1
     end_ind <- seg * n_per_segment
+    aux_data[start_ind:end_ind, seg] <- 1
     latent_data[start_ind:end_ind, i] <- rnorm(
       n_per_segment,
       runif(1, -5, 5), runif(1, 0.1, 5)
@@ -147,4 +195,7 @@ absolute_mean_correlation(cormat)
 }
 \references{
 \insertAllCited{}
+}
+\author{
+Mika Sipilä
 }

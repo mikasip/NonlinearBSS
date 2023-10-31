@@ -61,3 +61,6 @@ pred_obs <- predict(res, new_ICs, IC_to_data = TRUE)
 \seealso{
 \code{\link{iVAE}}
 }
+\author{
+Mika Sipilä
+}

@@ -40,6 +40,7 @@
 #' using the created auxiliary variables.
 #'
 #' @references \insertAllCited{}
+#' @author Mika Sipilä
 #' @seealso
 #' \code{\link{iVAE}}
 #' \code{\link{generate_nonstationary_spatial_data_by_segments}}

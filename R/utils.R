@@ -1,9 +1,3 @@
-#' Calculates a logarithm of multivariate normal probability density function using tensorflow.
-#' @importFrom tensorflow tf
-#' @param x A P-dimensional vector
-#' @param mu A P-dimensional mean vector
-#' @param v A P-dimensional variance vector for diagonal covariance
-#' @return A logarithm of multivariate normal pdf.
 norm_log_pdf <- function(x, mu, v, reduce = TRUE) {
     v <- v + 1e-35 # To avoid computational problems (when v == 0)
     lpdf <- tf$constant(-0.5, "float32") * (tf$math$pow((x - mu), 2) / v + tf$cast(tf$math$log(2 * pi), "float32") + tf$math$log(v))
@@ -13,12 +7,6 @@ norm_log_pdf <- function(x, mu, v, reduce = TRUE) {
     return(lpdf)
 }
 
-#' Calculates a logarithm of multivariate laplace probability density function using tensorflow.
-#' @importFrom tensorflow tf
-#' @param x A P-dimensional vector
-#' @param mu A P-dimensional location vector
-#' @param v A P-dimensional scale vector for diagonal scale matrix
-#' @return A logarithm of multivariate laplace pdf.
 laplace_log_pdf <- function(x, loc, scale, reduce = TRUE) {
     scale <- scale + 1e-35
     lpdf <- -(tf$math$log(2 * scale) + tf$abs(x - loc) / (scale))
@@ -26,6 +14,10 @@ laplace_log_pdf <- function(x, loc, scale, reduce = TRUE) {
         return(tf$reduce_sum(lpdf, -1L))
     }
     return(lpdf)
+}
+
+absolute_activation <- function(x) {
+    tf$abs(x)
 }
 
 SamplingGaussian(keras$layers$Layer) %py_class% {

@@ -79,3 +79,6 @@ plot(res)
 \seealso{
 \code{\link{iVAE}}
 }
+\author{
+Mika Sipilä
+}

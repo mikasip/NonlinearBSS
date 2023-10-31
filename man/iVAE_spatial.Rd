@@ -117,3 +117,6 @@ absolute_mean_correlation(cormat)
 \code{\link{iVAE}}
 \code{\link{generate_nonstationary_spatial_data_by_segments}}
 }
+\author{
+Mika Sipilä
+}
