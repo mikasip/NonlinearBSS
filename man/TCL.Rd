@@ -44,7 +44,7 @@ observations, and trains a deep neural network model to predict if the label
 is correct or incorrect. The model has a bottleneck layer at the end, which
 has P hidden units. The idea is, that in order to classify the data
 correctly, it has to learn the true independent components. For more
-details about TCL, see \citeRef{HyvarinenMorioka2016}{NonlinearBSS}.
+details about TCL, see \insertCite{HyvarinenMorioka2016}{NonlinearBSS}.
 }
 \examples{
 p <- 10

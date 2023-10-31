@@ -112,14 +112,14 @@ Trains an identifiable variational autoencoder (iVAE) using the input data.
 }
 \details{
 The method constructs and trains an identifiable variational
-autoencoder (iVAE) \citeRef{Khemakhem2020}{NonlinearBSS}
+autoencoder (iVAE) \insertCite{Khemakhem2020}{NonlinearBSS}
 based on the given parameters.
 iVAE is composed of an encoder \eqn{g}, a decoder \eqn{h} and
 an auxiliary function \eqn{w}.
 The encoder transforms the original data \eqn{x} into a mean and a variace
 vectors.
 The mean and the variance are then used to sample a latent representation by
-using a reparametrization trick \citeRef{kingma2013auto}{NonlinearBSS}.
+using a reparametrization trick \insertCite{kingma2013auto}{NonlinearBSS}.
 The decoder aims to transform the latent representation \eqn{z} back to the
 original data. The auxiliary function estimates the mean and the
 variance of the data based on the auxiliary
@@ -166,7 +166,7 @@ the conditions are that the mixing
 function is differentiable and that the variance (or scale)
 of the latent sources are varying based on the auxiliary variable.
 The exact identifiability results are given in
-\citeRef{Khemakhem2020}{NonlinearBSS}.
+\insertCite{Khemakhem2020}{NonlinearBSS}.
 }
 \examples{
 p <- 3
