@@ -1,5 +1,5 @@
 # R package for nonlinear blind source separation
-The repository contains R package with methods to perform nonlinear blind source separation (BSS). The main methods are variational autoencoder based \code{iVAE) and \code{iVAE_spatial}. The package also contains an implementation of regular variational autoencoder (\code{VAE}) and a method to perform time contrastive learning (\code{TCL}). 
+The repository contains R package with methods to perform nonlinear blind source separation (BSS). The main methods are variational autoencoder based ```iVAE``` and ```iVAE_spatial```. The package also contains an implementation of regular variational autoencoder (```VAE```) and a method to perform time contrastive learning (```TCL```). 
 
  # How to install?
 
