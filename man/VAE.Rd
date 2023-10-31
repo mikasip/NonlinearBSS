@@ -84,7 +84,7 @@ Trains a variational autoencoder (VAE) using the input data.
 }
 \details{
 The method constructs and trains a variational autoencoder (VAE)
-\insertRef{kingma2013auto}{NonlinearBSS} based on the given parameters.
+\insertCite{kingma2013auto}{NonlinearBSS} based on the given parameters.
 VAE is composed of an encoder and a decoder. The encoder transforms the
 original data into a latent representation. The decoder aims to
 transform the latent representation back to the original data.
