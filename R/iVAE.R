@@ -1,11 +1,13 @@
 #' Identifiable Variational Autoencoder
 #' @description Trains an identifiable variational autoencoder
 #' (iVAE) using the input data.
-#' \loadmathjax{}
+#' \loadmathjax
 #' @import tensorflow
 #' @import keras
 #' @import mathjaxr
 #' @import Rdpack
+#' @import stats
+#' @import graphics
 #' @importFrom Rdpack reprompt
 #' @importFrom mathjaxr preview_rd
 #' @param data A matrix with P columns and N rows containing the observed data.
@@ -14,6 +16,9 @@
 #' @param latent_dim A latent dimension for iVAE
 #' @param hidden_units K-dimensional vector giving the number of
 #' hidden units for K layers in encoder and K layers in decoder.
+#' @param test_data A matrix with P columns containing the test data.
+#' @param test_data_aux A matrix with D columns containing the auxiliary
+#' data for test_data.
 #' @param aux_hidden_units K-dimensional vector giving the number of
 #' hidden units for K layers in auxiliary function.
 #' @param validation_split Proportion of data used for validation
@@ -135,7 +140,7 @@
 #' n_per_segment <- 100
 #' n <- n_segments * n_per_segment
 #' latent_data <- matrix(NA, ncol = p, nrow = n)
-#' aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+#' aux_data <- matrix(0, ncol = n_segments, nrow = n)
 #' # Create artificial data with variance and mean varying over the segments.
 #' for (i in 1:p) {
 #'   for (seg in 1:n_segments) {
@@ -149,7 +154,9 @@
 #'   }
 #' }
 #' mixed_data <- mix_data(latent_data, 2, "elu")
-#' res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+#' 
+#' # For better performance, increase the number of epochs
+#' res <- iVAE(mixed_data, aux_data, 3, epochs = 10, batch_size = 64)
 #' cormat <- cor(res$IC, latent_data)
 #' cormat
 #' absolute_mean_correlation(cormat)
@@ -326,7 +333,7 @@ iVAE <- function(
         data_scaled,
         validation_data = validation_data,
         validation_split = validation_split, shuffle = TRUE,
-        batchsize = batchsize, epochs = 1, seed = seed
+        batchsize = batch_size, epochs = 1, seed = seed
       )
       IC_estimates <- predict(encoder, list(data_scaled, aux_data))
       MCCs[i] <- absolute_mean_correlation(cor(IC_estimates, true_data))
@@ -334,7 +341,7 @@ iVAE <- function(
   } else {
     hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled,
       validation_data = validation_data, validation_split = validation_split,
-      shuffle = TRUE, batchsize = batchsize, epochs = epochs, seed = seed
+      shuffle = TRUE, batchsize = batch_size, epochs = epochs, seed = seed
     )
   }
   IC_estimates <- predict(encoder, list(data_scaled, aux_data))
@@ -374,7 +381,7 @@ iVAE <- function(
 
 #' Plotting an Object of Class iVAE
 #' @description \code{plot} method for the class \code{iVAE}.
-#' @param obj Object of class \code{iVAE}
+#' @param x Object of class \code{iVAE}
 #' @param IC_inds A vector providing indices of ICs which are plotted.
 #' @param sample_inds A vector providing sample indices which are plotted.
 #' @param unscaled A boolean determining if the unscaled ICs are plotted
@@ -384,9 +391,9 @@ iVAE <- function(
 #' @param ylabs A vector providing ylab params for the plots.
 #' @param colors A vector providing colors for the plots.
 #' @param oma A \code{oma} parameter for the function \code{par}.
-#' See \code{\link[base]{par}}
+#' See \code{\link[graphics]{par}}
 #' @param mar A \code{mar} parameter for the function \code{par}.
-#' See \code{\link[base]{par}}
+#' See \code{\link[graphics]{par}}
 #' @param ... Further parameters for all plot.default methods.
 #' @returns
 #' No return value.
@@ -401,7 +408,7 @@ iVAE <- function(
 #' n_per_segment <- 100
 #' n <- n_segments * n_per_segment
 #' latent_data <- matrix(NA, ncol = p, nrow = n)
-#' aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+#' aux_data <- matrix(0, ncol = n_segments, nrow = n)
 #' # Create artificial data with variance and mean varying over the segments.
 #' for (i in 1:p) {
 #'   for (seg in 1:n_segments) {
@@ -414,7 +421,8 @@ iVAE <- function(
 #'   }
 #' }
 #' mixed_data <- mix_data(latent_data, 2, "elu")
-#' res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+#' # Increase the number of epochs to obtain better performance.
+#' res <- iVAE(mixed_data, aux_data, 3, epochs = 10, batch_size = 64)
 #' plot(res)
 #' @export
 #' @author Mika Sipilä
@@ -472,7 +480,7 @@ plot.iVAE <- function(
 #' n_per_segment <- 100
 #' n <- n_segments * n_per_segment
 #' latent_data <- matrix(NA, ncol = p, nrow = n)
-#' aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+#' aux_data <- matrix(0, ncol = n_segments, nrow = n)
 #' # Create artificial data with variance and mean varying over the segments.
 #' for (i in 1:p) {
 #'   for (seg in 1:n_segments) {
@@ -485,7 +493,8 @@ plot.iVAE <- function(
 #'   }
 #' }
 #' mixed_data <- mix_data(latent_data, 2, "elu")
-#' res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+#' # Increase the number of epochs to obtain better performance.
+#' res <- iVAE(mixed_data, aux_data, 3, epochs = 10, batch_size = 64)
 #' print(res)
 #' @export
 #' @author Mika Sipilä
@@ -518,7 +527,7 @@ print.iVAE <- function(x, ...) {
 #' n_per_segment <- 100
 #' n <- n_segments * n_per_segment
 #' latent_data <- matrix(NA, ncol = p, nrow = n)
-#' aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+#' aux_data <- matrix(0, ncol = n_segments, nrow = n)
 #' # Create artificial data with variance and mean varying over the segments.
 #' for (i in 1:p) {
 #'   for (seg in 1:n_segments) {
@@ -531,7 +540,8 @@ print.iVAE <- function(x, ...) {
 #'   }
 #' }
 #' mixed_data <- mix_data(latent_data, 2, "elu")
-#' res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+#' # Increase the number of epochs to obtain better performance.
+#' res <- iVAE(mixed_data, aux_data, 3, epochs = 10, batch_size = 64)
 #' summary(res)
 #' @export
 #' @author Mika Sipilä
@@ -573,7 +583,7 @@ summary.iVAE <- function(object, ...) {
 #' n_per_segment <- 100
 #' n <- n_segments * n_per_segment
 #' latent_data <- matrix(NA, ncol = p, nrow = n)
-#' aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+#' aux_data <- matrix(0, ncol = n_segments, nrow = n)
 #' # Create artificial data with variance and mean varying over the segments.
 #' for (i in 1:p) {
 #'   for (seg in 1:n_segments) {
@@ -586,7 +596,8 @@ summary.iVAE <- function(object, ...) {
 #'   }
 #' }
 #' mixed_data <- mix_data(latent_data, 2, "elu")
-#' res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+#' # Increase the number of epochs to obtain better performance.
+#' res <- iVAE(mixed_data, aux_data, 3, epochs = 10, batch_size = 64)
 #' new_data <- matrix(rnorm(p * 2), nrow = 2)
 #' new_aux_data <- rbind(c(1, rep(0, n_segments - 1)), c(1, rep(0, n_segments - 1)))
 #' pred_ICs <- predict(res, new_data, new_aux_data)
@@ -683,7 +694,7 @@ predict.iVAE <- function(
 #' n_per_segment <- 100
 #' n <- n_segments * n_per_segment
 #' latent_data <- matrix(NA, ncol = p, nrow = n)
-#' aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+#' aux_data <- matrix(0, ncol = n_segments, nrow = n)
 #' # Create artificial data with variance and mean varying over the segments.
 #' for (i in 1:p) {
 #'   for (seg in 1:n_segments) {
@@ -696,7 +707,8 @@ predict.iVAE <- function(
 #'   }
 #' }
 #' mixed_data <- mix_data(latent_data, 2, "elu")
-#' res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+#' # Increase the number of epochs to obtain better performance.
+#' res <- iVAE(mixed_data, aux_data, 3, epochs = 10, batch_size = 64)
 #' save_with_tf(res, "res_dir", "res_obj.RData")
 #' loaded_obj <- load_with_tf("res_obj.RData")
 #' new_ICs <- matrix(rnorm(p * 2), nrow = 2)
@@ -727,7 +739,7 @@ save_with_tf <- function(object, tf_model_dir, file, ...) {
 #' @author Mika Sipilä
 #' @inherit save_with_tf examples
 #' @export
-load_with_tf <- function(file, ...) {
+load_with_tf <- function(file) {
   obj_name <- load(file)
   object <- get(obj_name)
   object$encoder <- load_model_tf(paste0(object$tf_model_dir, "/encoder"))

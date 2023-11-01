@@ -35,6 +35,9 @@ are used as a test data.}
   \describe{
     \item{\code{hidden_units}}{K-dimensional vector giving the number of
 hidden units for K layers in encoder and K layers in decoder.}
+    \item{\code{test_data}}{A matrix with P columns containing the test data.}
+    \item{\code{test_data_aux}}{A matrix with D columns containing the auxiliary
+data for test_data.}
     \item{\code{aux_hidden_units}}{K-dimensional vector giving the number of
 hidden units for K layers in auxiliary function.}
     \item{\code{validation_split}}{Proportion of data used for validation}
@@ -96,14 +99,16 @@ coords <- matrix(runif(1000 * 2, 0, 1), ncol = 2)
 p <- 3
 # Generate artificial latent data
 latent_data <- generate_nonstationary_spatial_data_by_segments(
-    n,
+    n, p,
     coords, 10
 )$data
 # Generate artificial observed data by applying a nonlinear mixture
 obs_data <- mix_data(latent_data, 2)
 cor(obs_data, latent_data)
+
+# For better peformance, increase the number of epochs.
 resiVAE <- iVAE_spatial(obs_data, coords, c(0.1, 0.1), c(1, 1), 3,
-    epochs = 300, batch_size = 64
+    epochs = 10, batch_size = 64
 )
 cormat <- cor(resiVAE$IC, latent_data)
 cormat

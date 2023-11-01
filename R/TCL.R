@@ -11,6 +11,7 @@
 #' @param lr_start A starting learning rate.
 #' @param lr_end A learning rate after polynomial decay.
 #' @param seed Seed for the tensorflow model.
+#' @param ... Further parameters for keras::fit function.
 #' @return An object of class TCL.
 #' @details The method constructs and fits a model for time contrastive learning
 #' based on the given parameters. TCL assigns half of the labels incorrectly to
@@ -41,9 +42,11 @@
 #'     }
 #' }
 #' mixed_data <- mix_data(latent_data, 2, "elu")
+#' 
+#' # For better performance, increase the number of epochs.
 #' res <- TCL(mixed_data, labels - 1,
 #'     n_hidden_layers = 1,
-#'     n_hidden_units = 32, batch_size = 64, epochs = 1000
+#'     n_hidden_units = 32, batch_size = 64, epochs = 10
 #' )
 #' cormat <- cor(res$IC, latent_data)
 #' cormat

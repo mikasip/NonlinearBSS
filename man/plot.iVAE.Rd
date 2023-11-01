@@ -19,6 +19,8 @@
 )
 }
 \arguments{
+\item{x}{Object of class \code{iVAE}}
+
 \item{IC_inds}{A vector providing indices of ICs which are plotted.}
 
 \item{sample_inds}{A vector providing sample indices which are plotted.}
@@ -35,14 +37,12 @@ or not.}
 \item{colors}{A vector providing colors for the plots.}
 
 \item{oma}{A \code{oma} parameter for the function \code{par}.
-See \code{\link[base]{par}}}
+See \code{\link[graphics]{par}}}
 
 \item{mar}{A \code{mar} parameter for the function \code{par}.
-See \code{\link[base]{par}}}
+See \code{\link[graphics]{par}}}
 
 \item{...}{Further parameters for all plot.default methods.}
-
-\item{obj}{Object of class \code{iVAE}}
 }
 \value{
 No return value.
@@ -60,7 +60,7 @@ n_segments <- 10
 n_per_segment <- 100
 n <- n_segments * n_per_segment
 latent_data <- matrix(NA, ncol = p, nrow = n)
-aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+aux_data <- matrix(0, ncol = n_segments, nrow = n)
 # Create artificial data with variance and mean varying over the segments.
 for (i in 1:p) {
   for (seg in 1:n_segments) {
@@ -73,7 +73,8 @@ for (i in 1:p) {
   }
 }
 mixed_data <- mix_data(latent_data, 2, "elu")
-res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+# Increase the number of epochs to obtain better performance.
+res <- iVAE(mixed_data, aux_data, 3, epochs = 10, batch_size = 64)
 plot(res)
 }
 \seealso{

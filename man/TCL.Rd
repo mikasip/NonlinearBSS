@@ -30,6 +30,8 @@ for the observations.}
 \item{lr_end}{A learning rate after polynomial decay.}
 
 \item{seed}{Seed for the tensorflow model.}
+
+\item{...}{Further parameters for keras::fit function.}
 }
 \value{
 An object of class TCL.
@@ -66,9 +68,11 @@ for (seg in 1:n_segments) {
     }
 }
 mixed_data <- mix_data(latent_data, 2, "elu")
+
+# For better performance, increase the number of epochs.
 res <- TCL(mixed_data, labels - 1,
     n_hidden_layers = 1,
-    n_hidden_units = 32, batch_size = 64, epochs = 1000
+    n_hidden_units = 32, batch_size = 64, epochs = 10
 )
 cormat <- cor(res$IC, latent_data)
 cormat

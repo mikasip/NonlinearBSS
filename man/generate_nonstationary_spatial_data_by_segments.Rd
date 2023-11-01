@@ -23,7 +23,8 @@ generate_nonstationary_spatial_data_by_segments(
 has their own mean and variance}
 
 \item{random_mean}{A boolean determining if the constant zero mean
-is used or if mean is random randomly sampled from \eqn{\text{Unif}(-5, 5)}
+is used or if mean is random randomly sampled from 
+\mjeqn{Unif(-5, 5)}{ascii}
 for each segment.}
 }
 \value{
@@ -37,15 +38,15 @@ the center points for each segment.}
 }
 \description{
 Generates nonstationary Gaussian spatial data with
-changing mean and variance by segments.
+changing mean and variance by segments. \loadmathjax
 }
 \details{
 The method chooses uniformly \code{n_segments} center points from the provided
 spatial locations. The locations are divided into segments based on the
 lowest distance to any of the center points. The data is generated from
 normal distribution by sampling unique variance from distribution
-\eqn{\text{Unif}(0.1, 5)} for each segment. If \code{random_mean = TRUE}
-the means for each segment are sampled from distribution \eqn{\text{Unif}(-5, 5)}.
+\mjeqn{Unif(0.1, 5)}{ascii} for each segment. If \code{random_mean = TRUE}
+the means for each segment are sampled from distribution \mjeqn{Unif(-5, 5)}{ascii}.
 If \code{random_mean = FALSE} the constant zero mean is used for every segment.
 }
 \examples{

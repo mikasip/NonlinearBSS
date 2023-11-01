@@ -1,5 +1,6 @@
 #' Absolute Mean Correlation Coefficient
 #' @description Calculates absolute mean correlation coefficient
+#' \loadmathjax
 #' @import RcppHungarian
 #' @param cor_mat A correlation matrix.
 #' @return
@@ -7,12 +8,14 @@
 #' @details
 #' The method calculates absolute mean correlation coeffiecient (MCC) by
 #' solving a linear assignment problem. MCC is mathematically given as
-#' \deqn{
-#' \text{MCC}(\mathbf K)=\frac{1}{p} \sup_{\mathbf P  \in \mathcal{P}}
-#' \text{tr}(\mathbf P\, \abs(\mathbf K)),
-#' }
-#' where \eqn{\mathcal{P}} is a set of all possible permutation matrices,
-#' \eqn{\text{tr}(\cdot )} is the trace of a matrix, and \eqn{\abs(\cdot)}
+#' \mjdeqn{
+#' MCC(\mathbf K)=\frac{1}{p} \sup_{\mathbf P  \in \mathcal{P}}
+#' tr(\mathbf P\, \abs(\mathbf K)),
+#' }{ascii}
+#' where \mjeqn{\mathcal{P}}{ascii} is a set of all possible 
+#' permutation matrices,
+#' \mjeqn{ tr(\cdot )}{ascii} is the trace of a matrix, and 
+#' \mjeqn{\abs(\cdot)}{ascii}
 #' denotes taking the absolute value of a matrix elementwise.
 #' @examples
 #' d1 <- matrix(rnorm(300), ncol = 3)
@@ -58,6 +61,7 @@ elu <- function(a) {
 
 #' Create Overdeterminated Mixed Data
 #' @description Creates overdeterminated mixed data based on the input data.
+#' \loadmathjax
 #' @param data A matrix containing the original data.
 #' @param dim_mixed The dimension of the mixed data.
 #' @param n_layers The number of mixing layers.
@@ -67,43 +71,48 @@ elu <- function(a) {
 #' A matrix containing the mixed data.
 #' @details
 #' The method mixes the input data by applying mixing matrices and nonlinear
-#' activation function based on the input parameters. Let \eqn{\omega_i} be
-#' the activation function of \eqn{i}th layer and \eqn{\mathbf B_i} be the
-#' normalized mixing matrix of \eqn{i}th layer.
-#' Then, the mixing function \eqn{\mathbf f_L} is defined as
-#' \deqn{
+#' activation function based on the input parameters. 
+#' Let \mjeqn{\omega_i}{ascii} be
+#' the activation function of \mjeqn{i}{ascii}th layer and 
+#' \mjeqn{\mathbf B_i}{ascii} be the
+#' normalized mixing matrix of \mjeqn{i}{ascii}th layer.
+#' Then, the mixing function \mjeqn{\mathbf f_L}{ascii} 
+#' is defined as
+#' \mjdeqn{
 #'     \mathbf f_L(\mathbf z) = \begin{cases}
 #'         \omega_L(\mathbf B_L \mathbf z),\quad L = 1, \\
 #'         \omega_L(\mathbf B_L \mathbf f_{L-1}(\mathbf z)),
 #'         \quad L \in \{2,3,\dots\}.
 #'     \end{cases}
-#' }
-#' The function has a linear activation \eqn{\omega_L(x)=x} for the last layer,
-#' which means that mixing function \eqn{\mathbf f_1} with one layer corresponds
+#' }{ascii}
+#' The function has a linear activation 
+#' \mjeqn{\omega_L(x)=x}{ascii} for the last layer,
+#' which means that mixing function 
+#' \mjeqn{\mathbf f_1}{ascii} with one layer corresponds
 #' to a linear mixing. If more than one layers are applied, the other layers
 #' use the activation function given by the parameter \code{nonlinearity}.
 #' The options for \code{nonlinearity} are:
 #'
 #' \code{nonlinarity="elu"}:
-#' \deqn{
+#' \mjdeqn{
 #' \omega_i(x)=\begin{cases}
 #'     x,\quad x \geq 0, \\
-#'     \text{exp}(x) - 1,\quad x < 0,
+#'     exp(x) - 1,\quad x < 0,
 #' \end{cases}
-#' }
+#' }{ascii}
 #'
 #' \code{nonlinarity="xtanh"}:
-#' \deqn{
-#' \omega_i(x)= \text{tanh}(x) + 0.1 * x
-#' }
+#' \mjdeqn{
+#' \omega_i(x)= tanh(x) + 0.1 * x
+#' }{ascii}
 #'
 #' \code{nonlinarity="lrelu"}:
-#' \deqn{
+#' \mjdeqn{
 #' \omega_i(x)=\begin{cases}
 #'     x,\quad x \geq 0, \\
 #'     0.2 * x, x < 0.
 #' \end{cases}
-#' }
+#' }{ascii}
 #' @examples
 #' data <- matrix(rnorm(300), ncol = 3)
 #' mixed_data <- mix_data_over_determinated(data, 5, 3)
@@ -137,6 +146,7 @@ mix_data_over_determinated <- function(
 
 #' Create Mixed Data
 #' @description Creates mixed data based on the input data.
+#' \loadmathjax
 #' @param data A matrix containing the original data.
 #' @param n_layers The number of mixing layers.
 #' @param nonlinearity The function for applying nonlinearity
@@ -145,43 +155,45 @@ mix_data_over_determinated <- function(
 #' A matrix containing the mixed data.
 #' @details
 #' The method mixes the input data by applying mixing matrices and nonlinear
-#' activation function based on the input parameters. Let \eqn{\omega_i} be
-#' the activation function of \eqn{i}th layer and \eqn{\mathbf B_i} be the
-#' normalized mixing matrix of \eqn{i}th layer.
-#' Then, the mixing function \eqn{\mathbf f_L} is defined as
-#' \deqn{
+#' activation function based on the input parameters. 
+#' Let \mjeqn{\omega_i}{ascii} be
+#' the activation function of 
+#' \mjeqn{i}{ascii}th layer and \mjeqn{\mathbf B_i}{ascii} be the
+#' normalized mixing matrix of \mjeqn{i}{ascii}th layer.
+#' Then, the mixing function \mjeqn{\mathbf f_L}{ascii} is defined as
+#' \mjdeqn{
 #'     \mathbf f_L(\mathbf z) = \begin{cases}
 #'         \omega_L(\mathbf B_L \mathbf z),\quad L = 1, \\
 #'         \omega_L(\mathbf B_L \mathbf f_{L-1}(\mathbf z)),
 #'         \quad L \in \{2,3,\dots\}.
 #'     \end{cases}
-#' }
-#' The function has a linear activation \eqn{\omega_L(x)=x} for the last layer,
-#' which means that mixing function \eqn{\mathbf f_1} with one layer corresponds
+#' }{ascii}
+#' The function has a linear activation \mjeqn{\omega_L(x)=x}{ascii} for the last layer,
+#' which means that mixing function \mjeqn{\mathbf f_1}{ascii} with one layer corresponds
 #' to a linear mixing. If more than one layers are applied, the other layers
 #' use the activation function given by the parameter \code{nonlinearity}.
 #' The options for \code{nonlinearity} are:
 #'
 #' \code{nonlinarity="elu"}:
-#' \deqn{
+#' \mjdeqn{
 #' \omega_i(x)=\begin{cases}
 #'     x,\quad x \geq 0, \\
-#'     \text{exp}(x) - 1,\quad x < 0,
+#'     exp(x) - 1,\quad x < 0,
 #' \end{cases}
-#' }
+#' }{ascii}
 #'
 #' \code{nonlinarity="xtanh"}:
-#' \deqn{
-#' \omega_i(x)= \text{tanh}(x) + 0.1 * x
-#' }
+#' \mjdeqn{
+#' \omega_i(x)= tanh(x) + 0.1 * x
+#' }{ascii}
 #'
 #' \code{nonlinarity="lrelu"}:
-#' \deqn{
+#' \mjdeqn{
 #' \omega_i(x)=\begin{cases}
 #'     x,\quad x \geq 0, \\
 #'     0.2 * x, x < 0.
 #' \end{cases}
-#' }
+#' }{ascii}
 #' @examples
 #' data <- matrix(rnorm(300), ncol = 3)
 #' mixed_data <- mix_data(data, 3)
@@ -213,14 +225,15 @@ mix_data <- function(data, n_layers = 1, nonlinearity = "elu") {
 
 #' Generate Nonstationary Spatial Data by Segments
 #' @description Generates nonstationary Gaussian spatial data with
-#' changing mean and variance by segments.
+#' changing mean and variance by segments. \loadmathjax
 #' @param n A sample size.
 #' @param p A dimension of the data.
 #' @param coords A 2 x n matrix containing the spatial coordinates.
 #' @param n_segments The number of spatial segments. Each segment
 #' has their own mean and variance
 #' @param random_mean A boolean determining if the constant zero mean
-#' is used or if mean is random randomly sampled from \eqn{\text{Unif}(-5, 5)}
+#' is used or if mean is random randomly sampled from 
+#' \mjeqn{Unif(-5, 5)}{ascii}
 #' for each segment.
 #' @return
 #' An object with the following properties
@@ -235,8 +248,8 @@ mix_data <- function(data, n_layers = 1, nonlinearity = "elu") {
 #' spatial locations. The locations are divided into segments based on the
 #' lowest distance to any of the center points. The data is generated from
 #' normal distribution by sampling unique variance from distribution
-#' \eqn{\text{Unif}(0.1, 5)} for each segment. If \code{random_mean = TRUE}
-#' the means for each segment are sampled from distribution \eqn{\text{Unif}(-5, 5)}.
+#' \mjeqn{Unif(0.1, 5)}{ascii} for each segment. If \code{random_mean = TRUE}
+#' the means for each segment are sampled from distribution \mjeqn{Unif(-5, 5)}{ascii}.
 #' If \code{random_mean = FALSE} the constant zero mean is used for every segment.
 #' @examples
 #' coords <- matrix(runif(2000, 0, 1), ncol = 2)

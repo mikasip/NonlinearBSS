@@ -36,6 +36,11 @@ containing the auxiliary data.}
 
 \item{latent_dim}{A latent dimension for iVAE}
 
+\item{test_data}{A matrix with P columns containing the test data.}
+
+\item{test_data_aux}{A matrix with D columns containing the auxiliary
+data for test_data.}
+
 \item{hidden_units}{K-dimensional vector giving the number of
 hidden units for K layers in encoder and K layers in decoder.}
 
@@ -110,7 +115,7 @@ Provided if true_data is not NULL.}
 \description{
 Trains an identifiable variational autoencoder
 (iVAE) using the input data.
-\loadmathjax{}
+\loadmathjax
 }
 \details{
 The method constructs and trains an identifiable variational
@@ -182,7 +187,7 @@ n_segments <- 10
 n_per_segment <- 100
 n <- n_segments * n_per_segment
 latent_data <- matrix(NA, ncol = p, nrow = n)
-aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+aux_data <- matrix(0, ncol = n_segments, nrow = n)
 # Create artificial data with variance and mean varying over the segments.
 for (i in 1:p) {
   for (seg in 1:n_segments) {
@@ -196,7 +201,9 @@ for (i in 1:p) {
   }
 }
 mixed_data <- mix_data(latent_data, 2, "elu")
-res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+
+# For better performance, increase the number of epochs
+res <- iVAE(mixed_data, aux_data, 3, epochs = 10, batch_size = 64)
 cormat <- cor(res$IC, latent_data)
 cormat
 absolute_mean_correlation(cormat)

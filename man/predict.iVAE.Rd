@@ -38,7 +38,7 @@ n_segments <- 10
 n_per_segment <- 100
 n <- n_segments * n_per_segment
 latent_data <- matrix(NA, ncol = p, nrow = n)
-aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+aux_data <- matrix(0, ncol = n_segments, nrow = n)
 # Create artificial data with variance and mean varying over the segments.
 for (i in 1:p) {
   for (seg in 1:n_segments) {
@@ -51,7 +51,8 @@ for (i in 1:p) {
   }
 }
 mixed_data <- mix_data(latent_data, 2, "elu")
-res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+# Increase the number of epochs to obtain better performance.
+res <- iVAE(mixed_data, aux_data, 3, epochs = 10, batch_size = 64)
 new_data <- matrix(rnorm(p * 2), nrow = 2)
 new_aux_data <- rbind(c(1, rep(0, n_segments - 1)), c(1, rep(0, n_segments - 1)))
 pred_ICs <- predict(res, new_data, new_aux_data)

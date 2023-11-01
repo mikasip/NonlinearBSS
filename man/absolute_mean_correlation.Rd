@@ -14,16 +14,19 @@ A numeric value of absoulte mean correlation coeffiecient
 }
 \description{
 Calculates absolute mean correlation coefficient
+\loadmathjax
 }
 \details{
 The method calculates absolute mean correlation coeffiecient (MCC) by
 solving a linear assignment problem. MCC is mathematically given as
-\deqn{
-\text{MCC}(\mathbf K)=\frac{1}{p} \sup_{\mathbf P  \in \mathcal{P}}
-\text{tr}(\mathbf P\, \abs(\mathbf K)),
-}
-where \eqn{\mathcal{P}} is a set of all possible permutation matrices,
-\eqn{\text{tr}(\cdot )} is the trace of a matrix, and \eqn{\abs(\cdot)}
+\mjdeqn{
+MCC(\mathbf K)=\frac{1}{p} \sup_{\mathbf P  \in \mathcal{P}}
+tr(\mathbf P\, \abs(\mathbf K)),
+}{ascii}
+where \mjeqn{\mathcal{P}}{ascii} is a set of all possible 
+permutation matrices,
+\mjeqn{ tr(\cdot )}{ascii} is the trace of a matrix, and 
+\mjeqn{\abs(\cdot)}{ascii}
 denotes taking the absolute value of a matrix elementwise.
 }
 \examples{

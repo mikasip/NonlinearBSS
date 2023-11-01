@@ -50,14 +50,16 @@
 #' p <- 3
 #' # Generate artificial latent data
 #' latent_data <- generate_nonstationary_spatial_data_by_segments(
-#'     n,
+#'     n, p,
 #'     coords, 10
 #' )$data
 #' # Generate artificial observed data by applying a nonlinear mixture
 #' obs_data <- mix_data(latent_data, 2)
 #' cor(obs_data, latent_data)
+#' 
+#' # For better peformance, increase the number of epochs.
 #' resiVAE <- iVAE_spatial(obs_data, coords, c(0.1, 0.1), c(1, 1), 3,
-#'     epochs = 300, batch_size = 64
+#'     epochs = 10, batch_size = 64
 #' )
 #' cormat <- cor(resiVAE$IC, latent_data)
 #' cormat

@@ -93,20 +93,12 @@ trick to sample a new value using the mean and the standard deviation
 given by the encoder.
 }
 \examples{
-library(tensorflow)
-library(keras)
-library(tfdatasets)
-c(c(xtrain, ytrain), c(xtest, ytest)) \%<-\% dataset_mnist()
-
-input_size <- dim(xtrain)[2] * dim(xtrain)[3]
-x_train <- xtrain / 255
-x_test <- xtest / 255
-latent_size <- 10
-
-x_train <- array_reshape(x_train, c(nrow(x_train), input_size))
-x_test <- array_reshape(x_test, c(nrow(x_test), input_size))
-
-resVAE <- VAE(x_train, 10, hidden_units = c(128, 64, 32), lr_start = 0.0001, epochs = 10, batch_size = 64)
+p <- 3
+n <- 1000
+latent_data <- matrix(rnorm(p * n), ncol = p, nrow = n)
+mixed_data <- mix_data(latent_data, 2, "elu")
+res <- VAE(mixed_data, p, hidden_units = c(128, 64, 32), 
+lr_start = 0.0001, epochs = 1, batch_size = 64)
 }
 \references{
 \insertAllCited{}

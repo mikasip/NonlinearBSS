@@ -4,7 +4,7 @@
 \alias{load_with_tf}
 \title{Load iVAE Object with Trained Tensorflow Models}
 \usage{
-load_with_tf(file, ...)
+load_with_tf(file)
 }
 \arguments{
 \item{file}{Filename of the saved \code{iVAE} object.}
@@ -26,7 +26,7 @@ n_segments <- 10
 n_per_segment <- 100
 n <- n_segments * n_per_segment
 latent_data <- matrix(NA, ncol = p, nrow = n)
-aux_data <- matrix(NA, ncol = n_segments, nrow = n)
+aux_data <- matrix(0, ncol = n_segments, nrow = n)
 # Create artificial data with variance and mean varying over the segments.
 for (i in 1:p) {
   for (seg in 1:n_segments) {
@@ -39,7 +39,8 @@ for (i in 1:p) {
   }
 }
 mixed_data <- mix_data(latent_data, 2, "elu")
-res <- iVAE(mixed_data, aux_data, 3, epochs = 300, batch_size = 64)
+# Increase the number of epochs to obtain better performance.
+res <- iVAE(mixed_data, aux_data, 3, epochs = 10, batch_size = 64)
 save_with_tf(res, "res_dir", "res_obj.RData")
 loaded_obj <- load_with_tf("res_obj.RData")
 new_ICs <- matrix(rnorm(p * 2), nrow = 2)

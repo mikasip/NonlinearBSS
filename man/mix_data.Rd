@@ -19,46 +19,49 @@ A matrix containing the mixed data.
 }
 \description{
 Creates mixed data based on the input data.
+\loadmathjax
 }
 \details{
 The method mixes the input data by applying mixing matrices and nonlinear
-activation function based on the input parameters. Let \eqn{\omega_i} be
-the activation function of \eqn{i}th layer and \eqn{\mathbf B_i} be the
-normalized mixing matrix of \eqn{i}th layer.
-Then, the mixing function \eqn{\mathbf f_L} is defined as
-\deqn{
+activation function based on the input parameters. 
+Let \mjeqn{\omega_i}{ascii} be
+the activation function of 
+\mjeqn{i}{ascii}th layer and \mjeqn{\mathbf B_i}{ascii} be the
+normalized mixing matrix of \mjeqn{i}{ascii}th layer.
+Then, the mixing function \mjeqn{\mathbf f_L}{ascii} is defined as
+\mjdeqn{
     \mathbf f_L(\mathbf z) = \begin{cases}
         \omega_L(\mathbf B_L \mathbf z),\quad L = 1, \\
         \omega_L(\mathbf B_L \mathbf f_{L-1}(\mathbf z)),
         \quad L \in \{2,3,\dots\}.
     \end{cases}
-}
-The function has a linear activation \eqn{\omega_L(x)=x} for the last layer,
-which means that mixing function \eqn{\mathbf f_1} with one layer corresponds
+}{ascii}
+The function has a linear activation \mjeqn{\omega_L(x)=x}{ascii} for the last layer,
+which means that mixing function \mjeqn{\mathbf f_1}{ascii} with one layer corresponds
 to a linear mixing. If more than one layers are applied, the other layers
 use the activation function given by the parameter \code{nonlinearity}.
 The options for \code{nonlinearity} are:
 
 \code{nonlinarity="elu"}:
-\deqn{
+\mjdeqn{
 \omega_i(x)=\begin{cases}
     x,\quad x \geq 0, \\
-    \text{exp}(x) - 1,\quad x < 0,
+    exp(x) - 1,\quad x < 0,
 \end{cases}
-}
+}{ascii}
 
 \code{nonlinarity="xtanh"}:
-\deqn{
-\omega_i(x)= \text{tanh}(x) + 0.1 * x
-}
+\mjdeqn{
+\omega_i(x)= tanh(x) + 0.1 * x
+}{ascii}
 
 \code{nonlinarity="lrelu"}:
-\deqn{
+\mjdeqn{
 \omega_i(x)=\begin{cases}
     x,\quad x \geq 0, \\
     0.2 * x, x < 0.
 \end{cases}
-}
+}{ascii}
 }
 \examples{
 data <- matrix(rnorm(300), ncol = 3)
