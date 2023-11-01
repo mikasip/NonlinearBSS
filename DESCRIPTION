@@ -5,7 +5,6 @@ Version: 0.1.0
 Date: 2023-10-21
 Authors@R: c(person(given = "Mika", family = "Sipilä", role = c("aut", "cre"), email = "mika.e.sipila@jyu.fi", comment=c(ORCID = "0000-0002-5912-840X")))
 Imports: tensorflow, keras, mathjaxr
-Maintainer: Mika Sipilä <mike.e.sipila@jyu.fi>
 Description: The package contains variational autoencoder (VAE) based methods for nonlinear blind source separation. The methods include regular VAE and multiple methods based on identifiable variational autoencoder (iVAE). For details about iVAE, see Khemakhem et al. (2020) <https://doi.org/10.48550/arXiv.1907.04809>.  
 License: GPL-3
 Encoding: UTF-8
