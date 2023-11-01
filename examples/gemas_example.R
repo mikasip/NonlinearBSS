@@ -234,7 +234,6 @@ for (l in explainer$S) {
 }
 mashap_scaled <- sweep(mashap, 2, colSums(mashap), "/")
 
-# Shapley values for ICs with respect to Fe (Iron)
 X <- as.data.frame(resiVAE$IC_unscaled)
 X <- X
 bg_X <- X[bg_points$inds, ]
