@@ -1,10 +1,3 @@
-library(gstat)
-library(LaplacesDemon)
-library(RcppHungarian)
-library(distances)
-library(deepspat)
-library(Matrix)
-
 #' Absolute Mean Correlation Coefficient
 #' @description Calculates absolute mean correlation coefficient
 #' @import RcppHungarian
