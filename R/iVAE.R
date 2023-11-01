@@ -5,6 +5,7 @@
 #' @import tensorflow
 #' @import keras
 #' @import mathjaxr
+#' @import Rdpack
 #' @importFrom Rdpack reprompt
 #' @importFrom mathjaxr preview_rd
 #' @param data A matrix with P columns and N rows containing the observed data.
