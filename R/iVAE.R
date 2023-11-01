@@ -89,12 +89,12 @@
 #' \mjdeqn{
 #' \mathcal{L}(\theta |  x,  u) \geq
 #' E_{q_{ \theta_{ g}}( z| x, u)} (
-#' \text{log}\, p_{ \theta_{ h}}(x | z)  +
-#' \text{log}\,p_{ \theta_{w}}(z | u) -
-#' \text{log}\,q_{\theta_{g}}(z | x, u) ).
+#' log \, p_{ \theta_{ h}}(x | z)  +
+#' log \, p_{ \theta_{w}}(z | u) -
+#' log \, q_{\theta_{g}}(z | x, u) ).
 #' }{ascii}
 #'
-#' In the loss function, \mjeqn{\text{log} p_{ \theta_{ h}}(x | z)}{ascii}
+#' In the loss function, \mjeqn{ log \, p_{ \theta_{ h}}(x | z)}{ascii}
 #' controls the reconstruction error, and have the distribution based on the
 #' parameter \code{error_dist} where \code{gaussian} or
 #' \code{laplace} are currently supported. The location of
@@ -103,8 +103,8 @@
 #' \code{error_dist_sigma} is \code{0.02}. By decreasing the value,
 #' the loss function emphasizes more the reconstruction error and
 #' by increasing, the reconstruction error has less weight.
-#' The term \mjeqn{\text{log}\,p_{ \theta_{w}}(z | u) -
-#' \text{log}\,q_{\theta_{g}}(z | x, u)}{ascii} tries to make the
+#' The term \mjeqn{log \, p_{ \theta_{w}}(z | u) -
+#' log \, q_{\theta_{g}}(z | x, u)}{ascii} tries to make the
 #' distributions \mjeqn{p_{\theta_{w}}(z | u)}{ascii} and
 #' \mjeqn{q_{\theta_{g}}(z | x, u)}{ascii} as similar as possible.
 #' This term controls the disentangling and allows the method
