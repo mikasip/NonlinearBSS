@@ -108,37 +108,43 @@ Provided if true_data is not NULL.}
 \item{DNAME}{The of the original data.}
 }
 \description{
-Trains an identifiable variational autoencoder (iVAE) using the input data.
+Trains an identifiable variational autoencoder
+(iVAE) using the input data.
+\loadmathjax{}
 }
 \details{
 The method constructs and trains an identifiable variational
 autoencoder (iVAE) \insertCite{Khemakhem2020}{NonlinearBSS}
 based on the given parameters.
-iVAE is composed of an encoder \eqn{g}, a decoder \eqn{h} and
-an auxiliary function \eqn{w}.
-The encoder transforms the original data \eqn{x} into a mean and a variace
+iVAE is composed of an encoder \mjeqn{g}{ascii}, a decoder
+\mjeqn{h}{ascii} and
+an auxiliary function \mjeqn{w}{ascii}.
+The encoder transforms the original data
+\mjeqn{x}{ascii} into a mean and a variace
 vectors.
 The mean and the variance are then used to sample a latent representation by
 using a reparametrization trick \insertCite{kingma2013auto}{NonlinearBSS}.
-The decoder aims to transform the latent representation \eqn{z} back to the
+The decoder aims to transform the latent representation
+\mjeqn{z}{ascii} back to the
 original data. The auxiliary function estimates the mean and the
 variance of the data based on the auxiliary
 data.
-The functions \eqn{g}, \eqn{h} and \eqn{w} are deep neural networks
-with parameters \eqn{\lambda=(\lambda_g, \lambda_h, \lambda_w)^\top}.
+The functions \mjeqn{g}{ascii}, \mjeqn{h}{ascii}
+and \mjeqn{w}{ascii} are deep neural networks
+with parameters
+\mjeqn{\lambda=(\lambda_g, \lambda_h, \lambda_w)^\top}{ascii}.
 The parameters are learned by minimizing the lower bound of the data
 log-likelihood:
-\ifelse{html}{\out{<math xmlns="http://www.w3.org/1998/Math/MathML" display="block"><mrow data-mjx-texclass="ORD"><mi data-mjx-variant="-tex-calligraphic" mathvariant="script">L</mi></mrow><mo stretchy="false">(</mo><mi>θ</mi><mrow data-mjx-texclass="ORD"><mo stretchy="false">|</mo></mrow><mi>x</mi><mo>,</mo><mi>u</mi><mo stretchy="false">)</mo><mo>≥</mo><msub><mi>E</mi><mrow data-mjx-texclass="ORD"><msub><mi>q</mi><mrow data-mjx-texclass="ORD"><msub><mi>θ</mi><mrow data-mjx-texclass="ORD"><mi>g</mi></mrow></msub></mrow></msub><mo stretchy="false">(</mo><mi>z</mi><mrow data-mjx-texclass="ORD"><mo stretchy="false">|</mo></mrow><mi>x</mi><mo>,</mo><mi>u</mi><mo stretchy="false">)</mo></mrow></msub><mo stretchy="false">(</mo><mtext>log</mtext><mstyle scriptlevel="0"><mspace width="0.167em"></mspace></mstyle><msub><mi>p</mi><mrow data-mjx-texclass="ORD"><msub><mi>θ</mi><mrow data-mjx-texclass="ORD"><mi>h</mi></mrow></msub></mrow></msub><mo stretchy="false">(</mo><mi>x</mi><mrow data-mjx-texclass="ORD"><mo stretchy="false">|</mo></mrow><mi>z</mi><mo stretchy="false">)</mo><mo>+</mo><mtext>log</mtext><mstyle scriptlevel="0"><mspace width="0.167em"></mspace></mstyle><msub><mi>p</mi><mrow data-mjx-texclass="ORD"><msub><mi>θ</mi><mrow data-mjx-texclass="ORD"><mi>w</mi></mrow></msub></mrow></msub><mo stretchy="false">(</mo><mi>z</mi><mrow data-mjx-texclass="ORD"><mo stretchy="false">|</mo></mrow><mi>u</mi><mo stretchy="false">)</mo><mo>−</mo><mtext>log</mtext><mstyle scriptlevel="0"><mspace width="0.167em"></mspace></mstyle><msub><mi>q</mi><mrow data-mjx-texclass="ORD"><msub><mi>θ</mi><mrow data-mjx-texclass="ORD"><mi>g</mi></mrow></msub></mrow></msub><mo stretchy="false">(</mo><mi>z</mi><mrow data-mjx-texclass="ORD"><mo stretchy="false">|</mo></mrow><mi>x</mi><mo>,</mo><mi>u</mi><mo stretchy="false">)</mo><mo stretchy="false">)</mo><mo>.</mo></math>}}
-{\deqn{
+\mjdeqn{
 \mathcal{L}(\theta |  x,  u) \geq
 E_{q_{ \theta_{ g}}( z| x, u)} (
 \text{log}\, p_{ \theta_{ h}}(x | z)  +
 \text{log}\,p_{ \theta_{w}}(z | u) -
 \text{log}\,q_{\theta_{g}}(z | x, u) ).
-}}
+}{ascii}
 
-In the loss function, \eqn{\text{log} p_{ \theta_{ h}}(x | z)} controls the
-reconstruction error, and have the distribution based on the
+In the loss function, \mjeqn{\text{log} p_{ \theta_{ h}}(x | z)}{ascii}
+controls the reconstruction error, and have the distribution based on the
 parameter \code{error_dist} where \code{gaussian} or
 \code{laplace} are currently supported. The location of
 the distribution is the original data and the scale parameter
@@ -146,19 +152,20 @@ is given by \code{error_dist_sigma}. The default value for
 \code{error_dist_sigma} is \code{0.02}. By decreasing the value,
 the loss function emphasizes more the reconstruction error and
 by increasing, the reconstruction error has less weight.
-The term \eqn{\text{log}\,p_{ \theta_{w}}(z | u) -
-\text{log}\,q_{\theta_{g}}(z | x, u)} tries to make the
-distributions \eqn{p_{\theta_{w}}(z | u)} and
-\eqn{q_{\theta_{g}}(z | x, u)} as similar as possible.
+The term \mjeqn{\text{log}\,p_{ \theta_{w}}(z | u) -
+\text{log}\,q_{\theta_{g}}(z | x, u)}{ascii} tries to make the
+distributions \mjeqn{p_{\theta_{w}}(z | u)}{ascii} and
+\mjeqn{q_{\theta_{g}}(z | x, u)}{ascii} as similar as possible.
 This term controls the disentangling and allows the method
 to find the true latent components.
 The parameter \code{source_dist} defines the distributions
-\eqn{p_{ \theta_{w}}(z | u)} and \eqn{q_{\theta_{g}}(z | x, u)}.
+\mjeqn{p_{ \theta_{w}}(z | u)}{ascii} and
+\mjeqn{q_{\theta_{g}}(z | x, u)}{ascii}.
 The distributions \code{gaussian} and \code{laplace} are currently
 supported.
-The parameters for \eqn{p_{ \theta_{w}}(z | u)} are given by the
-auxiliary function and the parameters for \eqn{q_{\theta_{g}}(z | x, u)}
-are given by the encoder.
+The parameters for \mjeqn{p_{ \theta_{w}}(z | u)}{ascii} are given by the
+auxiliary function and the parameters for
+\mjeqn{q_{\theta_{g}}(z | x, u)}{ascii} are given by the encoder.
 
 The method is identifiable, meaning that it finds the true latent
 representation in the limit of infinite data, if some conditions are
