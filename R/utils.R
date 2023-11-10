@@ -52,3 +52,25 @@ SamplingLaplace(keras$layers$Layer) %py_class% {
 }
 
 sampling_laplace <- create_layer_wrapper(SamplingLaplace)
+
+WeightedSumLayer(keras$layers$Layer) %py_class% {
+    initialize <- function(p, k) {
+        super$initialize()
+        self$p <- p
+        self$k <- k
+    }
+
+    call <- function(y, weights) {
+        z_sum <- 0
+        ind <- 1
+        for (i in 1:self$k) {
+            z_i <- y[, ind:(ind + self$p - 1)]
+            weight_i <- weights[, i]
+            z_sum <- z_sum + z_i * weight_i
+            ind <- ind + self$p
+        }
+        return(z_sum)
+    }
+}
+
+weighted_sum <- create_layer_wrapper(WeightedSumLayer)

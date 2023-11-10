@@ -3,7 +3,11 @@ Type: Package
 Title: Nonlinear Blind Source Separation
 Version: 0.1.0
 Date: 2023-10-21
-Authors@R: c(person(given = "Mika", family = "Sipilä", role = c("aut", "cre"), email = "mika.e.sipila@jyu.fi", comment=c(ORCID = "0000-0002-5912-840X")))
+Authors@R: c(person(given = "Mika", family = "Sipilä", role = c("aut", "cre"), email = "mika.e.sipila@jyu.fi", comment=c(ORCID = "0000-0002-5912-840X")),
+    person(given = "Klaus", family = "Nordhausen", role = c("aut"),
+    comment = c(ORCID = "0000-0002-3758-8501")),
+    person(given = "Sara", family = "Taskinen", role = "aut",
+    comment = c(ORCID = "0000-0001-9470-7258")))
 Imports: stats, graphics, tensorflow, keras, mathjaxr, Rdpack, RcppHungarian
 Suggests: tfdatasets
 Description: The package contains variational autoencoder (VAE) based methods for nonlinear blind source separation. The methods include regular VAE and multiple methods based on identifiable variational autoencoder (iVAE). For details about iVAE, see Khemakhem et al. (2020) <https://doi.org/10.48550/arXiv.1907.04809>.  
