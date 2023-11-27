@@ -16,6 +16,16 @@ laplace_log_pdf <- function(x, loc, scale, reduce = TRUE) {
     return(lpdf)
 }
 
+# sigma not used
+bernoulli_log_pdf <- function(x, theta, sigma, reduce = TRUE) {
+    theta <- theta * 0.99 + 0.005
+    lpdf <- x * tf$math$log(theta) + (1 - x) * tf$math$log(1 - theta)
+    if (reduce) {
+        return(tf$reduce_sum(lpdf, -1L))
+    }
+    return(lpdf)
+}
+
 absolute_activation <- function(x) {
     tf$abs(x)
 }

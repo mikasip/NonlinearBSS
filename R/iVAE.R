@@ -176,10 +176,11 @@ iVAE <- function(
     "gaussian" = norm_log_pdf,
     "laplace" = laplace_log_pdf
   )
-  error_dist <- match.arg(error_dist, c("gaussian", "laplace"))
+  error_dist <- match.arg(error_dist, c("gaussian", "laplace", "bernoulli"))
   error_log_pdf <- switch(error_dist,
     "gaussian" = norm_log_pdf,
-    "laplace" = laplace_log_pdf
+    "laplace" = laplace_log_pdf,
+    "bernoulli" = bernoulli_log_pdf,
   )
   call_params <- list(
     latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
@@ -250,7 +251,8 @@ iVAE <- function(
       dense_layer()
     output_decoder <- output_decoder %>% dense_layer()
   }
-  out_layer <- layer_dense(units = p)
+  out_layer_activation <- ifelse(error_dist == "bernoulli", "sigmoid", "linear")
+  out_layer <- layer_dense(units = p, activation = out_layer_activation)
   x_decoded_mean <- x_decoded_mean %>% out_layer()
   output_decoder <- output_decoder %>% out_layer()
   decoder <- keras_model(input_decoder, output_decoder)

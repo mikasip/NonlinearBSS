@@ -12,9 +12,9 @@
 #' MCC(\mathbf K)=\frac{1}{p} \sup_{\mathbf P  \in \mathcal{P}}
 #' tr(\mathbf P\, \abs(\mathbf K)),
 #' }{ascii}
-#' where \mjeqn{\mathcal{P}}{ascii} is a set of all possible 
+#' where \mjeqn{\mathcal{P}}{ascii} is a set of all possible
 #' permutation matrices,
-#' \mjeqn{ tr(\cdot )}{ascii} is the trace of a matrix, and 
+#' \mjeqn{ tr(\cdot )}{ascii} is the trace of a matrix, and
 #' \mjeqn{\abs(\cdot)}{ascii}
 #' denotes taking the absolute value of a matrix elementwise.
 #' @examples
@@ -59,6 +59,18 @@ elu <- function(a) {
     return(a)
 }
 
+exp_arctan <- function(a) {
+    (1 / 2) * a * exp(atan(a))
+}
+
+leaky_softplus <- function(a, slope = 0.1) {
+    slope * a + (1 - slope) * log(1 + exp(a))
+}
+
+logsumexp <- function(a, slope = 0.1) {
+    log(exp(slope * a) + exp(a)) - log(2)
+}
+
 #' Create Overdeterminated Mixed Data
 #' @description Creates overdeterminated mixed data based on the input data.
 #' \loadmathjax
@@ -71,12 +83,12 @@ elu <- function(a) {
 #' A matrix containing the mixed data.
 #' @details
 #' The method mixes the input data by applying mixing matrices and nonlinear
-#' activation function based on the input parameters. 
+#' activation function based on the input parameters.
 #' Let \mjeqn{\omega_i}{ascii} be
-#' the activation function of \mjeqn{i}{ascii}th layer and 
+#' the activation function of \mjeqn{i}{ascii}th layer and
 #' \mjeqn{\mathbf B_i}{ascii} be the
 #' normalized mixing matrix of \mjeqn{i}{ascii}th layer.
-#' Then, the mixing function \mjeqn{\mathbf f_L}{ascii} 
+#' Then, the mixing function \mjeqn{\mathbf f_L}{ascii}
 #' is defined as
 #' \mjdeqn{
 #'     \mathbf f_L(\mathbf z) = \begin{cases}
@@ -85,9 +97,9 @@ elu <- function(a) {
 #'         \quad L \in \{2,3,\dots\}.
 #'     \end{cases}
 #' }{ascii}
-#' The function has a linear activation 
+#' The function has a linear activation
 #' \mjeqn{\omega_L(x)=x}{ascii} for the last layer,
-#' which means that mixing function 
+#' which means that mixing function
 #' \mjeqn{\mathbf f_1}{ascii} with one layer corresponds
 #' to a linear mixing. If more than one layers are applied, the other layers
 #' use the activation function given by the parameter \code{nonlinearity}.
@@ -155,9 +167,9 @@ mix_data_over_determinated <- function(
 #' A matrix containing the mixed data.
 #' @details
 #' The method mixes the input data by applying mixing matrices and nonlinear
-#' activation function based on the input parameters. 
+#' activation function based on the input parameters.
 #' Let \mjeqn{\omega_i}{ascii} be
-#' the activation function of 
+#' the activation function of
 #' \mjeqn{i}{ascii}th layer and \mjeqn{\mathbf B_i}{ascii} be the
 #' normalized mixing matrix of \mjeqn{i}{ascii}th layer.
 #' Then, the mixing function \mjeqn{\mathbf f_L}{ascii} is defined as
@@ -211,6 +223,12 @@ mix_data <- function(data, n_layers = 1, nonlinearity = "elu") {
                 mixed_data <- apply(mixed_data, c(1, 2), xtanh)
             } else if (nonlinearity == "elu") {
                 mixed_data <- apply(mixed_data, c(1, 2), elu)
+            } else if (nonlinearity == "exp_arctan") {
+                mixed_data <- apply(mixed_data, c(1, 2), exp_arctan)
+            } else if (nonlinearity == "leaky_softplus") {
+                mixed_data <- apply(mixed_data, c(1, 2), leaky_softplus)
+            } else if (nonlinearity == "logsumexp") {
+                mixed_data <- apply(mixed_data, c(1, 2), logsumexp)
             } else {
                 mixed_data <- apply(mixed_data, c(1, 2), lrelu)
             }
@@ -232,7 +250,7 @@ mix_data <- function(data, n_layers = 1, nonlinearity = "elu") {
 #' @param n_segments The number of spatial segments. Each segment
 #' has their own mean and variance
 #' @param random_mean A boolean determining if the constant zero mean
-#' is used or if mean is random randomly sampled from 
+#' is used or if mean is random randomly sampled from
 #' \mjeqn{Unif(-5, 5)}{ascii}
 #' for each segment.
 #' @return
