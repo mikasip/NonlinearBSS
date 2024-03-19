@@ -23,9 +23,9 @@ Creates mixed data based on the input data.
 }
 \details{
 The method mixes the input data by applying mixing matrices and nonlinear
-activation function based on the input parameters. 
+activation function based on the input parameters.
 Let \mjeqn{\omega_i}{ascii} be
-the activation function of 
+the activation function of
 \mjeqn{i}{ascii}th layer and \mjeqn{\mathbf B_i}{ascii} be the
 normalized mixing matrix of \mjeqn{i}{ascii}th layer.
 Then, the mixing function \mjeqn{\mathbf f_L}{ascii} is defined as

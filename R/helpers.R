@@ -71,6 +71,14 @@ logsumexp <- function(a, slope = 0.1) {
     log(exp(slope * a) + exp(a)) - log(2)
 }
 
+gaussian_kernel <- function(d) {
+    exp(-d^2)
+}
+
+wendland_kernel <- function(d) {
+    (1 - d)^6 * (35 * d^2 + 18 * d + 3) / 3
+}
+
 #' Create Overdeterminated Mixed Data
 #' @description Creates overdeterminated mixed data based on the input data.
 #' \loadmathjax
@@ -309,3 +317,61 @@ generate_nonstationary_spatial_data_by_segments <-
             center_points = center_points
         ))
     }
+
+#' Generate Nonstationary Spatio-Temporal Data by Segments
+#' @description Generates nonstationary Gaussian spatio-temporal data with
+#' changing mean and variance by segments. \loadmathjax
+#' @param n_time Number of time points.
+#' @param n_spat Number of spatial points.
+#' @param p A dimension of the data.
+#' @param n_segments_space Number of spatial segments.
+#' @param n_segments_time Number of temporal segments.
+#' @param coords_time A 3 x n (x, y, time) matrix containing the 
+#' spatio-temporal coordinates.
+#' @return
+#' An object with the following properties
+#' \item{data}{A p x n matrix containing the generated data.}
+#' \item{labels}{A vector giving numerical labels for each data point.
+#' The data points with same label belong in the same segment.}
+#' \item{coords}{A 3 x n matrix containing the spatio-temporal coordinates.}
+#' @details
+#' The method chooses uniformly \code{n_segments_space} center points from 
+#' the provided spatial locations. The locations are divided into segments 
+#' based on the lowest distance to any of the center points. Similarly 
+#' \code{n_segments_time} center points are selected from the provided 
+#' temporal points and the data are divided into temporal segments.
+#' The data is generated from normal distribution by sampling unique variance 
+#' from distribution \mjeqn{Unif(0.1, 5)}{ascii} for each segment and mean from
+#' distribution \mjeqn{Unif(-1, 1)}{ascii}.
+#' @examples
+#' coords_time <- cbind(rep(runif(50), 100), rep(runif(50), 100), rep(1:100, each=50))
+#' data_obj <- generate_nonstationary_spatio_temporal_data_by_segments(100, 50, 3, 5, 10, coords_time)
+#' @export
+generate_nonstationary_spatio_temporal_data_by_segments <- 
+    function(n_time, n_spat, p, n_segments_space, n_segments_time, coords_time) {
+  n <- dim(coords_time)[1]
+  data <- matrix(NA, nrow = n, ncol = p)
+  labels <- numeric(n)
+  center_point_inds <- sample(1:n_spat, n_segments_space)
+  center_points <- coords_time[center_point_inds,1:2]
+  labels_spat <- unlist(apply(coords_time[,1:2], 1, FUN = function(coord) {
+    centered_points <- matrix(unlist(apply(center_points, 1, FUN = function(x) { x - coord })), byrow = TRUE, nrow = n_segments_space)
+    dists <- apply(centered_points, 1, FUN = function(x) {sqrt(x[1]^2 + x[2]^2)})
+    return(which(dists == min(dists))[1])
+  }))
+  center_times <- sample(1:n_time, n_segments_time)
+  labels_time <- unlist(sapply(coords_time[,3], FUN = function(t) {
+    dists <- matrix(unlist(sapply(center_times, FUN = function(x) { abs(x - t) })), byrow = TRUE, nrow = n_segments_time)
+    return(which(dists == min(dists))[1])
+  }))
+  for (k in 1:n_segments_space) {
+    for (k2 in 1:n_segments_time) {
+      segment_coord_inds <- intersect(which(labels_spat == k), which(labels_time == k2))
+      segment_coords <- coords_time[segment_coord_inds, ]
+      for (i in 1:p) {
+        data[segment_coord_inds, i] <- rnorm(nrow(segment_coords), runif(1, -1 ,1), runif(1,0.1,5))
+      } 
+    }
+  }
+  return(list(data = data, labels = labels, coords_time = coords_time))
+}

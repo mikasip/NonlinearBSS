@@ -42,7 +42,7 @@
 #'     }
 #' }
 #' mixed_data <- mix_data(latent_data, 2, "elu")
-#' 
+#'
 #' # For better performance, increase the number of epochs.
 #' res <- TCL(mixed_data, labels - 1,
 #'     n_hidden_layers = 1,
@@ -115,6 +115,7 @@ TCL <- function(
     model %>% fit(x_train, y_train, shuffle = TRUE, ...)
 
     ICA_estimates <- predict(ICA_model, x)
-
-    return(list(IC = ICA_estimates, mean = 0, whitening_matrix = 0))
+    TCL_object <- list(IC = ICA_estimates, data_means = data_means, data_sds = data_sds, ICA_model = ICA_model)
+    class(TCL_object) <- "TCL"
+    return(TCL_object)
 }

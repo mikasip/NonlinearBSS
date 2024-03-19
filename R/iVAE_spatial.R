@@ -56,7 +56,7 @@
 #' # Generate artificial observed data by applying a nonlinear mixture
 #' obs_data <- mix_data(latent_data, 2)
 #' cor(obs_data, latent_data)
-#' 
+#'
 #' # For better peformance, increase the number of epochs.
 #' resiVAE <- iVAE_spatial(obs_data, coords, c(0.1, 0.1), c(1, 1), 3,
 #'     epochs = 10, batch_size = 64
@@ -101,6 +101,7 @@ iVAE_spatial <- function(
         aux_data <- cbind(aux_data, model.matrix(~ 0 + as.factor(labels)))
     }
     test_data <- NULL
+    test_aux_data <- NULL
     if (!is.null(test_inds)) {
         test_data <- data[test_inds, ]
         test_aux_data <- aux_data[test_inds, ]
@@ -111,5 +112,7 @@ iVAE_spatial <- function(
     )
     class(resVAE) <- c("iVAEspatial", class(resVAE))
     resVAE$spatial_dim <- dim(locations)[2]
+    resVAE$test_data <- test_data
+    resVAE$test_aux_data <- test_aux_data
     return(resVAE)
 }

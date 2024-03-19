@@ -23,7 +23,7 @@ generate_nonstationary_spatial_data_by_segments(
 has their own mean and variance}
 
 \item{random_mean}{A boolean determining if the constant zero mean
-is used or if mean is random randomly sampled from 
+is used or if mean is random randomly sampled from
 \mjeqn{Unif(-5, 5)}{ascii}
 for each segment.}
 }

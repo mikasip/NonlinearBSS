@@ -25,12 +25,12 @@ Creates overdeterminated mixed data based on the input data.
 }
 \details{
 The method mixes the input data by applying mixing matrices and nonlinear
-activation function based on the input parameters. 
+activation function based on the input parameters.
 Let \mjeqn{\omega_i}{ascii} be
-the activation function of \mjeqn{i}{ascii}th layer and 
+the activation function of \mjeqn{i}{ascii}th layer and
 \mjeqn{\mathbf B_i}{ascii} be the
 normalized mixing matrix of \mjeqn{i}{ascii}th layer.
-Then, the mixing function \mjeqn{\mathbf f_L}{ascii} 
+Then, the mixing function \mjeqn{\mathbf f_L}{ascii}
 is defined as
 \mjdeqn{
     \mathbf f_L(\mathbf z) = \begin{cases}
@@ -39,9 +39,9 @@ is defined as
         \quad L \in \{2,3,\dots\}.
     \end{cases}
 }{ascii}
-The function has a linear activation 
+The function has a linear activation
 \mjeqn{\omega_L(x)=x}{ascii} for the last layer,
-which means that mixing function 
+which means that mixing function
 \mjeqn{\mathbf f_1}{ascii} with one layer corresponds
 to a linear mixing. If more than one layers are applied, the other layers
 use the activation function given by the parameter \code{nonlinearity}.

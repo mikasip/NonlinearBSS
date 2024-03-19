@@ -23,9 +23,9 @@ solving a linear assignment problem. MCC is mathematically given as
 MCC(\mathbf K)=\frac{1}{p} \sup_{\mathbf P  \in \mathcal{P}}
 tr(\mathbf P\, \abs(\mathbf K)),
 }{ascii}
-where \mjeqn{\mathcal{P}}{ascii} is a set of all possible 
+where \mjeqn{\mathcal{P}}{ascii} is a set of all possible
 permutation matrices,
-\mjeqn{ tr(\cdot )}{ascii} is the trace of a matrix, and 
+\mjeqn{ tr(\cdot )}{ascii} is the trace of a matrix, and
 \mjeqn{\abs(\cdot)}{ascii}
 denotes taking the absolute value of a matrix elementwise.
 }
