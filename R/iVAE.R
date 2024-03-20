@@ -154,33 +154,26 @@
 #'   }
 #' }
 #' mixed_data <- mix_data(latent_data, 2, "elu")
-#' 
+#'
 #' # For better performance, increase the number of epochs
 #' res <- iVAE(mixed_data, aux_data, 3, epochs = 10, batch_size = 64)
 #' cormat <- cor(res$IC, latent_data)
 #' cormat
 #' absolute_mean_correlation(cormat)
 #' @export
-iVAE <- function(
-    data, aux_data, latent_dim, test_data = NULL,
-    test_data_aux = NULL, hidden_units = c(128, 128, 128),
-    aux_hidden_units = c(128, 128, 128), activation = "leaky_relu",
-    source_dist = "gaussian", validation_split = 0,
-    error_dist = "gaussian", error_dist_sigma = 0.02,
-    optimizer = NULL, lr_start = 0.001, lr_end = 0.0001,
-    steps = 10000, seed = NULL,
-    get_prior_means = TRUE, true_data = NULL,
-    epochs, batch_size) {
+iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = NULL, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
+                 activation = "leaky_relu", source_dist = "gaussian", validation_split = 0, error_dist = "gaussian",
+                 error_dist_sigma = 0.02, optimizer = NULL, lr_start = 0.001, lr_end = 0.0001,
+                 steps = 10000, seed = NULL, get_prior_means = TRUE, true_data = NULL, epochs, batch_size) {
   source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
   source_log_pdf <- switch(source_dist,
     "gaussian" = norm_log_pdf,
     "laplace" = laplace_log_pdf
   )
-  error_dist <- match.arg(error_dist, c("gaussian", "laplace", "bernoulli"))
+  error_dist <- match.arg(error_dist, c("gaussian", "laplace"))
   error_log_pdf <- switch(error_dist,
     "gaussian" = norm_log_pdf,
-    "laplace" = laplace_log_pdf,
-    "bernoulli" = bernoulli_log_pdf,
+    "laplace" = laplace_log_pdf
   )
   call_params <- list(
     latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
@@ -251,15 +244,11 @@ iVAE <- function(
       dense_layer()
     output_decoder <- output_decoder %>% dense_layer()
   }
-  out_layer_activation <- ifelse(error_dist == "bernoulli", "sigmoid", "linear")
-  out_layer <- layer_dense(units = p, activation = out_layer_activation)
+  out_layer <- layer_dense(units = p)
   x_decoded_mean <- x_decoded_mean %>% out_layer()
   output_decoder <- output_decoder %>% out_layer()
   decoder <- keras_model(input_decoder, output_decoder)
-  final_output <- layer_concatenate(list(
-    x_decoded_mean, z,
-    z_mean_and_var, prior_v
-  ))
+  final_output <- layer_concatenate(list(x_decoded_mean, z, z_mean_and_var, prior_v))
 
   vae <- keras_model(list(input_data, input_aux, input_prior), final_output)
   vae_loss <- function(x, res) {
@@ -267,48 +256,46 @@ iVAE <- function(
     z_sample <- res[, (1 + p):(p + latent_dim)]
     z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
     z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
-    prior_log_v <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
-    prior_mean_v <- res[, (p + 4 * latent_dim + 1):(p + 5 * latent_dim)]
-    log_px_z <- error_log_pdf(
-      x, x_mean,
-      tf$constant(error_dist_sigma, "float32")
-    )
+    prior_mean_v <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
+    prior_log_v <- res[, (p + 4 * latent_dim + 1):(p + 5 * latent_dim)]
+    log_px_z <- error_log_pdf(x, x_mean, tf$constant(error_dist_sigma, "float32"))
     log_qz_xu <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
     log_pz_u <- source_log_pdf(z_sample, prior_mean_v, tf$math$exp(prior_log_v))
 
-    return(-tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L))
+    G <- tf_cor(z_mean)
+    diag_mat <- tf$cast(tf$linalg$tensor_diag(rep(1L, latent_dim)), "float32")
+    G_0 <- tf$pow(tf$cast(G, "float32") - diag_mat, 2)
+    ic_loss <- 0
+
+    return(-tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu - ic_loss, -1L))
   }
   if (is.null(optimizer)) {
-    optimizer <- tf$keras$optimizers$legacy$Adam(
-      learning_rate =
-        tf$keras$optimizers$schedules$PolynomialDecay(
-          lr_start, steps,
-          lr_end, 2
-        )
-    )
+    optimizer <- tf$keras$optimizers$legacy$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
   }
 
-  metric_reconst_accuracy <- custom_metric(
-    "metric_reconst_accuracy",
-    function(x, res) {
-      x_mean <- res[, 1:p]
-      log_px_z <- error_log_pdf(
-        x, x_mean,
-        tf$constant(error_dist_sigma, "float32")
-      )
-      return(tf$reduce_mean(log_px_z, -1L))
-    }
-  )
+  metric_reconst_accuracy <- custom_metric("metric_reconst_accuracy", function(x, res) {
+    x_mean <- res[, 1:p]
+    log_px_z <- error_log_pdf(x, x_mean, tf$constant(error_dist_sigma, "float32"))
+    return(tf$reduce_mean(log_px_z, -1L))
+  })
 
   metric_kl_vae <- custom_metric("metric_kl_vae", function(x, res) {
     z_sample <- res[, (1 + p):(p + latent_dim)]
     z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
     z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
-    prior_log_v <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
-    prior_mean_v <- res[, (p + 4 * latent_dim + 1):(p + 5 * latent_dim)]
+    prior_mean_v <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
+    prior_log_v <- res[, (p + 4 * latent_dim + 1):(p + 5 * latent_dim)]
     log_qz_xu <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
     log_pz_u <- source_log_pdf(z_sample, prior_mean_v, tf$math$exp(prior_log_v))
     return(-tf$reduce_mean((log_pz_u - log_qz_xu), -1L))
+  })
+
+  metric_ic_reqularization <- custom_metric("ic_req", function(x, res) {
+    z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
+    G <- tf_cor(z_mean)
+    diag_mat <- tf$cast(tf$linalg$tensor_diag(rep(1L, latent_dim)), "float32")
+    G_0 <- tf$pow(tf$cast(G, "float32") - diag_mat, 2)
+    return(tf$reduce_mean(tf$abs(G_0)))
   })
 
   mse_vae <- custom_metric("mse_vae", function(x, res) {
@@ -323,58 +310,49 @@ iVAE <- function(
   )
   validation_data <- NULL
   if (!is.null(test_data_scaled)) {
-    validation_data <- list(list(
-      test_data_scaled, test_data_aux,
-      test_data_aux
-    ), test_data_scaled)
+    validation_data <- list(list(test_data_scaled, test_data_aux, test_data_aux), test_data_scaled)
   }
   MCCs <- numeric(epochs)
   if (!is.null(true_data)) {
     for (i in 1:epochs) {
-      hist <- vae %>% fit(list(data_scaled, aux_data, aux_data),
-        data_scaled,
-        validation_data = validation_data,
-        validation_split = validation_split, shuffle = TRUE,
-        batchsize = batch_size, epochs = 1, seed = seed
-      )
+      hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batchsize = batchsize, epochs = 1, seed = seed)
       IC_estimates <- predict(encoder, list(data_scaled, aux_data))
       MCCs[i] <- absolute_mean_correlation(cor(IC_estimates, true_data))
     }
   } else {
-    hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled,
-      validation_data = validation_data, validation_split = validation_split,
-      shuffle = TRUE, batchsize = batch_size, epochs = epochs, seed = seed
-    )
+    hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batchsize = batchsize, epochs = epochs, seed = seed)
   }
   IC_estimates <- predict(encoder, list(data_scaled, aux_data))
+  obs_estimates <- predict(decoder, IC_estimates)
   IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data))
+  prior_means <- predict(prior_mean_model, aux_data)
+  prior_log_vars <- predict(prior_log_var_model, aux_data)
+  log_px_z <- error_log_pdf(tf$constant(data_scaled, "float32"), tf$cast(obs_estimates, "float32"), tf$constant(error_dist_sigma, "float32"))
+  log_qz_xu <- source_log_pdf(tf$cast(IC_estimates, "float32"), tf$cast(IC_estimates, "float32"), tf$math$exp(tf$cast(IC_log_vars, "float32")))
+  log_pz_u <- source_log_pdf(tf$cast(IC_estimates, "float32"), tf$cast(prior_means, "float32"), tf$math$exp(tf$cast(prior_log_vars, "float32")))
+  elbo <- tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L)
   IC_means <- colMeans(IC_estimates)
   IC_sds <- apply(IC_estimates, 2, sd)
   IC_estimates_cent <- sweep(IC_estimates, 2, IC_means, "-")
   IC_estimates_scaled <- sweep(IC_estimates_cent, 2, IC_sds, "/")
   IC_vars <- exp(IC_log_vars)
-  IC_vars_scaled <- sweep(IC_vars, 2, IC_sds^2, "/")
+  IC_vars_scaled <- sweep(IC_vars, 2, IC_sds, "/")
   prior_means_scaled <- NULL
   prior_vars_scaled <- NULL
   if (get_prior_means) {
-    prior_means <- predict(prior_mean_model, diag(dim_aux))
-    prior_log_vars <- predict(prior_log_var_model, diag(dim_aux))
     prior_means_cent <- sweep(prior_means, 2, IC_means, "-")
     prior_means_scaled <- sweep(prior_means_cent, 2, IC_sds, "/")
     prior_vars <- exp(prior_log_vars)
-    prior_vars_scaled <- sweep(prior_vars, 2, IC_sds^2, "/")
+    prior_vars_scaled <- sweep(prior_vars, 2, IC_sds, "/")
   }
 
   iVAE_object <- list(
-    IC_unscaled = IC_estimates, IC = IC_estimates_scaled,
-    aux_data = aux_data, original_data = data,
-    IC_vars = IC_vars_scaled, prior_means = prior_means_scaled,
-    prior_vars = prior_vars_scaled, data_dim = p, sample_size = n,
-    prior_mean_model = prior_mean_model, call_params = call_params,
-    aux_dim = dim_aux, encoder = encoder, decoder = decoder,
-    data_means = data_means, data_sds = data_sds, IC_means = IC_means,
-    IC_sds = IC_sds, MCCs = MCCs, call = deparse(sys.call()),
-    D = paste(deparse(substitute(data))), metrics = hist
+    IC_unscaled = IC_estimates, IC = IC_estimates_scaled, IC_vars = IC_vars_scaled, elbo = as.numeric(elbo), reconst_acc = as.numeric(tf$reduce_mean(log_px_z, -1L)),
+    prior_means = prior_means_scaled, prior_vars = prior_vars_scaled, data_dim = p,
+    sample_size = n, prior_mean_model = prior_mean_model, prior_log_var_model = prior_log_var_model, call_params = call_params,
+    aux_dim = dim_aux, encoder = encoder, decoder = decoder, data_means = data_means,
+    data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds, MCCs = MCCs, call = deparse(sys.call()),
+    DNAME = paste(deparse(substitute(data))), metrics = hist, orig_data = data_scaled, aux_data = aux_data
   )
 
   class(iVAE_object) <- "iVAE"
