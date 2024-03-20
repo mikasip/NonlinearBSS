@@ -32,6 +32,10 @@ functions. Either \code{"gaussian"} (default) or \code{"wendland"}.}
 \item{test_inds}{An optional vector of the indices of the rows used as
 test data.}
 
+\item{epochs}{A number of epochs to train the model.}
+
+\item{batch_size}{A batch size.}
+
 \item{...}{
   Arguments passed on to \code{\link[=iVAE]{iVAE}}
   \describe{
@@ -61,8 +65,6 @@ set.seed(seed).}
 the auxiliary function are returned.}
     \item{\code{true_data}}{The true latent components. If provided, the mean
 correlation coefficient is calculated for each epoch.}
-    \item{\code{epochs}}{A number of epochs for training.}
-    \item{\code{batch_size}}{A batch size for training.}
   }}
 }
 \value{
@@ -104,7 +106,7 @@ obs_data <- mix_data(latent_data, 2)
 cor(obs_data, latent_data)
 
 # For better peformance, increase the number of epochs.
-resiVAE <- iVAE_radial_spatial(obs_data, coords, c(0.1, 0.1), c(1, 1), 3,
+resiVAE <- iVAE_radial_spatial(obs_data, coords, 3,
     epochs = 10, batch_size = 64
 )
 cormat <- cor(resiVAE$IC, latent_data)

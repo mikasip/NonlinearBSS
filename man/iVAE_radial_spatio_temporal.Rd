@@ -53,6 +53,10 @@ seasonal period.}
 \item{spatial_kernel}{A kernel function to be used to form the spatial radial basis
 functions. Either \code{"gaussian"} (default) or \code{"wendland"}.}
 
+\item{epochs}{A number of epochs to train the model.}
+
+\item{batch_size}{A batch size.}
+
 \item{...}{
   Arguments passed on to \code{\link[=iVAE]{iVAE}}
   \describe{
@@ -82,8 +86,6 @@ set.seed(seed).}
 the auxiliary function are returned.}
     \item{\code{true_data}}{The true latent components. If provided, the mean
 correlation coefficient is calculated for each epoch.}
-    \item{\code{epochs}}{A number of epochs for training.}
-    \item{\code{batch_size}}{A batch size for training.}
   }}
 }
 \value{
@@ -137,7 +139,7 @@ obs_data <- mix_data(latent_data, 2)
 cor(obs_data, latent_data)
 
 # For better peformance, increase the number of epochs.
-resiVAE <- iVAE_radial_spatio_temporal(obs_data, coords_time[1:2, ],
+resiVAE <- iVAE_radial_spatio_temporal(obs_data, coords_time[, 1:2],
     coords_time[, 3], p,
     epochs = 10, batch_size = 64
 )

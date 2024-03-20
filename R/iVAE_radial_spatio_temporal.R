@@ -24,6 +24,8 @@
 #' seasonal period.
 #' @param spatial_kernel A kernel function to be used to form the spatial radial basis
 #' functions. Either \code{"gaussian"} (default) or \code{"wendland"}.
+#' @param epochs A number of epochs to train the model.
+#' @param batch_size A batch size.
 #' @return
 #' An object of class iVAEradial_st, inherits from class iVAE.
 #' Additionally, the object has the following properties:
@@ -75,7 +77,7 @@
 #' cor(obs_data, latent_data)
 #'
 #' # For better peformance, increase the number of epochs.
-#' resiVAE <- iVAE_radial_spatio_temporal(obs_data, coords_time[1:2, ],
+#' resiVAE <- iVAE_radial_spatio_temporal(obs_data, coords_time[, 1:2],
 #'     coords_time[, 3], p,
 #'     epochs = 10, batch_size = 64
 #' )

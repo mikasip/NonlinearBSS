@@ -15,6 +15,8 @@
 #' functions. Either \code{"gaussian"} (default) or \code{"wendland"}.
 #' @param test_inds An optional vector of the indices of the rows used as
 #' test data.
+#' @param epochs A number of epochs to train the model.
+#' @param batch_size A batch size.
 #' @return
 #' An object of class iVAEradial, inherits from class iVAE.
 #' Additionally, the object has the following properties:
@@ -54,7 +56,7 @@
 #' cor(obs_data, latent_data)
 #'
 #' # For better peformance, increase the number of epochs.
-#' resiVAE <- iVAE_radial_spatial(obs_data, coords, c(0.1, 0.1), c(1, 1), 3,
+#' resiVAE <- iVAE_radial_spatial(obs_data, coords, 3,
 #'     epochs = 10, batch_size = 64
 #' )
 #' cormat <- cor(resiVAE$IC, latent_data)

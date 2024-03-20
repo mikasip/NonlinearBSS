@@ -8,6 +8,8 @@
 #' @param data A matrix with P columns and N rows containing the observed data.
 #' @param locations A matrix containing spatial or spatio-temporal locations.
 #' @param latent_dim A latent dimension for iVAE.
+#' @param epochs A number of epochs to train the model.
+#' @param batch_size A batch size.
 #' @return
 #' An object of class iVAEcoords, inherits from class iVAE.
 #' Additionally, the object has the following properties:

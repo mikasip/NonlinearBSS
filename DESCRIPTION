@@ -8,11 +8,11 @@ Authors@R: c(person(given = "Mika", family = "Sipilä", role = c("aut", "cre"), 
     comment = c(ORCID = "0000-0002-3758-8501")),
     person(given = "Sara", family = "Taskinen", role = "aut",
     comment = c(ORCID = "0000-0001-9470-7258")))
-Imports: stats, graphics, tensorflow, keras, mathjaxr, Rdpack, RcppHungarian
+Imports: stats, graphics, tensorflow, keras, mathjaxr, Rdpack, RcppHungarian, rdist
 Suggests: tfdatasets
 Description: The package contains variational autoencoder (VAE) based methods for nonlinear blind source separation. The methods include regular VAE and multiple methods based on identifiable variational autoencoder (iVAE). For details about iVAE, see Khemakhem et al. (2020) <https://doi.org/10.48550/arXiv.1907.04809>.  
 License: GPL-3
 Encoding: UTF-8
 LazyData: true
 RdMacros: Rdpack, mathjaxr
-RoxygenNote: 7.2.3
+RoxygenNote: 7.3.1

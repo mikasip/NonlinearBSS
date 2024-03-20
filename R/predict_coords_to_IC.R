@@ -41,7 +41,7 @@
 #' obs_data <- mix_data(latent_data, 2)
 #'
 #' # For better peformance, increase the number of epochs.
-#' resiVAE_st <- iVAE_radial_spatio_temporal(obs_data, coords_time, p,
+#' resiVAE_st <- iVAE_radial_spatio_temporal(obs_data, coords_time[, 1:2], coords_time[, 3], p,
 #'     epochs = 10, batch_size = 64
 #' )
 #'
