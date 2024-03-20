@@ -262,12 +262,7 @@ iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = N
     log_qz_xu <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
     log_pz_u <- source_log_pdf(z_sample, prior_mean_v, tf$math$exp(prior_log_v))
 
-    G <- tf_cor(z_mean)
-    diag_mat <- tf$cast(tf$linalg$tensor_diag(rep(1L, latent_dim)), "float32")
-    G_0 <- tf$pow(tf$cast(G, "float32") - diag_mat, 2)
-    ic_loss <- 0
-
-    return(-tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu - ic_loss, -1L))
+    return(-tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L))
   }
   if (is.null(optimizer)) {
     optimizer <- tf$keras$optimizers$legacy$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
@@ -290,14 +285,6 @@ iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = N
     return(-tf$reduce_mean((log_pz_u - log_qz_xu), -1L))
   })
 
-  metric_ic_reqularization <- custom_metric("ic_req", function(x, res) {
-    z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
-    G <- tf_cor(z_mean)
-    diag_mat <- tf$cast(tf$linalg$tensor_diag(rep(1L, latent_dim)), "float32")
-    G_0 <- tf$pow(tf$cast(G, "float32") - diag_mat, 2)
-    return(tf$reduce_mean(tf$abs(G_0)))
-  })
-
   mse_vae <- custom_metric("mse_vae", function(x, res) {
     x_mean <- res[, 1:p]
     return(metric_mean_squared_error(x, x_mean))
@@ -315,12 +302,12 @@ iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = N
   MCCs <- numeric(epochs)
   if (!is.null(true_data)) {
     for (i in 1:epochs) {
-      hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batchsize = batchsize, epochs = 1, seed = seed)
+      hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batchsize = batch_size, epochs = 1, seed = seed)
       IC_estimates <- predict(encoder, list(data_scaled, aux_data))
       MCCs[i] <- absolute_mean_correlation(cor(IC_estimates, true_data))
     }
   } else {
-    hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batchsize = batchsize, epochs = epochs, seed = seed)
+    hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batchsize = batch_size, epochs = epochs, seed = seed)
   }
   IC_estimates <- predict(encoder, list(data_scaled, aux_data))
   obs_estimates <- predict(decoder, IC_estimates)
