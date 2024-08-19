@@ -262,12 +262,7 @@ iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = N
     log_qz_xu <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
     log_pz_u <- source_log_pdf(z_sample, prior_mean_v, tf$math$exp(prior_log_v))
 
-    G <- tf_cor(z_mean)
-    diag_mat <- tf$cast(tf$linalg$tensor_diag(rep(1L, latent_dim)), "float32")
-    G_0 <- tf$pow(tf$cast(G, "float32") - diag_mat, 2)
-    ic_loss <- 0
-
-    return(-tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu - ic_loss, -1L))
+    return(-tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L))
   }
   if (is.null(optimizer)) {
     optimizer <- tf$keras$optimizers$legacy$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
@@ -290,23 +285,10 @@ iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = N
     return(-tf$reduce_mean((log_pz_u - log_qz_xu), -1L))
   })
 
-  metric_ic_reqularization <- custom_metric("ic_req", function(x, res) {
-    z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
-    G <- tf_cor(z_mean)
-    diag_mat <- tf$cast(tf$linalg$tensor_diag(rep(1L, latent_dim)), "float32")
-    G_0 <- tf$pow(tf$cast(G, "float32") - diag_mat, 2)
-    return(tf$reduce_mean(tf$abs(G_0)))
-  })
-
-  mse_vae <- custom_metric("mse_vae", function(x, res) {
-    x_mean <- res[, 1:p]
-    return(metric_mean_squared_error(x, x_mean))
-  })
-
   vae %>% compile(
     optimizer = optimizer,
     loss = vae_loss,
-    metrics = list(metric_reconst_accuracy, metric_kl_vae, mse_vae)
+    metrics = list(metric_reconst_accuracy, metric_kl_vae)
   )
   validation_data <- NULL
   if (!is.null(test_data_scaled)) {
