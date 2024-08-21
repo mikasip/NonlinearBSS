@@ -120,7 +120,7 @@ VAE <- function(data, latent_dim, hidden_units = c(128, 128, 128), validation_sp
             dense_layer()
         output_decoder <- output_decoder %>% dense_layer()
     }
-    out_layer <- layer_dense(units = p, activation = "sigmoid")
+    out_layer <- layer_dense(units = p)
     x_decoded_mean <- x_decoded_mean %>% out_layer()
     output_decoder <- output_decoder %>% out_layer()
     decoder <- keras_model(input_decoder, output_decoder)
@@ -132,14 +132,14 @@ VAE <- function(data, latent_dim, hidden_units = c(128, 128, 128), validation_sp
         z_sample <- res[, (1 + p):(p + latent_dim)]
         z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
         z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
-        reconst_loss <- tf$reduce_sum(loss_binary_crossentropy(x, x_mean), -1L)
-        kl_loss <- -0.5 * (1 + z_logvar - tf$square(z_mean) - tf$exp(z_logvar))
-        kl_loss <- tf$reduce_mean(kl_loss, -1L)
-
-        return(reconst_loss + kl_loss)
+        log_px_z <- error_log_pdf(x, x_mean, tf$constant(error_dist_sigma, "float32"))
+        log_qz_x <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
+        log_pz <- source_log_pdf(z_sample, 0L, 1L)
+        
+        return(-tf$reduce_mean(log_px_z + log_pz - log_qz_x, -1L))
     }
     if (is.null(optimizer)) {
-        optimizer <- tf$keras$optimizers$legacy$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
+        optimizer <- tf$keras$optimizers$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
     }
 
     metric_reconst_accuracy <- custom_metric("metric_reconst_accuracy", function(x, res) {
@@ -167,9 +167,10 @@ VAE <- function(data, latent_dim, hidden_units = c(128, 128, 128), validation_sp
     }
     hist <- vae %>% fit(data_scaled, data_scaled,
         shuffle = TRUE,
-        validation_split = validation_split, batchsize = batch_size,
+        validation_split = validation_split, batch_size = batch_size,
         epochs = epochs
     )
+
 
     IC_estimates <- predict(encoder, data_scaled)
     IC_log_vars <- predict(z_log_var_model, data_scaled)

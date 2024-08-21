@@ -265,7 +265,7 @@ iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = N
     return(-tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L))
   }
   if (is.null(optimizer)) {
-    optimizer <- tf$keras$optimizers$legacy$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
+    optimizer <- tf$keras$optimizers$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
   }
 
   metric_reconst_accuracy <- custom_metric("metric_reconst_accuracy", function(x, res) {
