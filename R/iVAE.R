@@ -297,12 +297,12 @@ iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = N
   MCCs <- numeric(epochs)
   if (!is.null(true_data)) {
     for (i in 1:epochs) {
-      hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batchsize = batch_size, epochs = 1, seed = seed)
+      hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = 1)
       IC_estimates <- predict(encoder, list(data_scaled, aux_data))
       MCCs[i] <- absolute_mean_correlation(cor(IC_estimates, true_data))
     }
   } else {
-    hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batchsize = batch_size, epochs = epochs, seed = seed)
+    hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
   }
   IC_estimates <- predict(encoder, list(data_scaled, aux_data))
   obs_estimates <- predict(decoder, IC_estimates)
