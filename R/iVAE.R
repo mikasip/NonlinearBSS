@@ -4,7 +4,6 @@
 #' \loadmathjax
 #' @import tensorflow
 #' @import keras
-#' @import keras3
 #' @import mathjaxr
 #' @import Rdpack
 #' @import stats

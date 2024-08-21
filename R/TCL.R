@@ -2,7 +2,6 @@
 #' @description Constructs and fits a model for time contrastive learning.
 #' @import tensorflow
 #' @import keras
-#' @import keras3
 #' @importFrom Rdpack reprompt
 #' @param data A matrix with P columns and N rows containing the observed data.
 #' @param labels A vector of length N containing the labels

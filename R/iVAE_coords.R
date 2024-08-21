@@ -3,7 +3,6 @@
 #' spatial and temporal radial basis functions as auxiliary data.
 #' @import tensorflow
 #' @import keras
-#' @import keras3
 #' @importFrom Rdpack reprompt
 #' @inheritDotParams iVAE -aux_data
 #' @param data A matrix with P columns and N rows containing the observed data.

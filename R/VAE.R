@@ -2,7 +2,6 @@
 #' @description Trains a variational autoencoder (VAE) using the input data.
 #' @import tensorflow
 #' @import keras
-#' @import keras3
 #' @importFrom Rdpack reprompt
 #' @param data A matrix with P columns and n rows
 #' @param latent_dim A latent dimension for VAE
