@@ -2,6 +2,7 @@
 #' @description Constructs and fits a model for time contrastive learning.
 #' @import tensorflow
 #' @import keras
+#' @import keras3
 #' @importFrom Rdpack reprompt
 #' @param data A matrix with P columns and N rows containing the observed data.
 #' @param labels A vector of length N containing the labels
@@ -103,7 +104,7 @@ TCL <- function(
     loss_fn <- loss_sparse_categorical_crossentropy()
 
     model %>% compile(
-        optimizer = tf$keras$optimizers$legacy$Adam(
+        optimizer = tf$keras$optimizers$Adam(
             learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(
                 lr_start, 10000, lr_end, 2
             )

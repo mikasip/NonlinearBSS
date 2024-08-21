@@ -3,6 +3,7 @@
 #' and spatial radial basis functions as auxiliary data.
 #' @import tensorflow
 #' @import keras
+#' @import keras3
 #' @import rdist
 #' @importFrom Rdpack reprompt
 #' @inheritDotParams iVAE -aux_data

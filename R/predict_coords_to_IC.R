@@ -3,6 +3,7 @@
 #' an object of class \code{iVAE_radial_st}
 #' @import tensorflow
 #' @import keras
+#' @import keras3
 #' @importFrom Rdpack reprompt
 #'
 #' @param object An object of class \code{iVAE_radial_st}
