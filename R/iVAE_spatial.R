@@ -1,3 +1,37 @@
+form_aux_data_spatial <- function(locations, segment_sizes, joint_segment_inds = rep(1, length(segment_sizes))) {
+    n <- nrow(data)
+    location_mins <- apply(locations, 2, min)
+    locations_zero <- sweep(locations, 2, location_mins, "-")
+    location_maxs <- apply(locations_zero, 2, max)
+    aux_data <- matrix(nrow = n, ncol = 0)
+    for (i in unique(joint_segment_inds)) {
+        inds <- which(joint_segment_inds == i)
+        labels <- rep(0, n)
+        lab <- 1
+        loop_dim <- function(j, sample_inds) {
+            ind <- inds[j]
+            seg_size <- segment_sizes[ind]
+            seg_limits <- seq(0, (location_maxs[ind]), seg_size)
+            for (coord in seg_limits) {
+                cur_inds <- which(locations_zero[sample_inds, ind] >= coord &
+                    locations_zero[sample_inds, ind] < coord + seg_size)
+                cur_sample_inds <- sample_inds[cur_inds]
+                if (j == length(inds)) {
+                    labels[cur_sample_inds] <<- lab
+                    lab <<- lab + 1
+                } else {
+                    loop_dim(j + 1, cur_sample_inds)
+                }
+            }
+        }
+        loop_dim(1, 1:n)
+        labels <- as.numeric(as.factor(labels)) # To ensure that
+        # empty segments are reduced
+        aux_data <- cbind(aux_data, model.matrix(~ 0 + as.factor(labels)))
+    }
+    return(aux_data)
+}
+
 #' Spatial Identifiable Variational Autoencoder
 #' @description Trains an identifiable variational autoencoder (iVAE) using the input data
 #' and the segmented spatial domain as auxiliary data.
@@ -70,36 +104,7 @@ iVAE_spatial <- function(
     data, locations, segment_sizes,
     joint_segment_inds = rep(1, length(segment_sizes)), latent_dim,
     test_inds = NULL, ...) {
-    n <- nrow(data)
-    location_mins <- apply(locations, 2, min)
-    locations_zero <- sweep(locations, 2, location_mins, "-")
-    location_maxs <- apply(locations_zero, 2, max)
-    aux_data <- matrix(nrow = n, ncol = 0)
-    for (i in unique(joint_segment_inds)) {
-        inds <- which(joint_segment_inds == i)
-        labels <- rep(0, n)
-        lab <- 1
-        loop_dim <- function(j, sample_inds) {
-            ind <- inds[j]
-            seg_size <- segment_sizes[ind]
-            seg_limits <- seq(0, (location_maxs[ind]), seg_size)
-            for (coord in seg_limits) {
-                cur_inds <- which(locations[sample_inds, ind] >= coord &
-                    locations[sample_inds, ind] < coord + seg_size)
-                cur_sample_inds <- sample_inds[cur_inds]
-                if (j == length(inds)) {
-                    labels[cur_sample_inds] <<- lab
-                    lab <<- lab + 1
-                } else {
-                    loop_dim(j + 1, cur_sample_inds)
-                }
-            }
-        }
-        loop_dim(1, 1:n)
-        labels <- as.numeric(as.factor(labels)) # To ensure that
-        # empty segments are reduced
-        aux_data <- cbind(aux_data, model.matrix(~ 0 + as.factor(labels)))
-    }
+    aux_data <- form_aux_data_spatial(locations, segment_sizes, joint_segment_inds)
     test_data <- NULL
     test_aux_data <- NULL
     if (!is.null(test_inds)) {

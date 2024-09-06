@@ -76,7 +76,7 @@ gaussian_kernel <- function(d) {
 }
 
 wendland_kernel <- function(d) {
-    (1 - d)^6 * (35 * d^2 + 18 * d + 3) / 3
+    ((1 - d)^6 * (35 * d^2 + 18 * d + 3) / 3) * ifelse(d >= 1, 0, 1)
 }
 
 #' Create Overdeterminated Mixed Data
