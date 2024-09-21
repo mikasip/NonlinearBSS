@@ -1,6 +1,62 @@
-iVAE_ar1 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data = NULL, test_data_aux = NULL, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
+#' Identifiable Variational Autoencoder with AR(1) Latent Structure
+#'
+#' This function fits an Identifiable Variational Autoencoder (iVAE) model where the latent variables follow an AR(1) process. It also supports handling auxiliary data and accommodates various choices for source and error distributions.
+#'
+#' @param data A numeric matrix of observed data (n x p), where n is the number of samples, and p is the number of features.
+#' @param aux_data A numeric matrix of auxiliary data (n x q), where q is the number of auxiliary variables.
+#' @param latent_dim An integer specifying the number of latent dimensions.
+#' @param data_prev Optional. A numeric matrix of previously observed data, used for constructing the AR(1) latent prior. If not provided, the function constructs it automatically.
+#' @param test_data Optional. A numeric matrix of test data used for validation.
+#' @param test_data_aux Optional. A numeric matrix of auxiliary data corresponding to the test data.
+#' @param hidden_units A numeric vector specifying the number of units in each hidden layer for the encoder and decoder.
+#' @param aux_hidden_units A numeric vector specifying the number of units in each hidden layer for modeling the prior distribution using the auxiliary data.
+#' @param activation A character string specifying the activation function to be used in hidden layers. Default is `"leaky_relu"`.
+#' @param source_dist A character string specifying the distribution for the latent variables. Choices are `"gaussian"` (default) or `"laplace"`.
+#' @param validation_split A numeric value specifying the fraction of training data to use for validation during model fitting. Default is 0.
+#' @param error_dist A character string specifying the distribution for the reconstruction error. Choices are `"gaussian"` (default) or `"laplace"`.
+#' @param error_dist_sigma A numeric value specifying the standard deviation for the error distribution. Default is 0.01.
+#' @param optimizer An optional Keras optimizer object. If NULL (default), an Adam optimizer with polynomial decay is used.
+#' @param lr_start A numeric value for the initial learning rate. Default is 0.001.
+#' @param lr_end A numeric value for the final learning rate. Default is 0.0001.
+#' @param steps An integer specifying the number of optimization steps for learning rate decay. Default is 10,000.
+#' @param seed An optional integer for setting the random seed to ensure reproducibility. Default is NULL.
+#' @param get_prior_means Logical. If TRUE, the model returns the prior means and variances. Default is TRUE.
+#' @param true_data Optional. A numeric matrix of ground truth data for calculating the mean correlation coefficient (MCC) during training.
+#' @param epochs An integer specifying the number of training epochs.
+#' @param batch_size An integer specifying the batch size for training.
+#'
+#' @details
+#' This function implements an Identifiable Variational Autoencoder (iVAE) model with a first-order autoregressive (AR(1)) prior on the latent variables. It allows for flexible configurations of the latent space, auxiliary data, and distributional assumptions for both latent variables and errors. 
+#' 
+#' The function returns an object of class `"iVAE"`, which includes trained models for the encoder, decoder, and latent AR(1) prior. It also provides the option to return prior means and variances based on the auxiliary data.
+#' 
+#' @return A list object of class `"iVAE"` containing:
+#' \item{IC_unscaled}{Unscaled latent variable estimates.}
+#' \item{IC}{Scaled latent variable estimates.}
+#' \item{IC_vars}{Scaled latent variable variances.}
+#' \item{prior_means}{Scaled prior means.}
+#' \item{prior_vars}{Scaled prior variances.}
+#' \item{data_dim}{Dimension of the observed data.}
+#' \item{sample_size}{Sample size of the training data.}
+#' \item{prior_ar1_model}{Trained AR(1) prior model.}
+#' \item{encoder}{Trained encoder model.}
+#' \item{decoder}{Trained decoder model.}
+#' \item{MCCs}{Mean correlation coefficient between the inferred latent variables and true data (if provided).}
+#' \item{call_params}{Parameters used during the function call.}
+#' \item{metrics}{Training metrics such as reconstruction accuracy and KL divergence.}
+#' 
+#' @examples
+#' \dontrun{
+#'   # Example usage:
+#'   data <- matrix(rnorm(1000), nrow = 100, ncol = 10)
+#'   aux_data <- matrix(rnorm(200), nrow = 100, ncol = 2)
+#'   model <- iVAEar1(data, aux_data, latent_dim = 3, epochs = 50, batch_size = 32)
+#'   print(model)
+#' }
+#' @export
+iVAEar1 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data = NULL, test_data_aux = NULL, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
                      activation = "leaky_relu", source_dist = "gaussian", validation_split = 0, error_dist = "gaussian",
-                     error_dist_sigma = 0.01, optimizer = NULL, lr_start = 0.01, lr_end = 0.0001,
+                     error_dist_sigma = 0.01, optimizer = NULL, lr_start = 0.001, lr_end = 0.0001,
                      steps = 10000, seed = NULL, get_prior_means = TRUE, true_data = NULL, epochs, batch_size) {
   source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
   source_log_pdf <- switch(source_dist,
@@ -15,7 +71,7 @@ iVAE_ar1 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data = N
   call_params <- list(
     latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
     error_dist_sigma = error_dist_sigma, hidden_units = hidden_units,
-    aux_hidden_units = aux_hidden_units, activation = "leaky_relu",
+    aux_hidden_units = aux_hidden_units, activation = activation,
     epochs = epochs, batch_size = batch_size, lr_start = lr_start,
     lr_end = lr_end, seed = seed, optimizer = optimizer
   )
@@ -117,7 +173,7 @@ iVAE_ar1 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data = N
     return(-tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L))
   }
   if (is.null(optimizer)) {
-    optimizer <- tf$keras$optimizers$legacy$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
+    optimizer <- tf$keras$optimizers$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
   }
 
   metric_reconst_accuracy <- custom_metric("metric_reconst_accuracy", function(x, res) {
@@ -138,15 +194,10 @@ iVAE_ar1 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data = N
     return(-tf$reduce_mean((log_pz_u - log_qz_xu), -1L))
   })
 
-  mse_vae <- custom_metric("mse_vae", function(x, res) {
-    x_mean <- res[, 1:p]
-    return(metric_mean_squared_error(x, x_mean))
-  })
-
   vae %>% compile(
     optimizer = optimizer,
     loss = vae_loss,
-    metrics = list(metric_reconst_accuracy, metric_kl_vae, mse_vae)
+    metrics = list(metric_reconst_accuracy, metric_kl_vae)
   )
   validation_data <- NULL
   if (!is.null(test_data_scaled)) {
@@ -155,12 +206,12 @@ iVAE_ar1 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data = N
   MCCs <- numeric(epochs)
   if (!is.null(true_data)) {
     for (i in 1:epochs) {
-      hist <- vae %>% fit(list(data_scaled, data_prev, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batchsize = batchsize, epochs = 1, seed = seed)
+      hist <- vae %>% fit(list(data_scaled, data_prev, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = 1)
       IC_estimates <- predict(encoder, list(data_scaled, aux_data))
       MCCs[i] <- absolute_mean_correlation(cor(IC_estimates, true_data))
     }
   } else {
-    hist <- vae %>% fit(list(data_scaled, data_prev, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batchsize = batchsize, epochs = epochs, seed = seed)
+    hist <- vae %>% fit(list(data_scaled, data_prev, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
   }
   IC_estimates <- predict(encoder, list(data_scaled, aux_data))
   IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data))
@@ -193,3 +244,4 @@ iVAE_ar1 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data = N
   class(iVAE_object) <- "iVAE"
   return(iVAE_object)
 }
+
