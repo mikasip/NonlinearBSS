@@ -231,25 +231,20 @@ GiVAE <- function(data, aux_data, latent_dim, edge_list,
         return(-tf$reduce_mean((log_pz_u - log_qz_xu), -1L))
     })
 
-    mse_vae <- custom_metric("mse_vae", function(x, res) {
-        x_mean <- res[, 1:p]
-        return(metric_mean_squared_error(x, x_mean))
-    })
-
     vae %>% compile(
         optimizer = optimizer,
         loss = vae_loss,
-        metrics = list(metric_reconst_accuracy, metric_kl_vae, mse_vae)
+        metrics = list(metric_reconst_accuracy, metric_kl_vae)
     )
     MCCs <- numeric(epochs)
     if (!is.null(true_data)) {
         for (i in 1:epochs) {
-            hist <- vae %>% fit(list(data_scaled, aux_data, index_matrix), data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = 1, seed = seed)
+            hist <- vae %>% fit(list(data_scaled, aux_data, index_matrix), data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = 1)
             IC_estimates <- predict(encoder, list(data_scaled, aux_data))
             MCCs[i] <- absolute_mean_correlation(cor(IC_estimates, true_data))
         }
     } else {
-        hist <- vae %>% fit(list(data_scaled, aux_data, index_matrix), data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs, seed = seed)
+        hist <- vae %>% fit(list(data_scaled, aux_data, index_matrix), data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
     }
     IC_estimates <- predict(encoder, list(data_scaled, aux_data))
     obs_estimates <- predict(decoder, IC_estimates)

@@ -86,78 +86,27 @@
 #' absolute_mean_correlation(cormat)
 #'
 #' @export
-iVAE_radial_spatio_temporal <- function(data, spatial_locations, time_points, latent_dim, elevation = NULL, test_inds = NULL, spatial_dim = 2, spatial_basis = c(2, 9), temporal_basis = c(9, 17, 37), elevation_basis = NULL, seasonal_period = NULL, spatial_kernel = "gaussian", epochs, batch_size, ...) {
-    spatial_kernel <- match.arg(spatial_kernel, c("gaussian", "wendland"))
-    N <- dim(data)[1]
-    min_coords <- apply(spatial_locations, 2, min)
-    locations_new <- sweep(spatial_locations, 2, min_coords, "-")
-    max_coords <- apply(locations_new, 2, max)
-    locations_new <- sweep(locations_new, 2, max_coords, "/")
-    knots_1d <- sapply(spatial_basis, FUN = function(i) seq(0 + (1 / (i + 2)), 1 - (1 / (i + 2)), length.out = i))
-    phi_all <- matrix(0, ncol = 0, nrow = N)
-    for (i in seq_along(spatial_basis)) {
-        theta <- 1 / spatial_basis[i] * 2.5
-        knot_list <- replicate(spatial_dim, knots_1d[[i]], simplify = FALSE)
-        knots <- as.matrix(expand.grid(knot_list))
-        phi <- cdist(locations_new, knots) / theta
-        dist_leq_1 <- phi[which(phi <= 1)]
-        dist_g_1_ind <- which(phi > 1)
-        if (spatial_kernel == "gaussian") {
-            phi <- gaussian_kernel(phi)
-        } else {
-            phi[which(phi <= 1)] <- wendland_kernel(dist_leq_1)
-            phi[dist_g_1_ind] <- 0
-        }
-        phi_all <- cbind(phi_all, phi)
-    }
-    if (!is.null(seasonal_period)) {
-        seasons <- floor(time_points / seasonal_period)
-        seasons_model_matrix <- model.matrix(~ 0 + as.factor(seasons))
-        phi_all <- cbind(phi_all, seasons_model_matrix)
-        time_points <- time_points %% seasonal_period + 1
-    }
-    min_time_point <- min(time_points)
-    max_time_point <- max(time_points)
-    for (i in seq_along(temporal_basis)) {
-        temp_knots <- c(seq(min_time_point, max_time_point, length.out = temporal_basis[i] + 2))
-        temp_knots <- temp_knots[2:(length(temp_knots) - 1)]
-        temp_dists <- cdist(time_points, temp_knots)
-        kappa <- abs(temp_knots[1] - temp_knots[2])
-        phi <- exp(-0.5 * (temp_dists)^2 / kappa^2)
-        phi_all <- cbind(phi_all, phi)
-    }
-    min_elevation <- NULL
-    max_elevation <- NULL
-    if (!is.null(elevation)) {
-        min_elevation <- min(elevation)
-        max_elevation <- max(elevation)
-    }
-    if (!is.null(elevation) & !is.null(elevation_basis)) {
-        for (i in seq_along(elevation_basis)) {
-            elevation_knots <- c(seq(min_elevation, max_elevation, length.out = elevation_basis[i] + 2))
-            elevation_knots <- elevation_knots[2:(length(elevation_knots) - 1)]
-            elevation_dists <- cdist(elevation, elevation_knots)
-            kappa <- abs(elevation_knots[1] - elevation_knots[2])
-            phi <- exp(-0.5 * (elevation_dists)^2 / kappa^2)
-            phi_all <- cbind(phi_all, phi)
-        }
-    }
-    aux_data <- phi_all
+iVAE_radial_spatio_temporal <- function(data, spatial_locations, time_points, latent_dim, 
+    elevation = NULL, test_inds = NULL, spatial_dim = 2, spatial_basis = c(2, 9), 
+    temporal_basis = c(9, 17, 37), elevation_basis = NULL, seasonal_period = NULL, 
+    spatial_kernel = "gaussian", epochs, batch_size, ...) {
+    
+    aux_data_obj <- form_radial_aux_data(spatial_locations, time_points, elevation, test_inds, spatial_dim, spatial_basis, temporal_basis, elevation_basis, seasonal_period, spatial_kernel)
     if (!is.null(test_inds)) {
         test_data <- data[test_inds, ]
         train_data <- data[-test_inds, ]
-        test_aux_data <- data[test_inds, ]
-        train_aux_data <- data[-test_inds, ]
+        test_aux_data <- aux_data_obj$aux_data[test_inds, ]
+        train_aux_data <- aux_data_obj$aux_data[-test_inds, ]
     } else {
         test_data <- NULL
         train_data <- data
         test_aux_data <- NULL
-        train_aux_data <- aux_data
+        train_aux_data <- aux_data_obj$aux_data
     }
     resVAE <- iVAE(train_data, train_aux_data, latent_dim, test_data = test_data, test_data_aux = test_aux_data, epochs = epochs, batch_size = batch_size, get_prior_means = FALSE, ...)
     class(resVAE) <- c("iVAEradial_st", class(resVAE))
-    resVAE$min_coords <- min_coords
-    resVAE$max_coords <- max_coords
+    resVAE$min_coords <- aux_data_obj$min_coords
+    resVAE$max_coords <- aux_data_obj$max_coords
     if (!is.null(seasonal_period)) {
         resVAE$seasonal_period <- seasonal_period
         resVAE$max_season <- ifelse(is.null(seasonal_period), NULL, max(seasons))
@@ -165,11 +114,11 @@ iVAE_radial_spatio_temporal <- function(data, spatial_locations, time_points, la
     resVAE$spatial_basis <- spatial_basis
     resVAE$temporal_basis <- temporal_basis
     resVAE$elevation_basis <- elevation_basis
-    resVAE$spatial_kernel <- spatial_kernel
-    resVAE$min_time_point <- min_time_point
-    resVAE$max_time_point <- max_time_point
-    resVAE$min_elevation <- min_elevation
-    resVAE$max_elevation <- max_elevation
+    resVAE$spatial_kernel <- aux_data_obj$spatial_kernel
+    resVAE$min_time_point <- aux_data_obj$min_time_point
+    resVAE$max_time_point <- aux_data_obj$max_time_point
+    resVAE$min_elevation <- aux_data_obj$min_elevation
+    resVAE$max_elevation <- aux_data_obj$max_elevation
     resVAE$spatial_dim <- spatial_dim
     return(resVAE)
 }
