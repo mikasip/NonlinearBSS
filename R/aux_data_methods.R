@@ -91,5 +91,5 @@ form_radial_aux_data <- function(spatial_locations, time_points, elevation = NUL
     aux_data <- phi_all
     return(list(aux_data = aux_data, spatial_kernel = spatial_kernel, min_coords = min_coords,
         max_coords = max_coords, min_time_point = min_time_point, max_time_point = max_time_point,
-        min_elevation = min_elevation, max_elevation = max_elevation))
+        min_elevation = min_elevation, max_elevation = max_elevation, seasons = seasons))
 }
