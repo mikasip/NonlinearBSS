@@ -56,6 +56,7 @@ form_radial_aux_data <- function(spatial_locations, time_points, elevation = NUL
         }
         phi_all <- cbind(phi_all, phi)
     }
+    seasons <- NULL
     if (!is.null(seasonal_period)) {
         seasons <- floor(time_points / seasonal_period)
         seasons_model_matrix <- model.matrix(~ 0 + as.factor(seasons))
