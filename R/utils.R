@@ -7,6 +7,20 @@ norm_log_pdf <- function(x, mu, v, reduce = TRUE) {
     return(lpdf)
 }
 
+huber_loss <- function(x, mu, v, delta = 0.2, reduce = TRUE) {
+    v <- v + 1e-35 # To avoid computational problems (when v == 0)
+    abs_diff <- tf$abs(x - mu)
+    delta <- tf$constant(delta, "float32")
+    quadratic_part <- tf$constant(-1/2, "float32") * tf$square(x - mu)
+    linear_part <- -delta * (abs_diff - tf$constant(0.5, "float32") * delta)
+    huber_loss <- tf$where(abs_diff < delta, quadratic_part, linear_part)
+    lpdf <- huber_loss / v # + tf$constant(-0.5, "float32") * (tf$cast(tf$math$log(2 * pi), "float32") + tf$math$log(v))
+    if (reduce) {
+        return(tf$reduce_sum(lpdf, -1L))
+    }
+    return(lpdf)
+}
+
 laplace_log_pdf <- function(x, loc, scale, reduce = TRUE) {
     scale <- scale + 1e-35
     lpdf <- -(tf$math$log(2 * scale) + tf$abs(x - loc) / (scale))

@@ -54,19 +54,20 @@
 #'   print(model)
 #' }
 #' @export
-iVAEar1_v2 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data = NULL, test_data_aux = NULL, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
+iVAEar1 <- function(data, aux_data, latent_dim, aux_prev, data_prev = NULL, test_data = NULL, test_data_aux = NULL, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
                      activation = "leaky_relu", source_dist = "gaussian", validation_split = 0, error_dist = "gaussian",
                      error_dist_sigma = 0.01, optimizer = NULL, lr_start = 0.001, lr_end = 0.0001,
                      steps = 10000, seed = NULL, get_prior_means = TRUE, true_data = NULL, epochs, batch_size) {
   source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
   source_log_pdf <- switch(source_dist,
     "gaussian" = norm_log_pdf,
-    "laplace" = laplace_log_pdf
+    "laplace" = laplace_log_pdf,
   )
-  error_dist <- match.arg(error_dist, c("gaussian", "laplace"))
+  error_dist <- match.arg(error_dist, c("gaussian", "laplace", "huber"))
   error_log_pdf <- switch(error_dist,
     "gaussian" = norm_log_pdf,
-    "laplace" = laplace_log_pdf
+    "laplace" = laplace_log_pdf,
+    "huber" = huber_loss,
   )
   call_params <- list(
     latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
@@ -105,22 +106,30 @@ iVAEar1_v2 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data =
   }
 
   input_prior <- layer_input(dim_aux)
+  input_prior_prev <- layer_input(dim_aux)
   prior_v <- input_prior
+  prior_v_prev <- input_prior_prev
   for (n_units in aux_hidden_units) {
-    prior_v <- prior_v %>%
-      layer_dense(units = n_units, activation = activation)
+    layer <- layer_dense(units = n_units, activation = activation)
+    prior_v <- prior_v %>% layer()
+    prior_v_prev <- prior_v_prev %>% layer()
   }
   prior_ar1 <- prior_v %>% layer_dense(units = latent_dim, activation = "tanh")
   prior_log_var <- prior_v %>% layer_dense(units = latent_dim)
-  prior_v <- layer_concatenate(list(prior_ar1, prior_log_var))
+  prior_mean_layer <- layer_dense(units = latent_dim)
+  prior_mean <- prior_v %>% prior_mean_layer()
+  prev_prior_mean <- prior_v_prev %>% prior_mean_layer()
+  prior_v <- layer_concatenate(list(prior_ar1, prior_log_var, prior_mean))
   prior_ar1_model <- keras_model(input_prior, prior_ar1)
   prior_log_var_model <- keras_model(input_prior, prior_log_var)
+  prior_mean_model <- keras_model(input_prior, prior_mean)
 
   input_data <- layer_input(p)
   input_aux <- layer_input(dim_aux)
+  input_aux_prev <- layer_input(dim_aux)
   input <- layer_concatenate(list(input_data, input_aux))
   input_prev_obs <- layer_input(p)
-  input_prev <- layer_concatenate(list(input_prev_obs, input_aux))
+  input_prev <- layer_concatenate(list(input_prev_obs, input_aux_prev))
   submodel <- input
   submodel_prev <- input_prev
   for (n_units in hidden_units) {
@@ -129,10 +138,13 @@ iVAEar1_v2 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data =
     submodel_prev <- submodel_prev %>% new_layer()
   }
   z_mean_layer <- layer_dense(units = latent_dim)
+  z_log_var_layer <- layer_dense(units = latent_dim)
   z_mean <- submodel %>% z_mean_layer()
-  z_log_var <- submodel %>% layer_dense(units = latent_dim)
+  z_log_var <- submodel %>% z_log_var_layer
   z_prev_mean <- submodel_prev %>% z_mean_layer()
+  #z_prev_log_var <- submodel_prev %>% z_log_var_layer
   z_mean_and_var <- layer_concatenate(list(z_mean, z_log_var))
+  #z_prev_mean_and_var <- layer_concatenate(list(z_prev_mean, z_prev_log_var))
   encoder <- keras_model(list(input_data, input_aux), z_mean)
   z_log_var_model <- keras_model(list(input_data, input_aux), z_log_var)
 
@@ -141,34 +153,49 @@ iVAEar1_v2 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data =
     "laplace" = sampling_laplace(p = latent_dim)
   )
   z <- z_mean_and_var %>% sampling_layer()
+  #z_prev <- z_prev_mean_and_var %>% sampling_layer()
 
   x_decoded_mean <- z
+  #x_prev_decoded_mean <- z_prev
   input_decoder <- layer_input(latent_dim)
   output_decoder <- input_decoder
   for (n_units in rev(hidden_units)) {
     dense_layer <- layer_dense(units = n_units, activation = activation)
     x_decoded_mean <- x_decoded_mean %>%
       dense_layer()
+    #x_prev_decoded_mean <- x_prev_decoded_mean %>% dense_layer()
     output_decoder <- output_decoder %>% dense_layer()
   }
   out_layer <- layer_dense(units = p)
   x_decoded_mean <- x_decoded_mean %>% out_layer()
+  #x_prev_decoded_mean <- x_prev_decoded_mean %>% out_layer()
   output_decoder <- output_decoder %>% out_layer()
   decoder <- keras_model(input_decoder, output_decoder)
-  final_output <- layer_concatenate(list(x_decoded_mean, z, z_mean_and_var, z_prev_mean, prior_v))
+  #final_output <- layer_concatenate(list(x_decoded_mean, z, z_mean_and_var, z_prev, z_prev_mean_and_var, prior_v, x_prev_decoded_mean, input_prev_obs))
+  final_output <- layer_concatenate(list(x_decoded_mean, z, z_mean_and_var, z_prev_mean, prior_v, prev_prior_mean))
 
-  vae <- keras_model(list(input_data, input_prev_obs, input_aux, input_prior), final_output)
+  vae <- keras_model(list(input_data, input_prev_obs, input_aux, input_prior, input_prior_prev, input_aux_prev), final_output)
   vae_loss <- function(x, res) {
     x_mean <- res[, 1:p]
     z_sample <- res[, (1 + p):(p + latent_dim)]
     z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
     z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
+    #z_prev <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
     z_prev_mean <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
+    #z_prev_logvar <- res[, (p + 5 * latent_dim + 1):(p + 6 * latent_dim)]
     prior_ar1 <- res[, (p + 4 * latent_dim + 1):(p + 5 * latent_dim)]
     prior_log_v <- res[, (p + 5 * latent_dim + 1):(p + 6 * latent_dim)]
+    prior_mean <- res[, (p + 6 * latent_dim + 1):(p + 7 * latent_dim)]
+    prior_prev_mean <- res[, (p + 7 * latent_dim + 1):(p + 8 * latent_dim)]
+    #x_prev_mean <- res[, (p + 9 * latent_dim + 1):(p + 10 * latent_dim)]
+    #x_prev <- res[, (p + 10 * latent_dim + 1):(p + 11 * latent_dim)]
+    #log_px_prev_z <- error_log_pdf(x_prev, x_prev_mean, tf$constant(error_dist_sigma, "float32"))
     log_px_z <- error_log_pdf(x, x_mean, tf$constant(error_dist_sigma, "float32"))
     log_qz_xu <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
-    log_pz_u <- source_log_pdf(z_sample, tf$math$multiply(prior_ar1, z_prev_mean), tf$math$exp(prior_log_v))
+    #log_qz_prev_xu <- source_log_pdf(z_prev, z_prev_mean, tf$math$exp(z_prev_logvar))
+
+    log_pz_u <- source_log_pdf(z_sample, prior_mean + tf$math$multiply(prior_ar1, (z_prev_mean - prior_prev_mean)), tf$math$exp(prior_log_v))
+    #log_pz_prev_u <- source_log_pdf(z_prev, prior_mean, tf$math$exp(prior_log_v))
 
     return(-tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L))
   }
@@ -206,12 +233,12 @@ iVAEar1_v2 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data =
   MCCs <- numeric(epochs)
   if (!is.null(true_data)) {
     for (i in 1:epochs) {
-      hist <- vae %>% fit(list(data_scaled, data_prev, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = 1)
+      hist <- vae %>% fit(list(data_scaled, data_prev, aux_data, aux_data, aux_prev, aux_prev), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = 1)
       IC_estimates <- predict(encoder, list(data_scaled, aux_data))
       MCCs[i] <- absolute_mean_correlation(cor(IC_estimates, true_data))
     }
   } else {
-    hist <- vae %>% fit(list(data_scaled, data_prev, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
+    hist <- vae %>% fit(list(data_scaled, data_prev, aux_data, aux_data, aux_prev, aux_prev), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
   }
   IC_estimates <- predict(encoder, list(data_scaled, aux_data))
   IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data))
@@ -238,10 +265,10 @@ iVAEar1_v2 <- function(data, aux_data, latent_dim, data_prev = NULL, test_data =
     sample_size = n, prior_ar1_model = prior_ar1_model, call_params = call_params,
     aux_dim = dim_aux, encoder = encoder, decoder = decoder, data_means = data_means,
     data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds, MCCs = MCCs, call = deparse(sys.call()),
+    prior_mean_model = prior_mean_model,
     DNAME = paste(deparse(substitute(data))), metrics = hist
   )
 
   class(iVAE_object) <- "iVAE"
   return(iVAE_object)
 }
-

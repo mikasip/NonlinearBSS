@@ -60,21 +60,20 @@ iVAEar1_segmentation <- function(
     joint_segment_inds = rep(1, length(segment_sizes)), latent_dim, n_s,
     test_inds = NULL, ...) {
     n <- dim(data)[1]
+    order_inds <- order(locations[, 3], locations[, 1], locations[, 2])
+    original_order <- order(order_inds)
+    data_ord <- data[order_inds, ]
     aux_data <- form_aux_data_spatial(locations, segment_sizes, joint_segment_inds)
-    test_data <- NULL
-    test_aux_data <- NULL
-    if (!is.null(test_inds)) {
-        test_data <- data[test_inds, ]
-        test_aux_data <- aux_data[test_inds, ]
-    }
-    data_prev <- rbind(data[1:n_s, ], data[1:(n - n_s), ])
-    resVAE <- iVAEar1(data, aux_data, latent_dim,
-        data_prev = data_prev, test_data = test_data,
-        test_data_aux = test_aux_data, ...
-    )
+    aux_data_ord <- aux_data[order_inds, ]
+    data_prev_ord <- rbind(data_ord[1:n_s, ], data_ord[1:(n - n_s), ])
+    prev_aux_data_ord <- rbind(aux_data_ord[1:n_s, ], aux_data_ord[1:(n - n_s), ])
+    data_prev <- data_prev_ord[original_order, ]
+    aux_data <- aux_data_ord[original_order, ]
+    prev_aux_data <- prev_aux_data_ord[original_order, ]
+
+    resVAE <- iVAEar1(data, aux_data, latent_dim, prev_aux_data, data_prev = data_prev,
+        get_prior_means = FALSE, ...)
     class(resVAE) <- c("iVAEar1_spatial", class(resVAE))
     resVAE$spatial_dim <- dim(locations)[2]
-    resVAE$test_data <- test_data
-    resVAE$test_aux_data <- test_aux_data
     return(resVAE)
 }

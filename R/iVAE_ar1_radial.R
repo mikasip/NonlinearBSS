@@ -12,8 +12,6 @@
 #' @param n_s The number of previous observations used to form the autoregressive prior.
 #' @param elevation Optional vector of elevation data corresponding to each observation in \code{data}.
 #' Default is \code{NULL}.
-#' @param test_inds An optional vector of indices for test data. If provided, the data at these indices will be held 
-#' out for evaluation as a test set. Default is \code{NULL}.
 #' @param spatial_dim An integer specifying the number of spatial dimensions. Default is 2 (e.g., latitude and longitude).
 #' @param spatial_basis A vector specifying the number of radial basis functions to use for spatial data. 
 #' Default is \code{c(2, 9)}.
@@ -70,26 +68,24 @@
 #' @seealso \code{\link{iVAEar1}} for the core iVAE with an autoregressive prior model.
 #' @export
 iVAEar1_radial <- function(data, spatial_locations, time_points, latent_dim, n_s,
-    elevation = NULL, test_inds = NULL, spatial_dim = 2, spatial_basis = c(2, 9), 
+    elevation = NULL, spatial_dim = 2, spatial_basis = c(2, 9), 
     temporal_basis = c(9, 17, 37), elevation_basis = NULL, seasonal_period = NULL, 
     spatial_kernel = "gaussian", epochs, batch_size, ...) {
     n <- dim(data)[1]
-    aux_data_obj <- form_radial_aux_data(spatial_locations, time_points, elevation, test_inds, spatial_dim, spatial_basis, temporal_basis, elevation_basis, seasonal_period, spatial_kernel)
-    if (!is.null(test_inds)) {
-        test_data <- data[test_inds, ]
-        train_data <- data[-test_inds, ]
-        test_aux_data <- aux_data_obj$aux_data[test_inds, ]
-        train_aux_data <- aux_data_obj$aux_data[-test_inds, ]
-    } else {
-        test_data <- NULL
-        train_data <- data
-        test_aux_data <- NULL
-        train_aux_data <- aux_data_obj$aux_data
-    }
-    data_prev <- rbind(data[1:n_s, ], data[1:(n - n_s), ])
-    resVAE <- iVAEar1(train_data, train_aux_data, latent_dim, data_prev = data_prev,
-        test_data = test_data, test_data_aux = test_aux_data, epochs = epochs, 
-        batch_size = batch_size, get_prior_means = FALSE, ...)
+    order_inds <- order(time_points, spatial_locations[, 1], spatial_locations[, 2])
+    original_order <- order(order_inds)
+    data_ord <- data[order_inds, ]
+    aux_data_obj <- form_radial_aux_data(spatial_locations, time_points, elevation, test_inds = NULL, spatial_dim, spatial_basis, temporal_basis, elevation_basis, seasonal_period, spatial_kernel)
+    aux_data <- aux_data_obj$aux_data
+    aux_data_ord <- aux_data[order_inds, ]
+    data_prev_ord <- rbind(data_ord[1:n_s, ], data_ord[1:(n - n_s), ])
+    prev_aux_data_ord <- rbind(aux_data_ord[1:n_s, ], aux_data_ord[1:(n - n_s), ])
+    data_prev <- data_prev_ord[original_order, ]
+    aux_data <- aux_data_ord[original_order, ]
+    prev_aux_data <- prev_aux_data_ord[original_order, ]
+
+    resVAE <- iVAEar1(data, aux_data, latent_dim, prev_aux_data, data_prev = data_prev,
+        epochs = epochs, batch_size = batch_size, get_prior_means = FALSE, ...)
     class(resVAE) <- c("iVAEradial_st", class(resVAE))
     resVAE$min_coords <- aux_data_obj$min_coords
     resVAE$max_coords <- aux_data_obj$max_coords
@@ -106,5 +102,8 @@ iVAEar1_radial <- function(data, spatial_locations, time_points, latent_dim, n_s
     resVAE$min_elevation <- aux_data_obj$min_elevation
     resVAE$max_elevation <- aux_data_obj$max_elevation
     resVAE$spatial_dim <- spatial_dim
+    resVAE$locations <- spatial_locations
+    resVAE$time <- time_points
+    resVAE$elevation <- elevation
     return(resVAE)
 }

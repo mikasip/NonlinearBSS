@@ -11,7 +11,6 @@ iVAEar1_radial(
   latent_dim,
   n_s,
   elevation = NULL,
-  test_inds = NULL,
   spatial_dim = 2,
   spatial_basis = c(2, 9),
   temporal_basis = c(9, 17, 37),
@@ -37,9 +36,6 @@ represents spatial coordinates (e.g., latitude and longitude for spatial data).}
 
 \item{elevation}{Optional vector of elevation data corresponding to each observation in \code{data}.
 Default is \code{NULL}.}
-
-\item{test_inds}{An optional vector of indices for test data. If provided, the data at these indices will be held 
-out for evaluation as a test set. Default is \code{NULL}.}
 
 \item{spatial_dim}{An integer specifying the number of spatial dimensions. Default is 2 (e.g., latitude and longitude).}
 
