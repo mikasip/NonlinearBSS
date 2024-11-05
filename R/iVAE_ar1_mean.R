@@ -241,6 +241,26 @@ iVAEar1 <- function(data, aux_data, latent_dim, aux_prev, data_prev = NULL, test
     hist <- vae %>% fit(list(data_scaled, data_prev, aux_data, aux_data, aux_prev, aux_prev), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
   }
   IC_estimates <- predict(encoder, list(data_scaled, aux_data))
+  obs_estimates <- predict(decoder, IC_estimates)
+  IC_log_vars <- predict(z_log_var_model, list(data_scaled, 
+      aux_data))
+  prior_means <- predict(prior_mean_model, aux_data)
+  prior_means_prev <- predict(prior_mean_model, aux_prev)
+  IC_estimates_prev <- predict(encoder,list(data_prev, aux_prev))
+  prior_log_vars <- predict(prior_log_var_model, aux_data)
+  prior_ar1s <- predict(prior_ar1_model, aux_data)
+  print("Calculating ELBO...")
+  prior_mean_ests <- prior_means + prior_ar1s * (IC_estimates_prev - prior_means_prev)
+  log_px_z <- error_log_pdf(tf$constant(data_scaled, "float32"), 
+      tf$cast(obs_estimates, "float32"), tf$constant(error_dist_sigma, 
+          "float32"))
+  log_qz_xu <- source_log_pdf(tf$cast(IC_estimates, "float32"), 
+      tf$cast(IC_estimates, "float32"), tf$math$exp(tf$cast(IC_log_vars, 
+          "float32")))
+  log_pz_u <- source_log_pdf(tf$cast(IC_estimates, "float32"), 
+      tf$cast(prior_mean_ests, "float32"), tf$math$exp(tf$cast(prior_log_vars, 
+          "float32")))
+  elbo <- tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L)
   IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data))
   IC_means <- colMeans(IC_estimates)
   IC_sds <- apply(IC_estimates, 2, sd)
@@ -265,7 +285,7 @@ iVAEar1 <- function(data, aux_data, latent_dim, aux_prev, data_prev = NULL, test
     sample_size = n, prior_ar1_model = prior_ar1_model, call_params = call_params,
     aux_dim = dim_aux, encoder = encoder, decoder = decoder, data_means = data_means,
     data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds, MCCs = MCCs, call = deparse(sys.call()),
-    prior_mean_model = prior_mean_model,
+    prior_mean_model = prior_mean_model, elbo = elbo,
     DNAME = paste(deparse(substitute(data))), metrics = hist
   )
 
