@@ -85,11 +85,17 @@ predict_coords_to_IC <- function(
         }
         phi_all <- cbind(phi_all, phi)
     }
+    if (object$week_component) {
+        day_of_week <- new_time_points %% 7
+        day_of_week_model_matrix <- model.matrix(~ 0 + as.factor(day_of_week))
+        phi_all <- cbind(phi_all, day_of_week_model_matrix)
+    }
     if (!is.null(object$seasonal_period)) {
         seasons <- c(
             0:object$max_season,
             floor(new_time_points / object$seasonal_period)
         )
+        seasons[seasons > object$max_season] <- object$max_season
         seasons_model_matrix <- model.matrix(~ 0 + as.factor(seasons))
         phi_all <- cbind(
             phi_all,

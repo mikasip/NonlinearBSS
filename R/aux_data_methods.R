@@ -32,7 +32,9 @@ form_aux_data_spatial <- function(locations, segment_sizes, joint_segment_inds =
     return(aux_data)
 }
 
-form_radial_aux_data <- function(spatial_locations, time_points, elevation = NULL, test_inds = NULL, spatial_dim = 2, spatial_basis = c(2, 9), temporal_basis = c(9, 17, 37), elevation_basis = NULL, seasonal_period = NULL, spatial_kernel = "gaussian") {
+form_radial_aux_data <- function(spatial_locations, time_points, elevation = NULL, test_inds = NULL, 
+    spatial_dim = 2, spatial_basis = c(2, 9), temporal_basis = c(9, 17, 37), elevation_basis = NULL, 
+    seasonal_period = NULL, max_season = NULL, spatial_kernel = "gaussian", week_component = FALSE) {
     spatial_kernel <- match.arg(spatial_kernel, c("gaussian", "wendland"))
     N <- dim(spatial_locations)[1]
     min_coords <- apply(spatial_locations, 2, min)
@@ -57,8 +59,16 @@ form_radial_aux_data <- function(spatial_locations, time_points, elevation = NUL
         phi_all <- cbind(phi_all, phi)
     }
     seasons <- NULL
+    if (week_component) {
+        day_of_week <- time_points %% 7
+        day_of_week_model_matrix <- model.matrix(~ 0 + as.factor(day_of_week))
+        phi_all <- cbind(phi_all, day_of_week_model_matrix)
+    }
     if (!is.null(seasonal_period)) {
         seasons <- floor(time_points / seasonal_period)
+        if (!is.null(max_season)) {
+            seasons <- sapply(seasons, function(i) min(i, max_season))
+        }
         seasons_model_matrix <- model.matrix(~ 0 + as.factor(seasons))
         phi_all <- cbind(phi_all, seasons_model_matrix)
         time_points <- time_points %% seasonal_period + 1
@@ -122,11 +132,17 @@ get_aux_data_radial <- function(object, spatial_locations, time_points,
         }
         phi_all <- cbind(phi_all, phi)
     }
+    if (object$week_component) {
+        day_of_week <- time_points %% 7
+        day_of_week_model_matrix <- model.matrix(~ 0 + as.factor(day_of_week))
+        phi_all <- cbind(phi_all, day_of_week_model_matrix)
+    }
     if (!is.null(object$seasonal_period)) {
         seasons <- c(
             0:object$max_season,
             floor(time_points / object$seasonal_period)
         )
+        seasons[seasons > object$max_season] <- object$max_season
         seasons_model_matrix <- model.matrix(~ 0 + as.factor(seasons))
         phi_all <- cbind(
             phi_all,

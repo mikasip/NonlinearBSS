@@ -69,13 +69,13 @@
 #' @export
 iVAEar1_radial <- function(data, spatial_locations, time_points, latent_dim, n_s,
     elevation = NULL, spatial_dim = 2, spatial_basis = c(2, 9), 
-    temporal_basis = c(9, 17, 37), elevation_basis = NULL, seasonal_period = NULL, 
-    spatial_kernel = "gaussian", epochs, batch_size, ...) {
+    temporal_basis = c(9, 17, 37), elevation_basis = NULL, seasonal_period = NULL, max_season = NULL,
+    week_component = FALSE, spatial_kernel = "gaussian", epochs, batch_size, ...) {
     n <- dim(data)[1]
     order_inds <- order(time_points, spatial_locations[, 1], spatial_locations[, 2])
     original_order <- order(order_inds)
     data_ord <- data[order_inds, ]
-    aux_data_obj <- form_radial_aux_data(spatial_locations, time_points, elevation, test_inds = NULL, spatial_dim, spatial_basis, temporal_basis, elevation_basis, seasonal_period, spatial_kernel)
+    aux_data_obj <- form_radial_aux_data(spatial_locations, time_points, elevation, test_inds = NULL, spatial_dim, spatial_basis, temporal_basis, elevation_basis, seasonal_period, max_season, spatial_kernel, week_component)
     aux_data <- aux_data_obj$aux_data
     aux_data_ord <- aux_data[order_inds, ]
     data_prev_ord <- rbind(data_ord[1:n_s, ], data_ord[1:(n - n_s), ])
@@ -105,5 +105,58 @@ iVAEar1_radial <- function(data, spatial_locations, time_points, latent_dim, n_s
     resVAE$locations <- spatial_locations
     resVAE$time <- time_points
     resVAE$elevation <- elevation
+    resVAE$week_component <- week_component
+    return(resVAE)
+}
+
+iVAEar_radial <- function(data, spatial_locations, time_points, latent_dim, n_s,
+    elevation = NULL, spatial_dim = 2, spatial_basis = c(2, 9), ar_order = 1,
+    temporal_basis = c(9, 17, 37), elevation_basis = NULL, 
+    seasonal_period = NULL, max_season = NULL,
+    week_component = FALSE, spatial_kernel = "gaussian", epochs, batch_size, ...) {
+    n <- dim(data)[1]
+    order_inds <- order(time_points, spatial_locations[, 1], spatial_locations[, 2])
+    original_order <- order(order_inds)
+    data_ord <- data[order_inds, ]
+    aux_data_obj <- form_radial_aux_data(spatial_locations, time_points, elevation, test_inds = NULL, spatial_dim, spatial_basis, temporal_basis, elevation_basis, seasonal_period, max_season, spatial_kernel, week_component)
+    aux_data <- aux_data_obj$aux_data
+    aux_data_ord <- aux_data[order_inds, ]
+    data_prev_list <- list()
+    aux_prev_list <- list()
+    prev_data <- data_ord
+    prev_data_aux <- aux_data_ord
+    for (i in 1:ar_order) {
+        data_prev_ord_i <- rbind(prev_data[1:n_s, ], prev_data[1:(n - n_s), ])
+        prev_aux_data_ord_i <- rbind(prev_data_aux[1:n_s, ], prev_data_aux[1:(n - n_s), ])
+        data_prev_i <- data_prev_ord_i[original_order, ]
+        aux_prev_i <- prev_aux_data_ord_i[original_order, ]
+        data_prev_list[[i]] <- data_prev_i
+        aux_prev_list[[i]] <- aux_prev_i
+        prev_data <- data_prev_ord_i
+        prev_data_aux <- prev_aux_data_ord_i
+    }
+
+    resVAE <- iVAEar(data, aux_data, latent_dim, data_prev_list, aux_prev_list,
+        ar_order = ar_order, epochs = epochs, batch_size = batch_size, get_prior_means = FALSE, ...)
+    class(resVAE) <- c("iVAEradial_st", class(resVAE))
+    resVAE$min_coords <- aux_data_obj$min_coords
+    resVAE$max_coords <- aux_data_obj$max_coords
+    if (!is.null(seasonal_period)) {
+        resVAE$seasonal_period <- seasonal_period
+        resVAE$max_season <- ifelse(is.null(seasonal_period), NULL, max(aux_data_obj$seasons))
+    }
+    resVAE$spatial_basis <- spatial_basis
+    resVAE$temporal_basis <- temporal_basis
+    resVAE$elevation_basis <- elevation_basis
+    resVAE$spatial_kernel <- aux_data_obj$spatial_kernel
+    resVAE$min_time_point <- aux_data_obj$min_time_point
+    resVAE$max_time_point <- aux_data_obj$max_time_point
+    resVAE$min_elevation <- aux_data_obj$min_elevation
+    resVAE$max_elevation <- aux_data_obj$max_elevation
+    resVAE$spatial_dim <- spatial_dim
+    resVAE$locations <- spatial_locations
+    resVAE$time <- time_points
+    resVAE$elevation <- elevation
+    resVAE$week_component <- week_component
     return(resVAE)
 }
