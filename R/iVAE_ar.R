@@ -57,7 +57,8 @@
 iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_list, test_data = NULL, test_data_aux = NULL, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
                      activation = "leaky_relu", source_dist = "gaussian", validation_split = 0, error_dist = "gaussian",
                      error_dist_sigma = 0.01, optimizer = NULL, lr_start = 0.001, lr_end = 0.0001, ar_order = 1,
-                     steps = 10000, seed = NULL, get_prior_means = TRUE, epochs, batch_size) {
+                     steps = 10000, seed = NULL, get_prior_means = TRUE, epoch_thresholds = NULL, 
+                     threshold_batch_sizes = NULL, epochs, initial_batch_size) {
   source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
   source_log_pdf <- switch(source_dist,
     "gaussian" = norm_log_pdf,
@@ -73,7 +74,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
     error_dist_sigma = error_dist_sigma, hidden_units = hidden_units,
     aux_hidden_units = aux_hidden_units, activation = activation,
-    epochs = epochs, batch_size = batch_size, lr_start = lr_start,
+    epochs = epochs, initial_batch_size = initial_batch_size, lr_start = lr_start,
     lr_end = lr_end, seed = seed, optimizer = optimizer
   )
 
@@ -212,8 +213,8 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     #z_prev_logvar <- res[, (p + 5 * latent_dim + 1):(p + 6 * latent_dim)]
     prev_z <- res[, (end_i + 1):(end_i + ar_order * latent_dim)]
     prior_prev_mean <- res[, (end_i + ar_order * latent_dim + 1):(end_i + (2 * ar_order) * latent_dim)]
-    ar_prev_mult <- tf$math$multiply(prior_ar, (prev_z))
-    prior_mean_final <- ar_prev_mult[, 1:latent_dim]
+    ar_prev_mult <- tf$math$multiply(prior_ar, (prev_z - prior_prev_mean))
+    prior_mean_final <- prior_mean + ar_prev_mult[, 1:latent_dim]
     if (ar_order > 1) {
       for (i in 2:ar_order) {
         prior_mean_final <- prior_mean_final + ar_prev_mult[, ((i - 1) * latent_dim + 1):(i * latent_dim)]
@@ -253,7 +254,16 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   inputs <- list(data_scaled, aux_data)
   inputs <- append(inputs, prev_data_list)
   inputs <- append(inputs, prev_aux_data_list)
-  hist <- vae %>% fit(inputs, data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
+  #if (!is.null(epoch_thresholds)) {
+  #  if (length(epoch_thresholds) != length(threshold_batch_sizes)) {
+  #    warning("If epoch_thresholds is set, threshold_batch_sizes must be a vector of equal length.")
+  #  } else {
+  #    
+  #  }
+  #}
+  hist <- vae %>% fit(inputs, data_scaled, validation_data = validation_data, 
+    validation_split = validation_split, shuffle = TRUE, 
+    batch_size = initial_batch_size, epochs = epochs)
   
   IC_estimates <- predict(encoder, list(data_scaled, aux_data))
   obs_estimates <- predict(decoder, IC_estimates)

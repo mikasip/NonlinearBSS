@@ -12,6 +12,8 @@
 #' @param get_var A boolean. If \code{TRUE}, the method returns the
 #' spatio-temporal variance function estimate.
 #' Otherwise returns the trend function estimate.
+#' @param unscaled A boolean. If \code{TRUE}, the method returns 
+#' the latent components or variance estimate as unscaled.
 #' @return
 #' A matrix containing the predicted variance or trend function for
 #' the latent components.
@@ -59,7 +61,7 @@
 #' @export
 predict_coords_to_IC <- function(
     object, new_spatial_locations, new_time_points,
-    new_elevation = NULL, get_var = FALSE) {
+    new_elevation = NULL, get_var = FALSE, unscaled = FALSE) {
     if (!("iVAEradial_st" %in% class(object))) {
         stop("Object must be class of iVAEradial_st")
     }
@@ -127,11 +129,15 @@ predict_coords_to_IC <- function(
     }
     if (get_var) {
         preds <- exp(as.matrix(object$prior_log_var_model(phi_all)))
-        preds <- sweep(preds, 2, object$IC_sds^2, "/")
+        if (!unscaled) {
+            preds <- sweep(preds, 2, object$IC_sds^2, "/")
+        }
     } else {
         preds <- as.matrix(object$prior_mean_model(phi_all))
-        preds <- sweep(preds, 2, object$IC_means, "-")
-        preds <- sweep(preds, 2, object$IC_sds, "/")
+        if (!unscaled) {
+            preds <- sweep(preds, 2, object$IC_means, "-")
+            preds <- sweep(preds, 2, object$IC_sds, "/")
+        }
     }
     return(preds)
 }

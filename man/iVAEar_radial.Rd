@@ -21,7 +21,7 @@ iVAEar_radial(
   week_component = FALSE,
   spatial_kernel = "gaussian",
   epochs,
-  batch_size,
+  initial_batch_size,
   ...
 )
 }
@@ -60,10 +60,10 @@ yearly period). Default is \code{NULL}.}
 
 \item{epochs}{Integer specifying the number of training epochs for the iVAE model.}
 
-\item{batch_size}{Integer specifying the batch size for training the iVAE model.}
-
 \item{...}{Additional arguments passed to the underlying \code{\link{iVAEar1}} function, including other hyperparameters 
 and model architecture specifications.}
+
+\item{batch_size}{Integer specifying the batch size for training the iVAE model.}
 }
 \value{
 A fitted iVAEar1 object of class \code{"iVAEradial_st"}, which includes:

@@ -76,3 +76,44 @@ SamplingLaplace(keras$layers$Layer) %py_class% {
 }
 
 sampling_laplace <- create_layer_wrapper(SamplingLaplace)
+
+
+
+increase_batch_callback <- CustomCallback(keras$callbacks$Callback) %py_class% {
+  
+    initialize <- function(epoch_threshold, batch_sizes, inputs, 
+        outputs, validation_data, total_epochs) {
+      super$initialize()
+      self$epoch_threshold <- epoch_threshold
+      self$batch_sizes <- batch_sizes
+      self$inputs <- inputs
+      self$outputs <- outputs
+      self$validation_data <- validation_data
+      self$start_epoch <- as.integer(0)
+      self$total_epochs <- total_epochs
+    }
+    
+    on_epoch_begin <- function(epoch, logs = NULL) {
+      if ((epoch + self$start_epoch) %in% self$epoch_threshold) {
+        new_batch_size <- self$batch_sizes[which(self$epoch_threshold == epoch + self$start_epoch)]
+        cat(sprintf("\nIncreasing batch size to %d at epoch %d\n", new_batch_size, epoch + self$start_epoch))
+        self$start_epoch <- as.integer(epoch + self$start_epoch)
+
+        if (self$start_epoch >= self$total_epochs) {
+            cat("\nTraining completed at epoch", epoch + self$start_epoch, "\n")
+            self$model$stop_training <- TRUE  # Ensure stopping if final epoch is reached
+            return()
+        }
+        # Stop training and restart with new batch size
+        self$model$stop_training <- TRUE
+        self$model$fit(
+          self$inputs, self$outputs,
+          batch_size = as.integer(new_batch_size),
+          epochs = as.integer(self$params$epochs - epoch),
+          validation_data = self$validation_data,
+          callbacks = list(self)
+        )
+      }
+    }
+}
+

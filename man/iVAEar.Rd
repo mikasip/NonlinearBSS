@@ -26,8 +26,10 @@ iVAEar(
   steps = 10000,
   seed = NULL,
   get_prior_means = TRUE,
+  epoch_thresholds = NULL,
+  threshold_batch_sizes = NULL,
   epochs,
-  batch_size
+  initial_batch_size
 )
 }
 \arguments{
@@ -69,11 +71,11 @@ iVAEar(
 
 \item{epochs}{An integer specifying the number of training epochs.}
 
-\item{batch_size}{An integer specifying the batch size for training.}
-
 \item{data_prev}{Optional. A numeric matrix of previously observed data, used for constructing the AR(1) latent prior. If not provided, the function constructs it automatically.}
 
 \item{true_data}{Optional. A numeric matrix of ground truth data for calculating the mean correlation coefficient (MCC) during training.}
+
+\item{batch_size}{An integer specifying the batch size for training.}
 }
 \value{
 A list object of class `"iVAE"` containing:

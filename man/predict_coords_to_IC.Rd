@@ -9,7 +9,8 @@ predict_coords_to_IC(
   new_spatial_locations,
   new_time_points,
   new_elevation = NULL,
-  get_var = FALSE
+  get_var = FALSE,
+  unscaled = FALSE
 )
 }
 \arguments{
@@ -24,6 +25,9 @@ predict_coords_to_IC(
 \item{get_var}{A boolean. If \code{TRUE}, the method returns the
 spatio-temporal variance function estimate.
 Otherwise returns the trend function estimate.}
+
+\item{unscaled}{A boolean. If \code{TRUE}, the method returns 
+the latent components or variance estimate as unscaled.}
 }
 \value{
 A matrix containing the predicted variance or trend function for

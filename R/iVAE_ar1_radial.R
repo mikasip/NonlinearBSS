@@ -183,7 +183,7 @@ iVAEar_radial <- function(data, spatial_locations, time_points, latent_dim, n_s,
     elevation = NULL, spatial_dim = 2, spatial_basis = c(2, 9), ar_order = 1,
     temporal_basis = c(9, 17, 37), elevation_basis = NULL, 
     seasonal_period = NULL, max_season = NULL,
-    week_component = FALSE, spatial_kernel = "gaussian", epochs, batch_size, ...) {
+    week_component = FALSE, spatial_kernel = "gaussian", epochs, initial_batch_size, ...) {
     n <- dim(data)[1]
     order_inds <- order(time_points, spatial_locations[, 1], spatial_locations[, 2])
     original_order <- order(order_inds)
@@ -205,9 +205,9 @@ iVAEar_radial <- function(data, spatial_locations, time_points, latent_dim, n_s,
         prev_data <- data_prev_ord_i
         prev_data_aux <- prev_aux_data_ord_i
     }
-
+ 
     resVAE <- iVAEar(data, aux_data, latent_dim, data_prev_list, aux_prev_list,
-        ar_order = ar_order, epochs = epochs, batch_size = batch_size, get_prior_means = FALSE, ...)
+        ar_order = ar_order, epochs = epochs, initial_batch_size = initial_batch_size, get_prior_means = FALSE, ...)
     class(resVAE) <- c("iVAEradial_st", class(resVAE))
     resVAE$min_coords <- aux_data_obj$min_coords
     resVAE$max_coords <- aux_data_obj$max_coords

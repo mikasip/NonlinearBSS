@@ -375,3 +375,42 @@ generate_nonstationary_spatio_temporal_data_by_segments <-
   }
   return(list(data = data, labels = labels, coords_time = coords_time))
 }
+
+mix_data_acyclic <- function(
+    data, dim_mixed, n_layers = 1,
+    nonlinearity = "elu") {
+    data_dim <- dim(data)[2]
+    edge_matrices <- list()
+    mixed_data <- data
+    edges <- ifelse(runif(dim_mixed * dim_mixed) > (2 / (dim_mixed - 1)), 0, 1)
+    parent_total_weights <- runif(dim_mixed, 0.2, 3)
+    edge_value_array <- array(runif(dim_mixed * dim_mixed * n_layers, -1, 1),
+                              dim = c(dim_mixed, dim_mixed, n_layers))
+    for (i in 1:n_layers) {
+        edge_value_array[, , i] <- (edge_value_array[, , i] * edges) * lower.tri(edge_value_array[, , i])
+    }
+    #edge_value_array_scales <- apply(edge_value_array, 1, sum)
+    #edge_value_array_scales[edge_value_array_scales == 0] <- 1
+    #rescale_values <- parent_total_weights / abs(edge_value_array_scales)
+    #for (i in 1:dim_mixed) {
+    #    edge_value_array[i, , ] <- edge_value_array[i, , ] * rescale_values[i]
+    #}
+    for (i in 1:n_layers) {
+        A <- diag(dim_mixed)
+        edge_matrices <- append(edge_matrices, list(edge_value_array[, , i]))
+        A <- A + edge_value_array[, , i]
+        #A <- l2normalize(A)
+        mixed_data <- t(A %*% t(mixed_data))
+        mixed_data <- mixed_data / mean(sqrt(diag(var(mixed_data))))
+        if (i > 1) {
+            if (nonlinearity == "xtanh") {
+                mixed_data <- apply(mixed_data, c(1, 2), xtanh)
+            } else if (nonlinearity == "elu") {
+                mixed_data <- apply(mixed_data, c(1, 2), elu)
+            } else {
+                mixed_data <- apply(mixed_data, c(1, 2), lrelu)
+            }
+        }
+    }
+    return(list(data = mixed_data, edge_matrices = edge_matrices))
+}
