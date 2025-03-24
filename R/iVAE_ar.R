@@ -78,16 +78,19 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     lr_end = lr_end, seed = seed, optimizer = optimizer
   )
 
+  mask <- (!is.na(data)) * 1L
+
   n <- as.integer(dim(data)[1])
   p <- as.integer(dim(data)[2])
 
-  data_means <- colMeans(data)
-  data_sds <- apply(data, 2, sd)
+  data_means <- colMeans(data, na.rm = TRUE)
+  data_sds <- apply(data, 2, function(col) { sd(col, na.rm = TRUE) })
+  data[which(mask == 0)] <- 0
   data_cent <- sweep(data, 2, data_means, "-")
   data_scaled <- sweep(data_cent, 2, data_sds, "/")
   
-
   for (i in seq_along(prev_data_list)) {
+    prev_data_list[[i]][which(is.na(prev_data_list[[i]]))] <- 0
     prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_means, "-")
     prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_sds, "/")
   }
@@ -107,6 +110,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     stop("Observed data and auxiliary data must have same sample size")
   }
 
+  mask_input <- layer_input(p)
   aux_input <- layer_input(dim_aux)
   prior_v <- aux_input
   prev_aux_inputs <- list()
@@ -190,12 +194,12 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   output_decoder <- output_decoder %>% out_layer()
   decoder <- keras_model(input_decoder, output_decoder)
   #final_output <- layer_concatenate(list(x_decoded_mean, z, z_mean_and_var, z_prev, z_prev_mean_and_var, prior_v, x_prev_decoded_mean, input_prev_obs))
-  output <- list(x_decoded_mean, z, z_mean_and_var, prior_v)
+  output <- list(x_decoded_mean, z, z_mean_and_var, prior_v, mask_input)
   output <- append(output, prev_z)
   output <- append(output, prev_prior_means)
   final_output <- layer_concatenate(output)
 
-  inputs <- list(input_data, aux_input)
+  inputs <- list(input_data, aux_input, mask_input)
   inputs <- append(inputs, prev_data_inputs)
   inputs <- append(inputs, prev_aux_inputs)
   vae <- keras_model(inputs, final_output)
@@ -204,15 +208,14 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     z_sample <- res[, (1 + p):(p + latent_dim)]
     z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
     z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
-    #z_prev <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
     prior_mean <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
     prior_log_v <- res[, (p + 4 * latent_dim + 1):(p + 5 * latent_dim)]
     start_i <- p + 5 * latent_dim + 1
     end_i <- p + 5 * latent_dim + latent_dim * ar_order
     prior_ar <- res[, start_i:end_i]
-    #z_prev_logvar <- res[, (p + 5 * latent_dim + 1):(p + 6 * latent_dim)]
-    prev_z <- res[, (end_i + 1):(end_i + ar_order * latent_dim)]
-    prior_prev_mean <- res[, (end_i + ar_order * latent_dim + 1):(end_i + (2 * ar_order) * latent_dim)]
+    mask <- res[, (end_i + 1):(end_i + p)]
+    prev_z <- res[, (end_i + p + 1):(end_i + p + ar_order * latent_dim)]
+    prior_prev_mean <- res[, (end_i + p + ar_order * latent_dim + 1):(end_i + p + (2 * ar_order) * latent_dim)]
     ar_prev_mult <- tf$math$multiply(prior_ar, (prev_z - prior_prev_mean))
     prior_mean_final <- prior_mean + ar_prev_mult[, 1:latent_dim]
     if (ar_order > 1) {
@@ -220,16 +223,18 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
         prior_mean_final <- prior_mean_final + ar_prev_mult[, ((i - 1) * latent_dim + 1):(i * latent_dim)]
       }
     }
-    #x_prev_mean <- res[, (p + 9 * latent_dim + 1):(p + 10 * latent_dim)]
-    #x_prev <- res[, (p + 10 * latent_dim + 1):(p + 11 * latent_dim)]
-    #log_px_prev_z <- error_log_pdf(x_prev, x_prev_mean, tf$constant(error_dist_sigma, "float32"))
-    log_px_z <- error_log_pdf(x, x_mean, tf$constant(error_dist_sigma, "float32"))
+    # Calculate each component separately for debugging
+    log_px_z_unreduced <- error_log_pdf(x, x_mean, tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
+      
+    # Apply mask
+    masked_log_px_z <- log_px_z_unreduced * mask
+    log_px_z <- tf$reduce_sum(masked_log_px_z, axis = -1L)
+    
+    # Check other components
     log_qz_xu <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
-    #log_qz_prev_xu <- source_log_pdf(z_prev, z_prev_mean, tf$math$exp(z_prev_logvar))
-
+    
     log_pz_u <- source_log_pdf(z_sample, prior_mean_final, tf$math$exp(prior_log_v))
-    #log_pz_prev_u <- source_log_pdf(z_prev, prior_mean, tf$math$exp(prior_log_v))
-
+    
     return(-tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L))
   }
   if (is.null(optimizer)) {
@@ -251,8 +256,8 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   if (!is.null(test_data_scaled)) {
     validation_data <- list(list(test_data_scaled, test_data_prev, test_data_aux, test_data_aux), test_data_scaled)
   }
-  inputs <- list(data_scaled, aux_data)
-  inputs <- append(inputs, prev_data_list)
+  inputs <- list(data_scaled, aux_data, mask)
+  inputs <- append(inputs, prev_data_list)  
   inputs <- append(inputs, prev_aux_data_list)
   #if (!is.null(epoch_thresholds)) {
   #  if (length(epoch_thresholds) != length(threshold_batch_sizes)) {
