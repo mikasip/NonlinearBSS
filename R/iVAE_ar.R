@@ -85,9 +85,9 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
 
   data_means <- colMeans(data, na.rm = TRUE)
   data_sds <- apply(data, 2, function(col) { sd(col, na.rm = TRUE) })
-  data[which(mask == 0)] <- 0
   data_cent <- sweep(data, 2, data_means, "-")
   data_scaled <- sweep(data_cent, 2, data_sds, "/")
+  data_scaled[which(mask == 0)] <- rnorm(length(which(mask == 0)))
   
   for (i in seq_along(prev_data_list)) {
     prev_data_list[[i]][which(is.na(prev_data_list[[i]]))] <- 0
@@ -102,6 +102,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     test_data_prev <- rbind(rep(0, p), test_data_scaled[1:(n - 1), ])
   }
 
+  
   if (!is.null(seed)) {
     tf$keras$utils$set_random_seed(as.integer(seed))
   }
