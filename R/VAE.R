@@ -1,8 +1,7 @@
 #' Variational Autoencoder
 #' @description Trains a variational autoencoder (VAE) using the input data.
-#' @import tensorflow
-#' @import keras
 #' @importFrom Rdpack reprompt
+#' @importFrom magrittr %>%
 #' @param data A matrix with P columns and n rows
 #' @param latent_dim A latent dimension for VAE
 #' @param hidden_units K-dimensional vector giving the number of
@@ -88,22 +87,22 @@ VAE <- function(data, latent_dim, hidden_units = c(128, 128, 128), validation_sp
     data_scaled <- data
 
     if (!is.null(seed)) {
-        tf$keras$utils$set_random_seed(as.integer(seed))
+        tensorflow::tf$keras$utils$set_random_seed(as.integer(seed))
     }
     n <- as.integer(dim(data)[1])
     p <- as.integer(dim(data)[2])
 
-    input <- layer_input(p)
+    input <- keras3::layer_input(p)
     submodel <- input
     for (n_units in hidden_units) {
         submodel <- submodel %>%
-            layer_dense(units = n_units, activation = activation)
+            keras3::layer_dense(units = n_units, activation = activation)
     }
-    z_mean <- submodel %>% layer_dense(latent_dim)
-    z_log_var <- submodel %>% layer_dense(latent_dim)
-    z_mean_and_var <- layer_concatenate(list(z_mean, z_log_var))
-    encoder <- keras_model(input, z_mean)
-    z_log_var_model <- keras_model(input, z_log_var)
+    z_mean <- submodel %>% keras3::layer_dense(latent_dim)
+    z_log_var <- submodel %>% keras3::layer_dense(latent_dim)
+    z_mean_and_var <- keras3::layer_concatenate(list(z_mean, z_log_var))
+    encoder <- keras3::keras_model(input, z_mean)
+    z_log_var_model <- keras3::keras_model(input, z_log_var)
 
     sampling_layer <- switch(source_dist,
         "gaussian" = sampling_gaussian(p = latent_dim),
@@ -112,60 +111,60 @@ VAE <- function(data, latent_dim, hidden_units = c(128, 128, 128), validation_sp
     z <- z_mean_and_var %>% sampling_layer()
 
     x_decoded_mean <- z
-    input_decoder <- layer_input(latent_dim)
+    input_decoder <- keras3::layer_input(latent_dim)
     output_decoder <- input_decoder
     for (n_units in rev(hidden_units)) {
-        dense_layer <- layer_dense(units = n_units, activation = activation)
+        dense_layer <- keras3::layer_dense(units = n_units, activation = activation)
         x_decoded_mean <- x_decoded_mean %>%
             dense_layer()
         output_decoder <- output_decoder %>% dense_layer()
     }
-    out_layer <- layer_dense(units = p)
+    out_layer <- keras3::layer_dense(units = p)
     x_decoded_mean <- x_decoded_mean %>% out_layer()
     output_decoder <- output_decoder %>% out_layer()
-    decoder <- keras_model(input_decoder, output_decoder)
-    final_output <- layer_concatenate(list(x_decoded_mean, z, z_mean_and_var))
+    decoder <- keras3::keras_model(input_decoder, output_decoder)
+    final_output <- keras3::layer_concatenate(list(x_decoded_mean, z, z_mean_and_var))
 
-    vae <- keras_model(input, final_output)
+    vae <- keras3::keras_model(input, final_output)
     vae_loss <- function(x, res) {
         x_mean <- res[, 1:p]
         z_sample <- res[, (1 + p):(p + latent_dim)]
         z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
         z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
-        log_px_z <- error_log_pdf(x, x_mean, tf$constant(error_dist_sigma, "float32"))
-        log_qz_x <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
+        log_px_z <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"))
+        log_qz_x <- source_log_pdf(z_sample, z_mean, tensorflow::tf$math$exp(z_logvar))
         log_pz <- source_log_pdf(z_sample, 0L, 1L)
         
-        return(-tf$reduce_mean(log_px_z + log_pz - log_qz_x, -1L))
+        return(-tensorflow::tf$reduce_mean(log_px_z + log_pz - log_qz_x, -1L))
     }
     if (is.null(optimizer)) {
-        optimizer <- tf$keras$optimizers$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
+        optimizer <- tensorflow::tf$keras$optimizers$Adam(learning_rate = tensorflow::tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
     }
 
     metric_reconst_accuracy <- custom_metric("metric_reconst_accuracy", function(x, res) {
         x_mean <- res[, 1:p]
-        log_px_z <- error_log_pdf(x, x_mean, tf$constant(error_dist_sigma, "float32"))
-        return(tf$reduce_mean(log_px_z, -1L))
+        log_px_z <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"))
+        return(tensorflow::tf$reduce_mean(log_px_z, -1L))
     })
 
     metric_kl_vae <- custom_metric("metric_kl_vae", function(x, res) {
         z_sample <- res[, (1 + p):(p + latent_dim)]
         z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
         z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
-        log_qz_xu <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
+        log_qz_xu <- source_log_pdf(z_sample, z_mean, tensorflow::tf$math$exp(z_logvar))
         log_pz_u <- source_log_pdf(z_sample, 0, 1)
-        return(-tf$reduce_mean((log_pz_u - log_qz_xu), -1L))
+        return(-tensorflow::tf$reduce_mean((log_pz_u - log_qz_xu), -1L))
     })
 
-    vae %>% compile(
+    vae %>% keras3::compile(
         optimizer = optimizer,
         loss = vae_loss,
         metrics = list(metric_reconst_accuracy, metric_kl_vae)
     )
     if (!is.null(seed)) {
-        tf$keras$utils$set_random_seed(as.integer(seed))
+        tensorflow::tf$keras$utils$set_random_seed(as.integer(seed))
     }
-    hist <- vae %>% fit(data_scaled, data_scaled,
+    hist <- vae %>% keras3::fit(data_scaled, data_scaled,
         shuffle = TRUE,
         validation_split = validation_split, batch_size = batch_size,
         epochs = epochs

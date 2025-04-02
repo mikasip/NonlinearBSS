@@ -31,16 +31,16 @@ for the observations.}
 
 \item{seed}{Seed for the tensorflow model.}
 
-\item{...}{Further parameters for keras::fit function.}
+\item{...}{Further parameters for keras::keras3::fit function.}
 }
 \value{
 An object of class TCL.
 }
 \description{
-Constructs and fits a model for time contrastive learning.
+Constructs and keras3::fits a model for time contrastive learning.
 }
 \details{
-The method constructs and fits a model for time contrastive learning
+The method constructs and keras3::fits a model for time contrastive learning
 based on the given parameters. TCL assigns half of the labels incorrectly to
 observations, and trains a deep neural network model to predict if the label
 is correct or incorrect. The model has a bottleneck layer at the end, which

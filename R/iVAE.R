@@ -2,23 +2,17 @@
 #' @description Trains an identifiable variational autoencoder
 #' (iVAE) using the input data.
 #' \loadmathjax
-#' @import tensorflow
-#' @import keras
-#' @import mathjaxr
-#' @import Rdpack
-#' @import stats
-#' @import graphics
+#' @importFrom magrittr %>%
 #' @importFrom Rdpack reprompt
 #' @importFrom mathjaxr preview_rd
+#' @importFrom graphics par
+#' @importFrom stats model.matrix predict rnorm runif sd var
 #' @param data A matrix with P columns and N rows containing the observed data.
 #' @param aux_data A matrix with D columns and N rows
 #' containing the auxiliary data.
 #' @param latent_dim A latent dimension for iVAE
 #' @param hidden_units K-dimensional vector giving the number of
 #' hidden units for K layers in encoder and K layers in decoder.
-#' @param test_data A matrix with P columns containing the test data.
-#' @param test_data_aux A matrix with D columns containing the auxiliary
-#' data for test_data.
 #' @param aux_hidden_units K-dimensional vector giving the number of
 #' hidden units for K layers in auxiliary function.
 #' @param validation_split Proportion of data used for validation
@@ -36,40 +30,36 @@
 #' for the default optimizer.
 #' @param seed Seed for the tensorflow model. Should be used instead of
 #' set.seed(seed).
-#' @param get_prior_means A boolean defining if the means provided by
-#' the auxiliary function are returned.
-#' @param true_data The true latent components. If provided, the mean
-#' correlation coefficient is calculated for each epoch.
+#' @param get_elbo Logical. If TRUE, the model returns the final ELBO value. Default is FALSE.
 #' @param epochs A number of epochs for training.
 #' @param batch_size A batch size for training.
-#' @return An object of class VAE.
-#' \item{IC_unscaled}{Unscaled latent components.}
-#' \item{IC}{The latent component with
-#' zero mean and unit variance.}
-#' \item{aux_data}{A matrix containing the provided auxiliary data.}
-#' \item{original_data}{A matrix containing the original data.}
-#' \item{data_dim}{The dimension of the original data.}
-#' \item{metrics}{Metrics of the training for each epoch.}
-#' \item{sample_size}{Sample size of
-#' the data.}
-#' \item{call_params}{The params for
-#' the original VAE method call.}
-#' \item{encoder}{The trained encoder.}
-#' \item{decoder}{The trained decoder.}
-#' \item{IC_means}{The means of the
-#' unscaled latent components.}
-#' \item{IC_means}{The standard devivations
-#' of the unscaled latent components.}
-#' \item{prior_means}{Means provided by auxiliary function.
-#' Scaled to match the normalized latent components.}
-#' \item{prior_vars}{Variances provided by auxiliary function.
-#' Scaled to match the normalized latent components.}
+#' @return An object of class iVAE.
+#' \item{IC_unscaled}{Unscaled latent variable estimates.}
+#' \item{IC}{Scaled latent variable estimates.}
+#' \item{data_dim}{Dimension of the observed data.}
+#' \item{sample_size}{Sample size of the training data.}
+#' \item{aux_dim}{The dimension of auxiliary variable vector.}
 #' \item{prior_mean_model}{A model, which outputs the means estimated by
 #' the auxiliary function.}
-#' \item{MCCs}{Mean correlation coefficients for each epoch.
-#' Provided if true_data is not NULL.}
-#' \item{call}{The of how the method was called.}
-#' \item{DNAME}{The of the original data.}
+#' \item{prior_log_var_model}{A model, which outputs the logarithmic variances 
+#' estimated by the auxiliary function.}
+#' \item{encoder}{The trained encoder.}
+#' \item{decoder}{The trained decoder.}
+#' \item{data_means}{The means of the
+#' original data.}
+#' \item{data_sds}{The standard deviations of the
+#' original data.}
+#' \item{IC_means}{The means of the
+#' unscaled latent components.}
+#' \item{IC_sds}{The standard deviations of the
+#' unscaled latent components.}
+#' \item{call_params}{The params for
+#' the original iVAE method call.}
+#' \item{elbo}{The ELBO value after training the model.}
+#' \item{metrics}{Metrics of the training for each epoch.}
+#' \item{call}{An output of how the method was called.}
+#' \item{DNAME}{The name of the original data.}
+#' 
 #' @details The method constructs and trains an identifiable variational
 #' autoencoder (iVAE) \insertCite{Khemakhem2020}{NonlinearBSS}
 #' based on the given parameters.
@@ -161,10 +151,10 @@
 #' cormat
 #' absolute_mean_correlation(cormat)
 #' @export
-iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = NULL, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
+iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
                  activation = "leaky_relu", source_dist = "gaussian", validation_split = 0, error_dist = "gaussian",
                  error_dist_sigma = 0.02, optimizer = NULL, lr_start = 0.001, lr_end = 0.0001,
-                 steps = 10000, seed = NULL, get_prior_means = TRUE, true_data = NULL, epochs, batch_size) {
+                 get_elbo = TRUE, steps = 10000, seed = NULL, epochs, batch_size) {
   source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
   source_log_pdf <- switch(source_dist,
     "gaussian" = norm_log_pdf,
@@ -183,18 +173,15 @@ iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = N
     lr_end = lr_end, seed = seed, optimizer = optimizer
   )
 
-  data_means <- colMeans(data)
-  data_sds <- apply(data, 2, sd)
+  mask <- (!is.na(data)) * 1L
+  data_means <- colMeans(data, na.rm = TRUE)
+  data_sds <- apply(data, 2, function(col) { sd(col, na.rm = TRUE) })
   data_cent <- sweep(data, 2, data_means, "-")
   data_scaled <- sweep(data_cent, 2, data_sds, "/")
-  test_data_scaled <- NULL
-  if (!is.null(test_data)) {
-    test_data_cent <- sweep(test_data, 2, data_means, "-")
-    test_data_scaled <- sweep(test_data_cent, 2, data_sds, "/")
-  }
+  data_scaled[which(mask == 0)] <- rnorm(length(which(mask == 0)))
 
   if (!is.null(seed)) {
-    tf$keras$utils$set_random_seed(as.integer(seed))
+    tensorflow::tf$keras$utils$set_random_seed(as.integer(seed))
   }
   n <- as.integer(dim(data)[1])
   p <- as.integer(dim(data)[2])
@@ -203,31 +190,32 @@ iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = N
     stop("Observed data and auxiliary data must have same sample size")
   }
 
-  input_prior <- layer_input(dim_aux)
+  mask_input <- keras3::layer_input(p)
+  input_prior <- keras3::layer_input(dim_aux)
   prior_v <- input_prior
   for (n_units in aux_hidden_units) {
     prior_v <- prior_v %>%
-      layer_dense(units = n_units, activation = activation)
+      keras3::layer_dense(units = n_units, activation = activation)
   }
-  prior_mean <- prior_v %>% layer_dense(latent_dim)
-  prior_log_var <- prior_v %>% layer_dense(latent_dim)
-  prior_v <- layer_concatenate(list(prior_mean, prior_log_var))
-  prior_mean_model <- keras_model(input_prior, prior_mean)
-  prior_log_var_model <- keras_model(input_prior, prior_log_var)
+  prior_mean <- prior_v %>% keras3::layer_dense(latent_dim)
+  prior_log_var <- prior_v %>% keras3::layer_dense(latent_dim)
+  prior_v <- keras3::layer_concatenate(list(prior_mean, prior_log_var))
+  prior_mean_model <- keras3::keras_model(input_prior, prior_mean)
+  prior_log_var_model <- keras3::keras_model(input_prior, prior_log_var)
 
-  input_data <- layer_input(p)
-  input_aux <- layer_input(dim_aux)
-  input <- layer_concatenate(list(input_data, input_aux))
+  input_data <- keras3::layer_input(p)
+  input_aux <- keras3::layer_input(dim_aux)
+  input <- keras3::layer_concatenate(list(input_data, input_aux))
   submodel <- input
   for (n_units in hidden_units) {
     submodel <- submodel %>%
-      layer_dense(units = n_units, activation = activation)
+      keras3::layer_dense(units = n_units, activation = activation)
   }
-  z_mean <- submodel %>% layer_dense(latent_dim)
-  z_log_var <- submodel %>% layer_dense(latent_dim)
-  z_mean_and_var <- layer_concatenate(list(z_mean, z_log_var))
-  encoder <- keras_model(list(input_data, input_aux), z_mean)
-  z_log_var_model <- keras_model(list(input_data, input_aux), z_log_var)
+  z_mean <- submodel %>% keras3::layer_dense(latent_dim)
+  z_log_var <- submodel %>% keras3::layer_dense(latent_dim)
+  z_mean_and_var <- keras3::layer_concatenate(list(z_mean, z_log_var))
+  encoder <- keras3::keras_model(list(input_data, input_aux), z_mean)
+  z_log_var_model <- keras3::keras_model(list(input_data, input_aux), z_log_var)
 
   sampling_layer <- switch(source_dist,
     "gaussian" = sampling_gaussian(p = latent_dim),
@@ -236,21 +224,21 @@ iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = N
   z <- z_mean_and_var %>% sampling_layer()
 
   x_decoded_mean <- z
-  input_decoder <- layer_input(latent_dim)
+  input_decoder <- keras3::layer_input(latent_dim)
   output_decoder <- input_decoder
   for (n_units in rev(hidden_units)) {
-    dense_layer <- layer_dense(units = n_units, activation = activation)
+    dense_layer <- keras3::layer_dense(units = n_units, activation = activation)
     x_decoded_mean <- x_decoded_mean %>%
       dense_layer()
     output_decoder <- output_decoder %>% dense_layer()
   }
-  out_layer <- layer_dense(units = p)
+  out_layer <- keras3::layer_dense(units = p)
   x_decoded_mean <- x_decoded_mean %>% out_layer()
   output_decoder <- output_decoder %>% out_layer()
-  decoder <- keras_model(input_decoder, output_decoder)
-  final_output <- layer_concatenate(list(x_decoded_mean, z, z_mean_and_var, prior_v))
+  decoder <- keras3::keras_model(input_decoder, output_decoder)
+  final_output <- keras3::layer_concatenate(list(x_decoded_mean, z, z_mean_and_var, prior_v, mask_input))
 
-  vae <- keras_model(list(input_data, input_aux, input_prior), final_output)
+  vae <- keras3::keras_model(list(input_data, input_aux, input_prior, mask_input), final_output)
   vae_loss <- function(x, res) {
     x_mean <- res[, 1:p]
     z_sample <- res[, (1 + p):(p + latent_dim)]
@@ -258,20 +246,26 @@ iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = N
     z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
     prior_mean_v <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
     prior_log_v <- res[, (p + 4 * latent_dim + 1):(p + 5 * latent_dim)]
-    log_px_z <- error_log_pdf(x, x_mean, tf$constant(error_dist_sigma, "float32"))
-    log_qz_xu <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
-    log_pz_u <- source_log_pdf(z_sample, prior_mean_v, tf$math$exp(prior_log_v))
+    mask <- res[, (p + 5 * latent_dim + 1):(2 * p + 5 * latent_dim)]
+    log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
+    masked_log_px_z <- log_px_z_unreduced * mask
+    log_px_z <- tensorflow::tf$reduce_sum(masked_log_px_z, axis = -1L)
+    log_qz_xu <- source_log_pdf(z_sample, z_mean, tensorflow::tf$math$exp(z_logvar))
+    log_pz_u <- source_log_pdf(z_sample, prior_mean_v, tensorflow::tf$math$exp(prior_log_v))
 
-    return(-tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L))
+    return(-tensorflow::tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L))
   }
   if (is.null(optimizer)) {
-    optimizer <- tf$keras$optimizers$Adam(learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
+    optimizer <- tensorflow::tf$keras$optimizers$Adam(learning_rate = tensorflow::tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
   }
 
   metric_reconst_accuracy <- custom_metric("metric_reconst_accuracy", function(x, res) {
     x_mean <- res[, 1:p]
-    log_px_z <- error_log_pdf(x, x_mean, tf$constant(error_dist_sigma, "float32"))
-    return(tf$reduce_mean(log_px_z, -1L))
+    mask <- res[, (p + 5 * latent_dim + 1):(2 * p + 5 * latent_dim)]
+    log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
+    masked_log_px_z <- log_px_z_unreduced * mask
+    log_px_z <- tensorflow::tf$reduce_sum(masked_log_px_z, axis = -1L)
+    return(tensorflow::tf$reduce_mean(log_px_z, -1L))
   })
 
   metric_kl_vae <- custom_metric("metric_kl_vae", function(x, res) {
@@ -280,61 +274,43 @@ iVAE <- function(data, aux_data, latent_dim, test_data = NULL, test_data_aux = N
     z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
     prior_mean_v <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
     prior_log_v <- res[, (p + 4 * latent_dim + 1):(p + 5 * latent_dim)]
-    log_qz_xu <- source_log_pdf(z_sample, z_mean, tf$math$exp(z_logvar))
-    log_pz_u <- source_log_pdf(z_sample, prior_mean_v, tf$math$exp(prior_log_v))
-    return(-tf$reduce_mean((log_pz_u - log_qz_xu), -1L))
+    log_qz_xu <- source_log_pdf(z_sample, z_mean, tensorflow::tf$math$exp(z_logvar))
+    log_pz_u <- source_log_pdf(z_sample, prior_mean_v, tensorflow::tf$math$exp(prior_log_v))
+    return(-tensorflow::tf$reduce_mean((log_pz_u - log_qz_xu), -1L))
   })
 
-  vae %>% compile(
+  vae %>% keras3::compile(
     optimizer = optimizer,
     loss = vae_loss,
     metrics = list(metric_reconst_accuracy, metric_kl_vae)
   )
-  validation_data <- NULL
-  if (!is.null(test_data_scaled)) {
-    validation_data <- list(list(test_data_scaled, test_data_aux, test_data_aux), test_data_scaled)
-  }
-  MCCs <- numeric(epochs)
-  if (!is.null(true_data)) {
-    for (i in 1:epochs) {
-      hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = 1)
-      IC_estimates <- predict(encoder, list(data_scaled, aux_data))
-      MCCs[i] <- absolute_mean_correlation(cor(IC_estimates, true_data))
-    }
-  } else {
-    hist <- vae %>% fit(list(data_scaled, aux_data, aux_data), data_scaled, validation_data = validation_data, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
-  }
+
+  hist <- vae %>% keras3::fit(list(data_scaled, aux_data, aux_data, mask), data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
   IC_estimates <- predict(encoder, list(data_scaled, aux_data))
   obs_estimates <- predict(decoder, IC_estimates)
-  IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data))
-  prior_means <- predict(prior_mean_model, aux_data)
-  prior_log_vars <- predict(prior_log_var_model, aux_data)
-  log_px_z <- error_log_pdf(tf$constant(data_scaled, "float32"), tf$cast(obs_estimates, "float32"), tf$constant(error_dist_sigma, "float32"))
-  log_qz_xu <- source_log_pdf(tf$cast(IC_estimates, "float32"), tf$cast(IC_estimates, "float32"), tf$math$exp(tf$cast(IC_log_vars, "float32")))
-  log_pz_u <- source_log_pdf(tf$cast(IC_estimates, "float32"), tf$cast(prior_means, "float32"), tf$math$exp(tf$cast(prior_log_vars, "float32")))
-  elbo <- tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L)
+  if (get_elbo) {
+    print("Calculating ELBO...")
+    IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data))
+    prior_means <- predict(prior_mean_model, aux_data)
+    prior_log_vars <- predict(prior_log_var_model, aux_data)
+    log_px_z <- error_log_pdf(tensorflow::tf$constant(data_scaled, "float32"), tensorflow::tf$cast(obs_estimates, "float32"), tensorflow::tf$constant(error_dist_sigma, "float32"))
+    log_qz_xu <- source_log_pdf(tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$math$exp(tensorflow::tf$cast(IC_log_vars, "float32")))
+    log_pz_u <- source_log_pdf(tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$cast(prior_means, "float32"), tensorflow::tf$math$exp(tensorflow::tf$cast(prior_log_vars, "float32")))
+    elbo <- tensorflow::tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L)
+    elbo <- as.numeric(elbo)
+  } else elbo <- NULL
   IC_means <- colMeans(IC_estimates)
   IC_sds <- apply(IC_estimates, 2, sd)
   IC_estimates_cent <- sweep(IC_estimates, 2, IC_means, "-")
   IC_estimates_scaled <- sweep(IC_estimates_cent, 2, IC_sds, "/")
-  IC_vars <- exp(IC_log_vars)
-  IC_vars_scaled <- sweep(IC_vars, 2, IC_sds, "/")
-  prior_means_scaled <- NULL
-  prior_vars_scaled <- NULL
-  if (get_prior_means) {
-    prior_means_cent <- sweep(prior_means, 2, IC_means, "-")
-    prior_means_scaled <- sweep(prior_means_cent, 2, IC_sds, "/")
-    prior_vars <- exp(prior_log_vars)
-    prior_vars_scaled <- sweep(prior_vars, 2, IC_sds, "/")
-  }
 
   iVAE_object <- list(
-    IC_unscaled = IC_estimates, IC = IC_estimates_scaled, IC_vars = IC_vars_scaled, elbo = as.numeric(elbo), reconst_acc = as.numeric(tf$reduce_mean(log_px_z, -1L)),
-    prior_means = prior_means_scaled, prior_vars = prior_vars_scaled, data_dim = p,
-    sample_size = n, prior_mean_model = prior_mean_model, prior_log_var_model = prior_log_var_model, call_params = call_params,
+    IC_unscaled = IC_estimates, IC = IC_estimates_scaled, data_dim = p,
+    sample_size = n, prior_mean_model = prior_mean_model, prior_log_var_model = prior_log_var_model,
     aux_dim = dim_aux, encoder = encoder, decoder = decoder, data_means = data_means,
-    data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds, MCCs = MCCs, call = deparse(sys.call()),
-    DNAME = paste(deparse(substitute(data))), metrics = hist, orig_data = data_scaled, aux_data = aux_data
+    data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds,
+    call_params = call_params, elbo = elbo, metrics = hist, call = deparse(sys.call()),
+    DNAME = paste(deparse(substitute(data)))
   )
 
   class(iVAE_object) <- "iVAE"
@@ -591,7 +567,7 @@ predict.iVAE <- function(
       "Dimension of newdata does not match the ",
       ifelse(IC_to_data, "latent dimension ",
         "dimension of the data "
-      ), "of the fitted model."
+      ), "of the keras3::fitted model."
     ))
   }
   if (!IC_to_data) {
@@ -599,7 +575,7 @@ predict.iVAE <- function(
     aux_n <- dim(aux_data)[1]
     if (aux_dim != object$aux_dim) {
       stop("The dimension of the auxiliary data does not match
-      the dimension of the auxiliary of the fitted model.")
+      the dimension of the auxiliary of the keras3::fitted model.")
     }
     if (aux_n != n) {
       stop("The sample size must the same in newdata and aux_data.")
@@ -635,11 +611,12 @@ predict.iVAE <- function(
 #' @description Saves \code{iVAE} object including the trained
 #' tensorflow models.
 #' @inheritDotParams base::save -list
-#' @import keras
+#' @import keras3
 #' @param object Object of class \code{iVAE}.
 #' @param tf_model_dir Directory, where the tensorflow.
 #' models should be saved.
 #' @param file Filename for saving the \code{iVAE} object.
+#' @param ... Further arguments for base::save function.
 #' @return
 #' No return value.
 #' @details
@@ -677,10 +654,15 @@ predict.iVAE <- function(
 #' pred_obs <- predict(loaded_obj, new_ICs, IC_to_data = TRUE)
 #' @export
 save_with_tf <- function(object, tf_model_dir, file, ...) {
+  tf_model_dir <- find_unique_name(tf_model_dir)
+  if (!dir.exists(tf_model_dir)) dir.create(tf_model_dir)
   object$tf_model_dir <- tf_model_dir
-  save_model_tf(object$encoder, paste0(tf_model_dir, "/encoder"))
-  save_model_tf(object$decoder, paste0(tf_model_dir, "/decoder"))
-  save_model_tf(object$prior_mean_model, paste0(tf_model_dir, "/prior_mean_model"))
+  keras3::save_model(object$encoder, paste0(tf_model_dir, "/encoder.keras"))
+  keras3::save_model(object$decoder, paste0(tf_model_dir, "/decoder.keras"))
+  keras3::save_model(object$prior_mean_model, paste0(tf_model_dir, "/prior_mean_model.keras"))
+  if ("iVAEar" %in% class(object)) {
+    keras3::save_model(object$prior_ar_model, paste0(tf_model_dir, "/prior_ar_model.keras"))
+  }
   save(object, file = file, ...)
   print("The model is saved successfully. Use the method load_with_tf to load the model correctly.")
 }
@@ -689,7 +671,7 @@ save_with_tf <- function(object, tf_model_dir, file, ...) {
 #' Load iVAE Object with Trained Tensorflow Models
 #' @description Loads \code{iVAE} object including the trained
 #' tensorflow models.
-#' @import keras
+#' @import keras3
 #' @param file Filename of the saved \code{iVAE} object.
 #' @return
 #' A loaded \code{iVAE} object with restored trained Tensorflow models.
@@ -704,8 +686,11 @@ save_with_tf <- function(object, tf_model_dir, file, ...) {
 load_with_tf <- function(file) {
   obj_name <- load(file)
   object <- get(obj_name)
-  object$encoder <- load_model_tf(paste0(object$tf_model_dir, "/encoder"))
-  object$decoder <- load_model_tf(paste0(object$tf_model_dir, "/decoder"))
-  object$prior_mean_model <- load_model_tf(paste0(object$tf_model_dir, "/prior_mean_model"))
+  object$encoder <- keras3::load_model(paste0(object$tf_model_dir, "/encoder.keras"))
+  object$decoder <- keras3::load_model(paste0(object$tf_model_dir, "/decoder.keras"))
+  object$prior_mean_model <- keras3::load_model(paste0(object$tf_model_dir, "/prior_mean_model.keras"))
+  if ("iVAEar" %in% class(object)) {
+    object$prior_mean_model <-  keras3::load_model(paste0(object$tf_model_dir, "/prior_ar_model.keras"))
+  }
   return(object)
 }

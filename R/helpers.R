@@ -1,7 +1,6 @@
 #' Absolute Mean Correlation Coefficient
 #' @description Calculates absolute mean correlation coefficient
 #' \loadmathjax
-#' @import RcppHungarian
 #' @param cor_mat A correlation matrix.
 #' @return
 #' A numeric value of absoulte mean correlation coeffiecient
@@ -24,7 +23,7 @@
 #' absolute_mean_correlation(cor_mat)
 #' @export
 absolute_mean_correlation <- function(cor_mat) {
-    max_cors <- HungarianSolver(-abs(cor_mat))$cost
+    max_cors <- RcppHungarian::HungarianSolver(-abs(cor_mat))$cost
     -max_cors / dim(cor_mat)[1]
 }
 

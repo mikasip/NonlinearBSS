@@ -1,9 +1,7 @@
 #' Radial Basis Function Based Spatio Temporal Identifiable Variational Autoencoder
 #' @description Trains an identifiable variational autoencoder (iVAE) which uses
 #' spatial and temporal radial basis functions as auxiliary data.
-#' @import tensorflow
-#' @import keras
-#' @import rdist
+#' @importFrom rdist cdist
 #' @importFrom Rdpack reprompt
 #' @inheritDotParams iVAE -aux_data
 #' @param data A matrix with P columns and N rows containing the observed data.
@@ -11,8 +9,6 @@
 #' @param time_points A vector containing the time points.
 #' @param latent_dim A latent dimension for iVAE.
 #' @param elevation An optional elevation vector for the data.
-#' @param test_inds An optional vector of the indices of the rows used as
-#' test data.
 #' @param spatial_dim The spatial dimension. Default is 2.
 #' @param spatial_basis The spatial resolution levels to form the spatial
 #' radial basis functions. Default is \code{c(2,9)}
@@ -87,23 +83,12 @@
 #'
 #' @export
 iVAE_radial_spatio_temporal <- function(data, spatial_locations, time_points, latent_dim, 
-    elevation = NULL, test_inds = NULL, spatial_dim = 2, spatial_basis = c(2, 9), 
+    elevation = NULL, spatial_dim = 2, spatial_basis = c(2, 9), 
     temporal_basis = c(9, 17, 37), elevation_basis = NULL, seasonal_period = NULL, 
     spatial_kernel = "gaussian", epochs, batch_size, ...) {
     
-    aux_data_obj <- form_radial_aux_data(spatial_locations, time_points, elevation, test_inds, spatial_dim, spatial_basis, temporal_basis, elevation_basis, seasonal_period, spatial_kernel)
-    if (!is.null(test_inds)) {
-        test_data <- data[test_inds, ]
-        train_data <- data[-test_inds, ]
-        test_aux_data <- aux_data_obj$aux_data[test_inds, ]
-        train_aux_data <- aux_data_obj$aux_data[-test_inds, ]
-    } else {
-        test_data <- NULL
-        train_data <- data
-        test_aux_data <- NULL
-        train_aux_data <- aux_data_obj$aux_data
-    }
-    resVAE <- iVAE(train_data, train_aux_data, latent_dim, test_data = test_data, test_data_aux = test_aux_data, epochs = epochs, batch_size = batch_size, get_prior_means = FALSE, ...)
+    aux_data_obj <- form_radial_aux_data(spatial_locations, time_points, elevation, spatial_dim, spatial_basis, temporal_basis, elevation_basis, seasonal_period, spatial_kernel)
+    resVAE <- iVAE(data, aux_data_obj$aux_data, latent_dim, epochs = epochs, batch_size = batch_size, ...)
     class(resVAE) <- c("iVAEradial_st", class(resVAE))
     resVAE$min_coords <- aux_data_obj$min_coords
     resVAE$max_coords <- aux_data_obj$max_coords

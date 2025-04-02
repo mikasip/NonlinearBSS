@@ -1,21 +1,20 @@
 #' Spatial Identifiable Variational Autoencoder
 #' @description Trains an identifiable variational autoencoder (iVAE) using the input data
 #' and the segmented spatial domain as auxiliary data.
-#' @import tensorflow
-#' @import keras
 #' @importFrom Rdpack reprompt
 #' @inheritDotParams iVAE -aux_data
 #' @param data A matrix with P columns and N rows containing the observed data.
 #' @param locations A matrix with spatial locations.
 #' @param segment_sizes A vector providing sizes for segments.
 #' The dimension should match the spatial dimenstion.
-#' @param joint_segment_inds A vector indicating which segments.
+#' @param joint_segment_inds A vector indicating which segments
 #' are considered jointly. See more in details.
 #' @param latent_dim A latent dimension for iVAE.
-#' @param test_inds A vector giving the indices of the data, which
-#' are used as a test data.
+#' @param epochs Integer specifying the number of training epochs for the iVAE model.
+#' @param batch_size Integer specifying the batch size for training the iVAE model.
+#' @param ... Additional arguments passed to the underlying \code{\link{iVAEar1}} function.
 #' @return
-#' An object of class iVAESpatial, inherits from class iVAE.
+#' An object of class \code{iVAEspatial}, inherits from class \code{iVAE}.
 #' Additionally, the object has a property
 #' \code{spatial_dim} which gives the dimension of the given locations.
 #' For more details, see \code{\link{iVAE}}.
@@ -68,22 +67,10 @@
 #' @export
 iVAE_spatial <- function(
     data, locations, segment_sizes,
-    joint_segment_inds = rep(1, length(segment_sizes)), latent_dim,
-    test_inds = NULL, ...) {
+    joint_segment_inds = rep(1, length(segment_sizes)), latent_dim, batch_size, epochs, ...) {
     aux_data <- form_aux_data_spatial(locations, segment_sizes, joint_segment_inds)
-    test_data <- NULL
-    test_aux_data <- NULL
-    if (!is.null(test_inds)) {
-        test_data <- data[test_inds, ]
-        test_aux_data <- aux_data[test_inds, ]
-    }
-    resVAE <- iVAE(data, aux_data, latent_dim,
-        test_data = test_data,
-        test_data_aux = test_aux_data, ...
-    )
+    resVAE <- iVAE(data, aux_data, latent_dim, batch_size = batch_size, epochs = epochs, ...)
     class(resVAE) <- c("iVAEspatial", class(resVAE))
     resVAE$spatial_dim <- dim(locations)[2]
-    resVAE$test_data <- test_data
-    resVAE$test_aux_data <- test_aux_data
     return(resVAE)
 }

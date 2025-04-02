@@ -10,7 +10,8 @@ iVAE_spatial(
   segment_sizes,
   joint_segment_inds = rep(1, length(segment_sizes)),
   latent_dim,
-  test_inds = NULL,
+  batch_size,
+  epochs,
   ...
 )
 }
@@ -22,22 +23,20 @@ iVAE_spatial(
 \item{segment_sizes}{A vector providing sizes for segments.
 The dimension should match the spatial dimenstion.}
 
-\item{joint_segment_inds}{A vector indicating which segments.
+\item{joint_segment_inds}{A vector indicating which segments
 are considered jointly. See more in details.}
 
 \item{latent_dim}{A latent dimension for iVAE.}
 
-\item{test_inds}{A vector giving the indices of the data, which
-are used as a test data.}
+\item{batch_size}{Integer specifying the batch size for training the iVAE model.}
+
+\item{epochs}{Integer specifying the number of training epochs for the iVAE model.}
 
 \item{...}{
   Arguments passed on to \code{\link[=iVAE]{iVAE}}
   \describe{
     \item{\code{hidden_units}}{K-dimensional vector giving the number of
 hidden units for K layers in encoder and K layers in decoder.}
-    \item{\code{test_data}}{A matrix with P columns containing the test data.}
-    \item{\code{test_data_aux}}{A matrix with D columns containing the auxiliary
-data for test_data.}
     \item{\code{aux_hidden_units}}{K-dimensional vector giving the number of
 hidden units for K layers in auxiliary function.}
     \item{\code{validation_split}}{Proportion of data used for validation}
@@ -55,16 +54,11 @@ A default is Adam optimizer with polynomial decay.}
 for the default optimizer.}
     \item{\code{seed}}{Seed for the tensorflow model. Should be used instead of
 set.seed(seed).}
-    \item{\code{get_prior_means}}{A boolean defining if the means provided by
-the auxiliary function are returned.}
-    \item{\code{true_data}}{The true latent components. If provided, the mean
-correlation coefficient is calculated for each epoch.}
-    \item{\code{epochs}}{A number of epochs for training.}
-    \item{\code{batch_size}}{A batch size for training.}
+    \item{\code{get_elbo}}{Logical. If TRUE, the model returns the final ELBO value. Default is FALSE.}
   }}
 }
 \value{
-An object of class iVAESpatial, inherits from class iVAE.
+An object of class \code{iVAEspatial}, inherits from class \code{iVAE}.
 Additionally, the object has a property
 \code{spatial_dim} which gives the dimension of the given locations.
 For more details, see \code{\link{iVAE}}.

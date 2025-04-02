@@ -32,7 +32,7 @@ form_aux_data_spatial <- function(locations, segment_sizes, joint_segment_inds =
     return(aux_data)
 }
 
-form_radial_aux_data <- function(spatial_locations, time_points, elevation = NULL, test_inds = NULL, 
+form_radial_aux_data <- function(spatial_locations, time_points, elevation = NULL, 
     spatial_dim = 2, spatial_basis = c(2, 9), temporal_basis = c(9, 17, 37), elevation_basis = NULL, 
     seasonal_period = NULL, max_season = NULL, spatial_kernel = "gaussian", week_component = FALSE) {
     spatial_kernel <- match.arg(spatial_kernel, c("gaussian", "wendland"))
@@ -125,9 +125,9 @@ get_aux_data_radial <- function(object, spatial_locations, time_points,
         dist_leq_1 <- phi[which(phi <= 1)]
         dist_g_1_ind <- which(phi > 1)
         if (object$spatial_kernel == "gaussian") {
-            phi <- NonlinearBSS:::gaussian_kernel(phi)
+            phi <- gaussian_kernel(phi)
         } else {
-            phi[which(phi <= 1)] <- NonlinearBSS:::wendland_kernel(dist_leq_1)
+            phi[which(phi <= 1)] <- wendland_kernel(dist_leq_1)
             phi[dist_g_1_ind] <- 0
         }
         phi_all <- cbind(phi_all, phi)

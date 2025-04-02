@@ -1,8 +1,7 @@
 #' Predict the Latent Components from Coordinates
 #' @description Predicts the latent components from the coordinates using
 #' an object of class \code{iVAE_radial_st}
-#' @import tensorflow
-#' @import keras
+#' @importFrom magrittr %>%
 #' @importFrom Rdpack reprompt
 #'
 #' @param object An object of class \code{iVAE_radial_st}
@@ -87,10 +86,12 @@ predict_coords_to_IC <- function(
         }
         phi_all <- cbind(phi_all, phi)
     }
-    if (object$week_component) {
-        day_of_week <- new_time_points %% 7
-        day_of_week_model_matrix <- model.matrix(~ 0 + as.factor(day_of_week))
-        phi_all <- cbind(phi_all, day_of_week_model_matrix)
+    if ("week_component" %in% names(attributes(object))) {
+        if (object$week_component) {
+            day_of_week <- new_time_points %% 7
+            day_of_week_model_matrix <- model.matrix(~ 0 + as.factor(day_of_week))
+            phi_all <- cbind(phi_all, day_of_week_model_matrix)
+        }
     }
     if (!is.null(object$seasonal_period)) {
         seasons <- c(

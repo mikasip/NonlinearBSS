@@ -10,7 +10,6 @@ iVAE_radial_spatio_temporal(
   time_points,
   latent_dim,
   elevation = NULL,
-  test_inds = NULL,
   spatial_dim = 2,
   spatial_basis = c(2, 9),
   temporal_basis = c(9, 17, 37),
@@ -32,9 +31,6 @@ iVAE_radial_spatio_temporal(
 \item{latent_dim}{A latent dimension for iVAE.}
 
 \item{elevation}{An optional elevation vector for the data.}
-
-\item{test_inds}{An optional vector of the indices of the rows used as
-test data.}
 
 \item{spatial_dim}{The spatial dimension. Default is 2.}
 
@@ -62,9 +58,6 @@ functions. Either \code{"gaussian"} (default) or \code{"wendland"}.}
   \describe{
     \item{\code{hidden_units}}{K-dimensional vector giving the number of
 hidden units for K layers in encoder and K layers in decoder.}
-    \item{\code{test_data}}{A matrix with P columns containing the test data.}
-    \item{\code{test_data_aux}}{A matrix with D columns containing the auxiliary
-data for test_data.}
     \item{\code{aux_hidden_units}}{K-dimensional vector giving the number of
 hidden units for K layers in auxiliary function.}
     \item{\code{validation_split}}{Proportion of data used for validation}
@@ -82,10 +75,7 @@ A default is Adam optimizer with polynomial decay.}
 for the default optimizer.}
     \item{\code{seed}}{Seed for the tensorflow model. Should be used instead of
 set.seed(seed).}
-    \item{\code{get_prior_means}}{A boolean defining if the means provided by
-the auxiliary function are returned.}
-    \item{\code{true_data}}{The true latent components. If provided, the mean
-correlation coefficient is calculated for each epoch.}
+    \item{\code{get_elbo}}{Logical. If TRUE, the model returns the final ELBO value. Default is FALSE.}
   }}
 }
 \value{

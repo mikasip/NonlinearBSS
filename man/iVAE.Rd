@@ -8,8 +8,6 @@ iVAE(
   data,
   aux_data,
   latent_dim,
-  test_data = NULL,
-  test_data_aux = NULL,
   hidden_units = c(128, 128, 128),
   aux_hidden_units = c(128, 128, 128),
   activation = "leaky_relu",
@@ -20,10 +18,9 @@ iVAE(
   optimizer = NULL,
   lr_start = 0.001,
   lr_end = 1e-04,
+  get_elbo = TRUE,
   steps = 10000,
   seed = NULL,
-  get_prior_means = TRUE,
-  true_data = NULL,
   epochs,
   batch_size
 )
@@ -35,11 +32,6 @@ iVAE(
 containing the auxiliary data.}
 
 \item{latent_dim}{A latent dimension for iVAE}
-
-\item{test_data}{A matrix with P columns containing the test data.}
-
-\item{test_data_aux}{A matrix with D columns containing the auxiliary
-data for test_data.}
 
 \item{hidden_units}{K-dimensional vector giving the number of
 hidden units for K layers in encoder and K layers in decoder.}
@@ -66,51 +58,45 @@ A default is Adam optimizer with polynomial decay.}
 
 \item{lr_end}{A ending learning rate for the default optimizer.}
 
+\item{get_elbo}{Logical. If TRUE, the model returns the final ELBO value. Default is FALSE.}
+
 \item{steps}{A number of learning steps between lr_start and lr_end
 for the default optimizer.}
 
 \item{seed}{Seed for the tensorflow model. Should be used instead of
 set.seed(seed).}
 
-\item{get_prior_means}{A boolean defining if the means provided by
-the auxiliary function are returned.}
-
-\item{true_data}{The true latent components. If provided, the mean
-correlation coefficient is calculated for each epoch.}
-
 \item{epochs}{A number of epochs for training.}
 
 \item{batch_size}{A batch size for training.}
 }
 \value{
-An object of class VAE.
-\item{IC_unscaled}{Unscaled latent components.}
-\item{IC}{The latent component with
-zero mean and unit variance.}
-\item{aux_data}{A matrix containing the provided auxiliary data.}
-\item{original_data}{A matrix containing the original data.}
-\item{data_dim}{The dimension of the original data.}
-\item{metrics}{Metrics of the training for each epoch.}
-\item{sample_size}{Sample size of
-the data.}
-\item{call_params}{The params for
-the original VAE method call.}
-\item{encoder}{The trained encoder.}
-\item{decoder}{The trained decoder.}
-\item{IC_means}{The means of the
-unscaled latent components.}
-\item{IC_means}{The standard devivations
-of the unscaled latent components.}
-\item{prior_means}{Means provided by auxiliary function.
-Scaled to match the normalized latent components.}
-\item{prior_vars}{Variances provided by auxiliary function.
-Scaled to match the normalized latent components.}
+An object of class iVAE.
+\item{IC_unscaled}{Unscaled latent variable estimates.}
+\item{IC}{Scaled latent variable estimates.}
+\item{data_dim}{Dimension of the observed data.}
+\item{sample_size}{Sample size of the training data.}
+\item{aux_dim}{The dimension of auxiliary variable vector.}
 \item{prior_mean_model}{A model, which outputs the means estimated by
 the auxiliary function.}
-\item{MCCs}{Mean correlation coefficients for each epoch.
-Provided if true_data is not NULL.}
-\item{call}{The of how the method was called.}
-\item{DNAME}{The of the original data.}
+\item{prior_log_var_model}{A model, which outputs the logarithmic variances 
+estimated by the auxiliary function.}
+\item{encoder}{The trained encoder.}
+\item{decoder}{The trained decoder.}
+\item{data_means}{The means of the
+original data.}
+\item{data_sds}{The standard deviations of the
+original data.}
+\item{IC_means}{The means of the
+unscaled latent components.}
+\item{IC_sds}{The standard deviations of the
+unscaled latent components.}
+\item{call_params}{The params for
+the original iVAE method call.}
+\item{elbo}{The ELBO value after training the model.}
+\item{metrics}{Metrics of the training for each epoch.}
+\item{call}{An output of how the method was called.}
+\item{DNAME}{The name of the original data.}
 }
 \description{
 Trains an identifiable variational autoencoder

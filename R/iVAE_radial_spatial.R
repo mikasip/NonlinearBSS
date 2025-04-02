@@ -1,9 +1,7 @@
 #' Radial Basis Function Based Spatial Identifiable Variational Autoencoder
 #' @description Trains an identifiable variational autoencoder (iVAE) using the input data
 #' and spatial radial basis functions as auxiliary data.
-#' @import tensorflow
-#' @import keras
-#' @import rdist
+#' @importFrom magrittr %>%
 #' @importFrom Rdpack reprompt
 #' @inheritDotParams iVAE -aux_data
 #' @param data A matrix with P columns and N rows containing the observed data.
@@ -13,8 +11,6 @@
 #' each resolution. Default value is (2, 9).
 #' @param kernel A kernel function to be used to form the radial basis
 #' functions. Either \code{"gaussian"} (default) or \code{"wendland"}.
-#' @param test_inds An optional vector of the indices of the rows used as
-#' test data.
 #' @param epochs A number of epochs to train the model.
 #' @param batch_size A batch size.
 #' @return
@@ -64,7 +60,7 @@
 #' absolute_mean_correlation(cormat)
 #'
 #' @export
-iVAE_radial_spatial <- function(data, locations, latent_dim, num_basis = c(2, 9), kernel = "gaussian", test_inds = NULL, epochs, batch_size, ...) {
+iVAE_radial_spatial <- function(data, locations, latent_dim, num_basis = c(2, 9), kernel = "gaussian", epochs, batch_size, ...) {
     kernel <- match.arg(kernel, c("gaussian", "wendland"))
     spatial_dim <- dim(locations)[2]
     N <- dim(data)[1]
@@ -89,18 +85,7 @@ iVAE_radial_spatial <- function(data, locations, latent_dim, num_basis = c(2, 9)
         phi_all <- cbind(phi_all, phi)
     }
     aux_data <- phi_all
-    if (!is.null(test_inds)) {
-        test_data <- data[test_inds, ]
-        train_data <- data[-test_inds, ]
-        test_aux_data <- data[test_inds, ]
-        train_aux_data <- data[-test_inds, ]
-    } else {
-        test_data <- NULL
-        train_data <- data
-        test_aux_data <- NULL
-        train_aux_data <- aux_data
-    }
-    resVAE <- iVAE(train_data, train_aux_data, latent_dim, test_data = test_data, test_data_aux = test_aux_data, epochs = epochs, batch_size = batch_size, get_prior_means = FALSE, ...)
+    resVAE <- iVAE(data, aux_data, latent_dim, epochs = epochs, batch_size = batch_size, ...)
     class(resVAE) <- c("iVAEradial", class(resVAE))
     resVAE$min_coords <- min_coords
     resVAE$max_coords <- max_coords

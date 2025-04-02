@@ -1,7 +1,6 @@
 #' Time Contrastive Learning
-#' @description Constructs and fits a model for time contrastive learning.
-#' @import tensorflow
-#' @import keras
+#' @description Constructs and keras3::fits a model for time contrastive learning.
+#' @importFrom magrittr %>%
 #' @importFrom Rdpack reprompt
 #' @param data A matrix with P columns and N rows containing the observed data.
 #' @param labels A vector of length N containing the labels
@@ -11,9 +10,9 @@
 #' @param lr_start A starting learning rate.
 #' @param lr_end A learning rate after polynomial decay.
 #' @param seed Seed for the tensorflow model.
-#' @param ... Further parameters for keras::fit function.
+#' @param ... Further parameters for keras::keras3::fit function.
 #' @return An object of class TCL.
-#' @details The method constructs and fits a model for time contrastive learning
+#' @details The method constructs and keras3::fits a model for time contrastive learning
 #' based on the given parameters. TCL assigns half of the labels incorrectly to
 #' observations, and trains a deep neural network model to predict if the label
 #' is correct or incorrect. The model has a bottleneck layer at the end, which
@@ -57,7 +56,7 @@ TCL <- function(
     data, labels, n_hidden_layers = 1,
     n_hidden_units = 32, lr_start = 0.01, lr_end = 0.001, seed = NULL, ...) {
     if (!is.null(seed)) {
-        tf$keras$utils$set_random_seed(as.integer(seed))
+        tensorflow::tf$keras$utils$set_random_seed(as.integer(seed))
     }
 
     n <- dim(data)[1]
@@ -77,8 +76,8 @@ TCL <- function(
     x_train <- x_suffled
     y_train <- y_suffled
 
-    input <- layer_input(p)
-    ICA_layer <- layer_dense(
+    input <- keras3::layer_input(p)
+    ICA_layer <- keras3::layer_dense(
         units = p, name = "ICA_Layer",
         activation = "linear"
     )
@@ -86,25 +85,26 @@ TCL <- function(
     submodel <- input
     for (i in 1:n_hidden_layers) {
         submodel <- submodel %>%
-            layer_dense(
+            keras3::layer_dense(
                 units = n_hidden_units, activation = "leaky_relu"
             )
     }
     submodel_ICA <- submodel %>% ICA_layer()
+    absolute_activation <- absolute_activation()
     submodel_final <- submodel_ICA %>% absolute_activation()
 
-    output <- submodel_final %>% layer_dense(n_segments,
+    output <- submodel_final %>% keras3::layer_dense(n_segments,
         activation = "softmax"
     )
 
-    model <- keras_model(inputs = input, outputs = output)
-    ICA_model <- keras_model(inputs = input, outputs = ICA_layer$output)
+    model <- keras3::keras_model(inputs = input, outputs = output)
+    ICA_model <- keras3::keras_model(inputs = input, outputs = ICA_layer$output)
 
     loss_fn <- loss_sparse_categorical_crossentropy()
 
-    model %>% compile(
-        optimizer = tf$keras$optimizers$Adam(
-            learning_rate = tf$keras$optimizers$schedules$PolynomialDecay(
+    model %>% keras3::compile(
+        optimizer = tensorflow::tf$keras$optimizers$Adam(
+            learning_rate = tensorflow::tf$keras$optimizers$schedules$PolynomialDecay(
                 lr_start, 10000, lr_end, 2
             )
         ),
@@ -112,7 +112,7 @@ TCL <- function(
         metrics = "accuracy"
     )
 
-    model %>% fit(x_train, y_train, shuffle = TRUE, ...)
+    model %>% keras3::fit(x_train, y_train, shuffle = TRUE, ...)
 
     ICA_estimates <- predict(ICA_model, x)
     TCL_object <- list(IC = ICA_estimates, data_means = data_means, data_sds = data_sds, ICA_model = ICA_model)
