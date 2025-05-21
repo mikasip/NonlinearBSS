@@ -123,8 +123,8 @@ predict_coords_to_IC_ar <- function(
         preds <- sweep(preds, 2, object$IC_sds, "/")
     }
     return(list(preds = preds, coords_time = cbind(new_spatial_locations[-(1:n_s_new), ], 
-            new_time_points[-(1:n_s_new)], new_elevation[-(1:n_s_new)])),
-            trends = trend, vars = vars, ar_coefs = coefs)
+            new_time_points[-(1:n_s_new)], new_elevation[-(1:n_s_new)]),
+            trends = trend, vars = vars, ar_coefs = coefs))
 }
 
 #' Predict Latent Independent Components for Training Data
