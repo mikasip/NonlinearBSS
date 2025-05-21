@@ -1,7 +1,6 @@
 #' Identifiable Variational Autoencoder
 #' @description Trains an identifiable variational autoencoder
 #' (iVAE) using the input data.
-#' \loadmathjax
 #' @importFrom magrittr %>%
 #' @importFrom Rdpack reprompt
 #' @importFrom mathjaxr preview_rd

@@ -1,6 +1,6 @@
 #' Identifiable Variational Autoencoder with AR(R) Latent Structure
 #'
-#' This function keras3::fits an Identifiable Variational Autoencoder (iVAE) model where the latent 
+#' @description \loadmathjax This function keras3::fits an Identifiable Variational Autoencoder (iVAE) model where the latent 
 #' variables follow an AR(R) process, R being the autoregressive order.
 #' It also supports handling auxiliary data and accommodates various 
 #' choices for source and error distributions.
@@ -32,15 +32,15 @@
 #'
 #' @details The iVAEar method extends spatio-temporal identifiable variational 
 #' autoencoders (\code{\link{iVAE}}) with an autoregressive (AR) structure. It consists of:
-
-#' - Encoder \mjeqn{\mathbf{g}(\mathbf{x}, \mathbf{u})}{ascii}: Maps observations 
+#'
+#' Encoder \mjeqn{\mathbf{g}(\mathbf{x}, \mathbf{u})}{ascii}: Maps observations 
 #' \mjeqn{\mathbf{x}}{ascii} and auxiliary variables \mjeqn{\mathbf{u}}{ascii} to 
 #' latent variables \mjeqn{\mathbf{z}}{ascii}.
 #' 
-#' - Decoder \mjeqn{\mathbf{h}(\mathbf{x})}{ascii}: Reconstructs \mjeqn{\mathbf{x}}{ascii} 
+#' Decoder \mjeqn{\mathbf{h}(\mathbf{x})}{ascii}: Reconstructs \mjeqn{\mathbf{x}}{ascii} 
 #' from the latent representations.
 #' 
-#' - Auxiliary Function \mjqen{\mathbf{w}(\mathbf{u})}{ascii}: Estimates parameters of 
+#' Auxiliary Function \mjeqn{\mathbf{w}(\mathbf{u})}{ascii}: Estimates parameters of 
 #' the autoregressive latent prior.
 #' 
 #' In particular, the auxiliary function gives spatio-temporal trend 
@@ -55,14 +55,16 @@
 #' 
 #' where \mjeqn{\epsilon_i \sim \mathcal{N}(\mathbf{0}, \sigma(\mathbf{s}, t))}{ascii} is Gaussian noise.
 #' 
-#' The model optimizes the **evidence lower bound (ELBO)**:
+#' The model optimizes the **evidence lower bound (ELBO):
 #' 
 #' \mjeqn{\mathcal{L} = \mathbb{E}_{q(\mathbf{z} | \mathbf{x}, \mathbf{u})} \left[ \log p(\mathbf{x} | \mathbf{z}) \right] - D_{\text{KL}}(q(\mathbf{z} | \mathbf{x}, \mathbf{u}) \| p(\mathbf{z} | \mathbf{u}))}{ascii}
 #' 
 #' where:
-#' - The first term maximizes reconstruction accuracy by ensuring 
+#' 
+#' The first term maximizes reconstruction accuracy by ensuring 
 #' \mjeqn{\mathbf{x}}{ascii} can be recovered from \mjeqn{\mathbf{z}}{ascii}.
-#' - The second term regularizes the latent space, enforcing an 
+#' 
+#' The second term regularizes the latent space, enforcing an 
 #' autoregressive prior structure through \mjeqn{\mathbf{w}(\mathbf{u})}{ascii}.
 #' 
 #' The framework is implemented using deep neural networks, optimizing 
@@ -105,6 +107,8 @@
 #' cormat <- cor(resiVAE$IC, latent_data)
 #' cormat
 #' absolute_mean_correlation(cormat)
+#' @references \insertAllCited{}
+#' @author Mika Sipilä
 #' 
 #' @export
 iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_list, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
@@ -335,7 +339,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   IC_vars_scaled <- sweep(IC_vars, 2, IC_sds^2, "/")
 
   iVAE_object <- list(
-    IC_unscaled = IC_estimates, IC = IC_estimates_scaled, data_dim = p,
+    IC_unscaled = IC_estimates, IC = IC_estimates_scaled, data_dim = p, ar_order = ar_order,
     sample_size = n, prior_ar_model = prior_ar_model, prior_mean_model = prior_mean_model,
     aux_dim = dim_aux, encoder = encoder, decoder = decoder, data_means = data_means,
     data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds, call_params = call_params, elbo = elbo, 

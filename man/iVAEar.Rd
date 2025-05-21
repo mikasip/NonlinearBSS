@@ -81,7 +81,7 @@ In addition the object has the following field:
 by the auxiliary function.}
 }
 \description{
-This function keras3::fits an Identifiable Variational Autoencoder (iVAE) model where the latent 
+\loadmathjax This function keras3::fits an Identifiable Variational Autoencoder (iVAE) model where the latent 
 variables follow an AR(R) process, R being the autoregressive order.
 It also supports handling auxiliary data and accommodates various 
 choices for source and error distributions.
@@ -89,43 +89,39 @@ choices for source and error distributions.
 \details{
 The iVAEar method extends spatio-temporal identifiable variational 
 autoencoders (\code{\link{iVAE}}) with an autoregressive (AR) structure. It consists of:
-- Encoder \mjeqn{\mathbf{g}(\mathbf{x}, \mathbf{u})}{ascii}: Maps observations 
+
+Encoder \mjeqn{\mathbf{g}(\mathbf{x}, \mathbf{u})}{ascii}: Maps observations 
 \mjeqn{\mathbf{x}}{ascii} and auxiliary variables \mjeqn{\mathbf{u}}{ascii} to 
 latent variables \mjeqn{\mathbf{z}}{ascii}.
 
-- Decoder \mjeqn{\mathbf{h}(\mathbf{x})}{ascii}: Reconstructs \mjeqn{\mathbf{x}}{ascii} 
+Decoder \mjeqn{\mathbf{h}(\mathbf{x})}{ascii}: Reconstructs \mjeqn{\mathbf{x}}{ascii} 
 from the latent representations.
 
-- Auxiliary Function \mjqen{\mathbf{w}(\mathbf{u})}{ascii}: Estimates parameters of 
+Auxiliary Function \mjeqn{\mathbf{w}(\mathbf{u})}{ascii}: Estimates parameters of 
 the autoregressive latent prior.
 
 In particular, the auxiliary function gives spatio-temporal trend 
-(\mjeqn{\mathbf{\mu}(\mathbf{s}, t)}{ascii}), variance 
-(\mjeqn{\mathbf{\sigma}(\mathbf{s}, t)}{ascii}) 
-and AR coefficient (\mjeqn{\mathbf{\gamma_r}(\mathbf{s}, t), 
-r=1,\dots, W}{ascii}) functions. 
-The parameter \mjeqn{W}{ascii} in the equations correspond to 
-the parameter \code{ar_order} 
-set by user, \mjeqn{\mathbf{s}}{ascii} is the spatial location 
-and \mjeqn{t} is the 
+(\mjeqn{\mathbf{\mu}(\mathbf{s}, t)}{ascii}), variance (\mjeqn{\mathbf{\sigma}(\mathbf{s}, t)}{ascii}) 
+and AR coefficient (\mjeqn{\mathbf{\gamma_r}(\mathbf{s}, t), r=1,\dots, W}{ascii}) functions. 
+The parameter \mjeqn{W}{ascii} in the equations correspond to the parameter \code{ar_order} 
+set by user, \mjeqn{\mathbf{s}}{ascii} is the spatial location and \mjeqn{t} is the 
 temporal location. The latent components \mjeqn{z_1, \dots, z_P}{ascii} are 
 assumed to be generated through the following autoregressive process:
 
-\mjeqn{\mathbf{z}^t_i = \mu_i(\mathbf{s}, t) + \sum_{r=1}^{W}
- \gamma_{i,r}(\mathbf{s}, t) (\mathbf{z}_i^{t-r} - \mu_i(\mathbf{s}, t - r)) 
-+ \epsilon_i(\mathbf{s}, t)}{ascii}
+\mjeqn{\mathbf{z}^t_i = \mu_i(\mathbf{s}, t) + \sum_{r=1}^{W} \gamma_{i,r}(\mathbf{s}, t) (\mathbf{z}_i^{t-r} - \mu_i(\mathbf{s}, t - r)) + \epsilon_i(\mathbf{s}, t)}{ascii}
 
-where \mjeqn{\epsilon_i \sim \mathcal{N}(\mathbf{0}, \sigma(\mathbf{s}, t))}{ascii} 
-is Gaussian noise.
+where \mjeqn{\epsilon_i \sim \mathcal{N}(\mathbf{0}, \sigma(\mathbf{s}, t))}{ascii} is Gaussian noise.
 
-The model optimizes the **evidence lower bound (ELBO)**:
+The model optimizes the **evidence lower bound (ELBO):
 
 \mjeqn{\mathcal{L} = \mathbb{E}_{q(\mathbf{z} | \mathbf{x}, \mathbf{u})} \left[ \log p(\mathbf{x} | \mathbf{z}) \right] - D_{\text{KL}}(q(\mathbf{z} | \mathbf{x}, \mathbf{u}) \| p(\mathbf{z} | \mathbf{u}))}{ascii}
 
 where:
-- The first term maximizes reconstruction accuracy by ensuring 
+
+The first term maximizes reconstruction accuracy by ensuring 
 \mjeqn{\mathbf{x}}{ascii} can be recovered from \mjeqn{\mathbf{z}}{ascii}.
-- The second term regularizes the latent space, enforcing an 
+
+The second term regularizes the latent space, enforcing an 
 autoregressive prior structure through \mjeqn{\mathbf{w}(\mathbf{u})}{ascii}.
 
 The framework is implemented using deep neural networks, optimizing 
@@ -162,5 +158,10 @@ resiVAE <- iVAEar_radial(
 cormat <- cor(resiVAE$IC, latent_data)
 cormat
 absolute_mean_correlation(cormat)
-
+}
+\references{
+\insertAllCited{}
+}
+\author{
+Mika Sipilä
 }

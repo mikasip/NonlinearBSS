@@ -17,10 +17,10 @@
 #'
 #' @details This function utilizes an autoregressive iVAE model to predict 
 #' latent independent components (ICs) at new spatial-temporal locations.
-#' The method relies on a learned trend function \mjqen{\mu(\mathbf{s}, t)}{ascii} 
+#' The method relies on a learned trend function \mjeqn{\mu(\mathbf{s}, t)}{ascii} 
 #' and an autoregressive structure to propagate ICs over time.
 #' 
-#' Specifically, the model follows an autoregressive process of order \mjqen{R}{ascii}:
+#' Specifically, the model follows an autoregressive process of order \mjeqn{R}{ascii}:
 #' 
 #' \mjeqn{\mathbf{z}_t = \mu(\mathbf{s}, t) + \sum_{r=1}^{R} \gamma_r(\mathbf{s}, t) (\mathbf{z}_{t-r} - \mu(\mathbf{s}_t, t)) + \omega_t}{ascii}
 #' 
@@ -42,7 +42,7 @@
 predict_coords_to_IC_ar <- function(
     object, last_spatial_locations, last_time_points, last_elevations = NULL,
     new_spatial_locations, new_time_points, new_elevation = NULL, 
-    get_var = FALSE, get_ar_coefs = FALSE, unscaled = FALSE) {
+    get_trend = FALSE, get_var = FALSE, get_ar_coefs = FALSE, unscaled = FALSE) {
     if (!("iVAEradial_st" %in% class(object))) {
         stop("Object must be class of iVAEradial_st")
     }
@@ -175,10 +175,11 @@ predict_coords_to_IC_ar_train_data <- function(object, get_var = FALSE,
     prev_ICs_list <- list()
     prev_ICs <- object$IC_unscaled[time_ord, ]
     prev_prior_means <- prior_means
+    latent_dim <- object$call_params$latent_dim
     for (i in 1:object$ar_order) {
-        prev_prior_means <- rbind(matrix(0, ncol = object$latent_dim, nrow = n_s), prev_prior_means[-((N - n_s + 1): N), ])
-        prev_ICs <- rbind(matrix(0, ncol = object$latent_dim, nrow = n_s), prev_ICs[-((N - n_s + 1): N), ])
-        prior_means <- prior_means + ar_coeffs[, ((i - 1) * object$latent_dim + 1):(i * object$latent_dim)] * (prev_ICs - prev_prior_means)
+        prev_prior_means <- rbind(matrix(0, ncol = latent_dim, nrow = n_s), prev_prior_means[-((N - n_s + 1): N), ])
+        prev_ICs <- rbind(matrix(0, ncol = latent_dim, nrow = n_s), prev_ICs[-((N - n_s + 1): N), ])
+        prior_means <- prior_means + ar_coeffs[, ((i - 1) * latent_dim + 1):(i * latent_dim)] * (prev_ICs - prev_prior_means)
     }
     # Predict latent components using the AR(1) process
     preds <- prior_means

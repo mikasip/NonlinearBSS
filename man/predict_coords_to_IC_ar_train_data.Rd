@@ -36,10 +36,10 @@ using the fitted autoregressive identifiable variational autoencoder (iVAEar).
 \details{
 This function utilizes an autoregressive iVAE model to predict 
 latent independent components (ICs) at new spatial-temporal locations.
-The method relies on a learned trend function \mjqen{\mu(\mathbf{s}, t)}{ascii} 
+The method relies on a learned trend function \mjeqn{\mu(\mathbf{s}, t)}{ascii} 
 and an autoregressive structure to propagate ICs over time.
 
-Specifically, the model follows an autoregressive process of order \mjqen{R}{ascii}:
+Specifically, the model follows an autoregressive process of order \mjeqn{R}{ascii}:
 
 \mjeqn{\mathbf{z}_t = \mu(\mathbf{s}, t) + \sum_{r=1}^{R} \gamma_r(\mathbf{s}, t) (\mathbf{z}_{t-r} - \mu(\mathbf{s}_t, t)) + \omega_t}{ascii}
 
