@@ -177,7 +177,7 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
   data_sds <- apply(data, 2, function(col) { sd(col, na.rm = TRUE) })
   data_cent <- sweep(data, 2, data_means, "-")
   data_scaled <- sweep(data_cent, 2, data_sds, "/")
-  data_scaled[which(mask == 0)] <- rnorm(length(which(mask == 0)))
+  data_scaled[which(mask == 0)] <- 0
 
   if (!is.null(seed)) {
     tensorflow::tf$keras$utils$set_random_seed(as.integer(seed))
