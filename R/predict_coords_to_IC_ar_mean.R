@@ -66,7 +66,7 @@ predict_coords_to_IC_ar <- function(
     if ("iVAEar_radial" %in% class(object)) {
         phi_all <- get_aux_data_radial(object, new_spatial_locations_ord, new_time_points_ord, new_elevation_ord)
     } else {
-        phi_all <- 
+        phi_all <- get_aux_data_spatial(object, cbind(new_spatial_locations_ord, new_time_points_ord))
     }
     if (get_var) {
         vars <- exp(as.matrix(object$prior_log_var_model(phi_all)))
@@ -130,8 +130,6 @@ predict_coords_to_IC_ar <- function(
             new_time_points[-(1:n_s_new)], new_elevation[-(1:n_s_new)]),
             trends = trend, vars = vars, ar_coefs = coefs))
 }
-
-predict_coords_to_IC_ar_segmentation <- function()
 
 #' Predict Latent Independent Components for Training Data
 #'
