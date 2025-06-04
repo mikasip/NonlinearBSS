@@ -16,6 +16,14 @@
 #'   If NULL, no elevation data will be used.
 #' @param latent_dim A latent dimension for iVAE.
 #' @param n_s Number of unique spatial locations in the data. Not provided for STDFD object.
+#' @param time_dim The index of the time dimension in the \code{locations} matrix.
+#' Has to be provided if \code{seasonal_period} or \code{week_component} is not NULL.
+#' @param seasonal_period The length of the seasonal period in the time dimension.
+#' If provided, the temporal segmentation is done based on day of the year.
+#' @param max_season An integer giving the maximum number of seasonal periods considered. 
+#' Can be used in case the forecasting period have a season number which is not present in the training data.
+#' @param week_component A boolean value indicating if daily changes within a week is considered. 
+#' Can be used only if the data is observed daily in time.
 #' @param ar_order An autoregressive order used in iVAEar.
 #' @param epochs Integer specifying the number of training epochs for the iVAE model.
 #' @param batch_size Integer specifying the batch size for training the iVAE model.
@@ -140,12 +148,14 @@ iVAEar_segmentation <- function(data, ...) {
 iVAEar_segmentation.default <- function(
     data, locations, segment_sizes,
     joint_segment_inds = rep(1, length(segment_sizes)), latent_dim, n_s,
+    time_dim = NULL, seasonal_period = NULL, max_season = NULL, week_component = FALSE, 
     ar_order = 1, epochs, batch_size, ...) {
     n <- dim(data)[1]
     order_inds <- order(locations[, 3], locations[, 1], locations[, 2])
     original_order <- order(order_inds)
     data_ord <- data[order_inds, ]
-    aux_data <- form_aux_data_spatial(locations, segment_sizes, joint_segment_inds)
+    aux_data <- form_aux_data_spatial(locations, segment_sizes, 
+        joint_segment_inds, time_dim, seasonal_period, max_season, week_component)
     aux_data_ord <- aux_data[order_inds, ]
     data_prev_list <- list()
     aux_prev_list <- list()

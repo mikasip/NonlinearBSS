@@ -1,5 +1,30 @@
-form_aux_data_spatial <- function(locations, segment_sizes, joint_segment_inds = rep(1, length(segment_sizes))) {
+form_aux_data_spatial <- function(locations, segment_sizes, 
+    joint_segment_inds = rep(1, length(segment_sizes)),
+    time_dim = NULL, seasonal_period = NULL, 
+    max_season = NULL, week_component = FALSE) {
     n <- nrow(locations)
+    if (!is.null(week_component)) {
+        if (is.null(time_dim)) {
+            stop("Time dimension must be provided if week component is given.")
+        }
+        day_of_week <- locations[, time_dim] %% 7
+        day_of_week_model_matrix <- model.matrix(~ 0 + as.factor(day_of_week))
+    } else {
+        day_of_week_model_matrix <- NULL
+    }
+    if (!is.null(seasonal_period)) {
+        if (is.null(time_dim)) {
+            stop("Time dimension must be provided if seasonal period is given.")
+        }
+        seasons <- floor(locations[, time_dim] / seasonal_period)
+        if (!is.null(max_season)) {
+            seasons <- sapply(seasons, function(i) min(i, max_season))
+        }
+        seasons_model_matrix <- model.matrix(~ 0 + as.factor(seasons))
+        locations[, time_dim] <- locations[, time_dim] %% seasonal_period + 1
+    } else {
+        seasons_model_matrix <- NULL
+    }
     location_mins <- apply(locations, 2, min)
     locations_zero <- sweep(locations, 2, location_mins, "-")
     location_maxs <- apply(locations_zero, 2, max)
@@ -28,6 +53,12 @@ form_aux_data_spatial <- function(locations, segment_sizes, joint_segment_inds =
         labels <- as.numeric(as.factor(labels)) # To ensure that
         # empty segments are reduced
         aux_data <- cbind(aux_data, model.matrix(~ 0 + as.factor(labels)))
+    }
+    if (!is.null(seasons_model_matrix)) {
+        aux_data <- cbind(aux_data, seasons_model_matrix)
+    }
+    if (!is.null(day_of_week_model_matrix)) {
+        aux_data <- cbind(aux_data, day_of_week_model_matrix)
     }
     return(aux_data)
 }
