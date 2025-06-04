@@ -154,8 +154,9 @@ iVAEar_segmentation.default <- function(
     order_inds <- order(locations[, 3], locations[, 1], locations[, 2])
     original_order <- order(order_inds)
     data_ord <- data[order_inds, ]
-    aux_data <- form_aux_data_spatial(locations, segment_sizes, 
+    aux_data_obj <- form_aux_data_spatial(locations, segment_sizes, 
         joint_segment_inds, time_dim, seasonal_period, max_season, week_component)
+    aux_data <- aux_data_obj$aux_data
     aux_data_ord <- aux_data[order_inds, ]
     data_prev_list <- list()
     aux_prev_list <- list()
@@ -174,8 +175,15 @@ iVAEar_segmentation.default <- function(
 
     resVAE <- iVAEar(data, aux_data, latent_dim, data_prev_list, aux_prev_list,
         ar_order = ar_order, batch_size = batch_size, epochs = epochs, ...)
-    class(resVAE) <- c("iVAEar1_spatial", class(resVAE))
+    class(resVAE) <- c("iVAEar_segmentation", class(resVAE))
     resVAE$spatial_dim <- dim(locations)[2]
+    resVAE$segment_sizes <- segment_sizes
+    resVAE$joint_segment_inds <- joint_segment_inds
+    resVAE$min_coords <- aux_data_obj$min_coords
+    resVAE$max_coords <- aux_data_obj$max_coords
+    resVAE$seasonal_period <- seasonal_period
+    resVAE$max_season <- max_season
+    resVAE$week_component <- week_component
     return(resVAE)
 }
 

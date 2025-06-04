@@ -43,8 +43,8 @@ predict_coords_to_IC_ar <- function(
     object, last_spatial_locations, last_time_points, last_elevations = NULL,
     new_spatial_locations, new_time_points, new_elevation = NULL, 
     get_trend = FALSE, get_var = FALSE, get_ar_coefs = FALSE, unscaled = FALSE) {
-    if (!("iVAEradial_st" %in% class(object))) {
-        stop("Object must be class of iVAEradial_st")
+    if (!("iVAEradial_st" %in% class(object)) & !("iVAEar_segmentation" %in% class(object))) {
+        stop("Object must be class of iVAEradial_st or iVAEar_segmentation")
     }
     new_spatial_locations <- rbind(as.matrix(last_spatial_locations), as.matrix(new_spatial_locations))
     new_time_points <- c(last_time_points, new_time_points)
@@ -62,8 +62,12 @@ predict_coords_to_IC_ar <- function(
     } else {
         new_elevation_ord <- NULL
     }
-    n_s_new <- nrow(as.data.frame(new_spatial_locations_ord) %>% dplyr::distinct())  
-    phi_all <- get_aux_data_radial(object, new_spatial_locations_ord, new_time_points_ord, new_elevation_ord)
+    n_s_new <- nrow(as.data.frame(new_spatial_locations_ord) %>% dplyr::distinct())
+    if ("iVAEar_radial" %in% class(object)) {
+        phi_all <- get_aux_data_radial(object, new_spatial_locations_ord, new_time_points_ord, new_elevation_ord)
+    } else {
+        phi_all <- 
+    }
     if (get_var) {
         vars <- exp(as.matrix(object$prior_log_var_model(phi_all)))
         if (!unscaled) {
@@ -126,6 +130,8 @@ predict_coords_to_IC_ar <- function(
             new_time_points[-(1:n_s_new)], new_elevation[-(1:n_s_new)]),
             trends = trend, vars = vars, ar_coefs = coefs))
 }
+
+predict_coords_to_IC_ar_segmentation <- function()
 
 #' Predict Latent Independent Components for Training Data
 #'

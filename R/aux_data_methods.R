@@ -60,7 +60,12 @@ form_aux_data_spatial <- function(locations, segment_sizes,
     if (!is.null(day_of_week_model_matrix)) {
         aux_data <- cbind(aux_data, day_of_week_model_matrix)
     }
-    return(aux_data)
+    return(list(aux_data = aux_data, 
+        min_coords = location_mins, 
+        max_coords = location_maxs, 
+        seasonal_period = seasonal_period, 
+        max_season = max_season, 
+        week_component = week_component))
 }
 
 form_radial_aux_data <- function(spatial_locations, time_points, elevation = NULL, 
@@ -204,4 +209,64 @@ get_aux_data_radial <- function(object, spatial_locations, time_points,
         }
     }
     return(phi_all)
+}
+
+get_aux_data_spatial <- function(object, locations) {
+    if (!("iVAEar_segmentation" %in% class(object))) {
+        stop("Object must be class of iVAEar_segmentation")
+    }
+    N <- nrow(locations)
+    if (!is.null(object$week_component)) {
+        day_of_week <- locations[, object$time_dim] %% 7
+        day_of_week_model_matrix <- model.matrix(~ 0 + as.factor(day_of_week))
+    } else {
+        day_of_week_model_matrix <- NULL
+    }
+    if (!is.null(object$seasonal_period)) {
+        seasons <- floor(locations[, object$time_dim] / object$seasonal_period)
+        if (!is.null(object$max_season)) {
+            seasons <- sapply(seasons, function(i) min(i, object$max_season))
+        }
+        seasons_model_matrix <- model.matrix(~ 0 + as.factor(seasons))
+        locations[, object$time_dim] <- locations[, object$time_dim] %% 
+            object$seasonal_period + 1
+    } else {
+        seasons_model_matrix <- NULL
+    }
+    
+    locations_zero <- sweep(locations, 2, object$min_coords, "-")
+    locations_zero <- sweep(locations_zero, 2, object$max_coords, "/")
+    aux_data <- matrix(nrow = N, ncol = 0)
+    for (i in seq_along(object$segment_sizes)) {
+        inds <- which(object$joint_segment_inds == i)
+        labels <- rep(0, N)
+        lab <- 1
+        loop_dim <- function(j, sample_inds) {
+            ind <- inds[j]
+            seg_size <- object$segment_sizes[ind]
+            seg_limits <- seq(0, (object$max_coords[ind]), seg_size)
+            for (coord in seg_limits) {
+                cur_inds <- which(locations_zero[sample_inds, ind] >= coord &
+                    locations_zero[sample_inds, ind] < coord + seg_size)
+                cur_sample_inds <- sample_inds[cur_inds]
+                if (j == length(inds)) {
+                    labels[cur_sample_inds] <<- lab
+                    lab <<- lab + 1
+                } else {
+                    loop_dim(j + 1, cur_sample_inds)
+                }
+            }
+        }
+        loop_dim(1, 1:N)
+        labels <- as.numeric(as.factor(labels)) # To ensure that
+        # empty segments are reduced
+        aux_data <- cbind(aux_data, model.matrix(~ 0 + as.factor(labels)))
+    }
+    if (!is.null(seasons_model_matrix)) {
+        aux_data <- cbind(aux_data, seasons_model_matrix)
+    }
+    if (!is.null(day_of_week_model_matrix)) {
+        aux_data <- cbind(aux_data, day_of_week_model_matrix)
+    }
+    return(aux_data)
 }
