@@ -74,12 +74,15 @@ predict_coords_to_IC_ar <- function(
             vars <- sweep(preds, 2, object$IC_sds^2, "/")
         }
     } else vars <- NULL
-    # Retrieve last latent components based on spatial locations and time
-    orig_coords_time <- cbind(object$locations, object$time)
-    if (!is.null(object$elevation)) orig_coords_time <- cbind(orig_coords_time, object$elevation)
-    last_ICs_inds <- which(object$locations[, 1] %in% new_spatial_locations[, 1] & 
-                        object$locations[, 2] %in% new_spatial_locations[, 2] & 
-                        object$time %in% unique(last_time_points))
+    if ("iVAEar_radial" %in% class(object)) {
+        orig_coords_time <- cbind(object$locations, object$time)
+        if (!is.null(object$elevation)) orig_coords_time <- cbind(orig_coords_time, object$elevation)
+    } else {
+        orig_coords_time <- object$locations
+    }
+    last_ICs_inds <- which(orig_coords_time[, 1] %in% new_spatial_locations[, 1] & 
+                        orig_coords_time[, 2] %in% new_spatial_locations[, 2] & 
+                        orig_coords_time[, 3] %in% unique(last_time_points))
     last_IC_coords_time <- orig_coords_time[last_ICs_inds, ]
     last_ICs <- object$IC_unscaled[last_ICs_inds, ]
     last_IC_ord_inds <- order(last_IC_coords_time[, 3], last_IC_coords_time[, 1], last_IC_coords_time[, 2])
@@ -112,7 +115,7 @@ predict_coords_to_IC_ar <- function(
             end_ind <- t * n_s_new
             pred <- prior_means[start_ind:end_ind, ]
             for (i in 1:object$ar_order) {
-                ar_coef <- ar_coeffs[start_ind:end_ind, ((i - 1) * object$latent_dim + 1):(i * object$latent_dim)]
+                ar_coef <- ar_coeffs[start_ind:end_ind, ((i - 1) * object$call_params$latent_dim + 1):(i * object$call_params$latent_dim)]
                 pred_i <- preds[(start_ind - (i * n_s_new)):(end_ind - (i * n_s_new)), ]
                 mean_i <- prior_means[(start_ind - (i * n_s_new)):(end_ind - (i * n_s_new)), ]
                 pred <- pred + ar_coef * (pred_i - mean_i)
@@ -153,15 +156,26 @@ predict_coords_to_IC_ar <- function(
 #' @export
 predict_coords_to_IC_ar_train_data <- function(object, get_var = FALSE, 
     get_ar_coefs = FALSE, unscaled = FALSE) {
-    if (!("iVAEradial_st" %in% class(object))) {
-        stop("Object must be class of iVAEradial_st")
+    if (!("iVAEradial_st" %in% class(object)) & !("iVAEar_segmentation" %in% class(object))) {
+        stop("Object must be class of iVAEradial_st or iVAEar_segmentation")
     }
     N <- nrow(object$locations)
-    n_t <- length(unique(object$time))
+    if ("iVAEar_radial" %in% class(object)) {
+        time_points <- object$time
+    } else if (!is.null(object$time_dim)) {
+        time_points <- object$locations[, object$time_dim]
+    } else {
+        stop("Object of class iVAEar_segmentation must have time dimension defined")
+    }
+    n_t <- length(unique(time_points))
     n_s <- N/n_t
-    time_ord <- order(object$time)
+    time_ord <- order(time_points)
     orig_ord <- order(time_ord)
-    phi_all <- get_aux_data_radial(object, object$locations, object$time, object$elevation)
+    if ("iVAEar_radial" %in% class(object)) {
+        phi_all <- get_aux_data_radial(object, object$locations, time_points, object$elevation)
+    } else {
+        phi_all <- get_aux_data_spatial(object, object$locations)
+    }
     if (get_var) {
         vars <- exp(as.matrix(object$prior_log_var_model(phi_all)))
         if (!unscaled) {

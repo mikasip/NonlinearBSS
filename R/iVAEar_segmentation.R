@@ -177,13 +177,17 @@ iVAEar_segmentation.default <- function(
         ar_order = ar_order, batch_size = batch_size, epochs = epochs, ...)
     class(resVAE) <- c("iVAEar_segmentation", class(resVAE))
     resVAE$spatial_dim <- dim(locations)[2]
+    resVAE$locations <- locations
     resVAE$segment_sizes <- segment_sizes
     resVAE$joint_segment_inds <- joint_segment_inds
     resVAE$min_coords <- aux_data_obj$min_coords
     resVAE$max_coords <- aux_data_obj$max_coords
     resVAE$seasonal_period <- seasonal_period
-    resVAE$max_season <- max_season
+    resVAE$max_season <- aux_data_obj$max_season
     resVAE$week_component <- week_component
+    resVAE$time_dim <- time_dim
+    resVAE$unique_labels <- aux_data_obj$unique_labels
+    resVAE$max_label_per_group <- aux_data_obj$max_label_per_group
     return(resVAE)
 }
 

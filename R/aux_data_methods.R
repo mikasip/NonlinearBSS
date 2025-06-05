@@ -3,7 +3,7 @@ form_aux_data_spatial <- function(locations, segment_sizes,
     time_dim = NULL, seasonal_period = NULL, 
     max_season = NULL, week_component = FALSE) {
     n <- nrow(locations)
-    if (!is.null(week_component)) {
+    if (week_component) {
         if (is.null(time_dim)) {
             stop("Time dimension must be provided if week component is given.")
         }
@@ -29,6 +29,11 @@ form_aux_data_spatial <- function(locations, segment_sizes,
     locations_zero <- sweep(locations, 2, location_mins, "-")
     location_maxs <- apply(locations_zero, 2, max)
     aux_data <- matrix(nrow = n, ncol = 0)
+    
+    # Store training labels for each joint segment group
+    unique_labels_list <- list()
+    max_label_per_group <- numeric()
+    
     for (i in unique(joint_segment_inds)) {
         inds <- which(joint_segment_inds == i)
         labels <- rep(0, n)
@@ -50,22 +55,32 @@ form_aux_data_spatial <- function(locations, segment_sizes,
             }
         }
         loop_dim(1, 1:n)
-        labels <- as.numeric(as.factor(labels)) # To ensure that
-        # empty segments are reduced
-        aux_data <- cbind(aux_data, model.matrix(~ 0 + as.factor(labels)))
+        
+        all_possible_labels <- 0:max(labels)  # Include 0 for empty segments
+        unique_labels_list[[i]] <- unique(labels)
+        
+        # Now convert to factor for model matrix creation
+        labels_factor <- factor(labels, levels = unique_labels_list[[i]])
+        label_model_matrix <- model.matrix(~ 0 + labels_factor)
+
+        aux_data <- cbind(aux_data, label_model_matrix)
     }
+    
     if (!is.null(seasons_model_matrix)) {
         aux_data <- cbind(aux_data, seasons_model_matrix)
     }
     if (!is.null(day_of_week_model_matrix)) {
         aux_data <- cbind(aux_data, day_of_week_model_matrix)
     }
+    
     return(list(aux_data = aux_data, 
         min_coords = location_mins, 
         max_coords = location_maxs, 
         seasonal_period = seasonal_period, 
-        max_season = max_season, 
-        week_component = week_component))
+        max_season = ifelse(is.null(seasons_model_matrix), NULL, max(seasons)),
+        seasons = ifelse(is.null(seasonal_period), NULL, seasons),
+        week_component = week_component,
+        unique_labels = unique_labels_list))
 }
 
 form_radial_aux_data <- function(spatial_locations, time_points, elevation = NULL, 
@@ -216,18 +231,41 @@ get_aux_data_spatial <- function(object, locations) {
         stop("Object must be class of iVAEar_segmentation")
     }
     N <- nrow(locations)
-    if (!is.null(object$week_component)) {
+    
+    # Handle week component
+    if (object$week_component) {
         day_of_week <- locations[, object$time_dim] %% 7
         day_of_week_model_matrix <- model.matrix(~ 0 + as.factor(day_of_week))
+        # Ensure all 7 days are represented in columns
+        all_days <- 0:6
+        day_names <- paste0("as.factor(day_of_week)", all_days)
+        missing_days <- setdiff(day_names, colnames(day_of_week_model_matrix))
+        if (length(missing_days) > 0) {
+            missing_matrix <- matrix(0, nrow = N, ncol = length(missing_days))
+            colnames(missing_matrix) <- missing_days
+            day_of_week_model_matrix <- cbind(day_of_week_model_matrix, missing_matrix)
+            # Reorder columns to match expected order
+            day_of_week_model_matrix <- day_of_week_model_matrix[, day_names]
+        }
     } else {
         day_of_week_model_matrix <- NULL
     }
+    
+    # Handle seasonal component
     if (!is.null(object$seasonal_period)) {
         seasons <- floor(locations[, object$time_dim] / object$seasonal_period)
-        if (!is.null(object$max_season)) {
-            seasons <- sapply(seasons, function(i) min(i, object$max_season))
-        }
-        seasons_model_matrix <- model.matrix(~ 0 + as.factor(seasons))
+        seasons[seasons > object$max_season] <- object$max_season
+        
+        # Create model matrix with all possible seasons from training
+        all_seasons <- 0:object$max_season
+        season_names <- paste0("as.factor(seasons)", all_seasons)
+        
+        # Create full model matrix
+        seasons_expanded <- factor(seasons, levels = all_seasons)
+        seasons_model_matrix <- model.matrix(~ 0 + seasons_expanded)
+        colnames(seasons_model_matrix) <- season_names
+        
+        # Modify time dimension
         locations[, object$time_dim] <- locations[, object$time_dim] %% 
             object$seasonal_period + 1
     } else {
@@ -235,12 +273,14 @@ get_aux_data_spatial <- function(object, locations) {
     }
     
     locations_zero <- sweep(locations, 2, object$min_coords, "-")
-    locations_zero <- sweep(locations_zero, 2, object$max_coords, "/")
     aux_data <- matrix(nrow = N, ncol = 0)
-    for (i in seq_along(object$segment_sizes)) {
+    
+    # Process each joint segment group
+    for (i in unique(object$joint_segment_inds)) {
         inds <- which(object$joint_segment_inds == i)
         labels <- rep(0, N)
         lab <- 1
+        
         loop_dim <- function(j, sample_inds) {
             ind <- inds[j]
             seg_size <- object$segment_sizes[ind]
@@ -258,15 +298,28 @@ get_aux_data_spatial <- function(object, locations) {
             }
         }
         loop_dim(1, 1:N)
-        labels <- as.numeric(as.factor(labels)) # To ensure that
-        # empty segments are reduced
-        aux_data <- cbind(aux_data, model.matrix(~ 0 + as.factor(labels)))
+        
+        # Get the training labels for this joint segment group
+        unique_new_labels <- unique(labels)
+        training_labels <- object$unique_labels[[i]]
+        if (any(!unique_new_labels %in% training_labels)) {
+            stop("The segments of the new data do not match the training data")
+        }
+        labels_factor <- factor(labels, levels = training_labels)
+        
+        # Create model matrix - this will have consistent dimensions
+        label_model_matrix <- model.matrix(~ 0 + labels_factor)
+        
+        aux_data <- cbind(aux_data, label_model_matrix)
     }
+    
+    # Add seasonal and week components
     if (!is.null(seasons_model_matrix)) {
         aux_data <- cbind(aux_data, seasons_model_matrix)
     }
     if (!is.null(day_of_week_model_matrix)) {
         aux_data <- cbind(aux_data, day_of_week_model_matrix)
     }
+    
     return(aux_data)
 }
