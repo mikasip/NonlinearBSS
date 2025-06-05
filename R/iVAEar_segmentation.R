@@ -143,7 +143,7 @@ iVAEar_segmentation <- function(data, ...) {
   UseMethod("iVAEar_segmentation")
 }
 
-#' @rdname iVAEar_radial
+#' @rdname iVAEar_segmentation
 #' @export
 iVAEar_segmentation.default <- function(
     data, locations, segment_sizes,
@@ -234,4 +234,3 @@ iVAEar_segmentation.STFDF <- function(data, segment_sizes, joint_segment_inds, l
     
     return(result)
 }
-

@@ -2,10 +2,28 @@
 % Please edit documentation in R/iVAEar_segmentation.R
 \name{iVAEar_segmentation}
 \alias{iVAEar_segmentation}
+\alias{iVAEar_segmentation.default}
 \alias{iVAEar_segmentation.STFDF}
 \title{iVAEar Segmentation}
 \usage{
 iVAEar_segmentation(data, ...)
+
+\method{iVAEar_segmentation}{default}(
+  data,
+  locations,
+  segment_sizes,
+  joint_segment_inds = rep(1, length(segment_sizes)),
+  latent_dim,
+  n_s,
+  time_dim = NULL,
+  seasonal_period = NULL,
+  max_season = NULL,
+  week_component = FALSE,
+  ar_order = 1,
+  epochs,
+  batch_size,
+  ...
+)
 
 \method{iVAEar_segmentation}{STFDF}(
   data,
@@ -29,6 +47,8 @@ iVAEar_segmentation(data, ...)
 
 \item{...}{Additional arguments passed to the underlying \code{\link{iVAEar}} function.}
 
+\item{locations}{A matrix of spatio-temporal locations corresponding to each observation in \code{data}. Not provided for STFDF object.}
+
 \item{segment_sizes}{A vector providing sizes for segments.
 The dimension should match the spatial dimenstion.}
 
@@ -39,10 +59,8 @@ are considered jointly. See more in details.}
 
 \item{n_s}{Number of unique spatial locations in the data. Not provided for STDFD object.}
 
-\item{var_names}{For STFDF objects only. A character vector specifying which variables to use from the STFDF data. 
-If NULL, all variables will be used.}
-
-\item{ar_order}{An autoregressive order used in iVAEar.}
+\item{time_dim}{The index of the time dimension in the \code{locations} matrix.
+Has to be provided if \code{seasonal_period} or \code{week_component} is not NULL.}
 
 \item{seasonal_period}{The length of the seasonal period in the time dimension.
 If provided, the temporal segmentation is done based on day of the year.}
@@ -53,17 +71,17 @@ Can be used in case the forecasting period have a season number which is not pre
 \item{week_component}{A boolean value indicating if daily changes within a week is considered. 
 Can be used only if the data is observed daily in time.}
 
+\item{ar_order}{An autoregressive order used in iVAEar.}
+
 \item{epochs}{Integer specifying the number of training epochs for the iVAE model.}
 
 \item{batch_size}{Integer specifying the batch size for training the iVAE model.}
 
-\item{locations}{A matrix of spatio-temporal locations corresponding to each observation in \code{data}. Not provided for STFDF object.}
+\item{var_names}{For STFDF objects only. A character vector specifying which variables to use from the STFDF data. 
+If NULL, all variables will be used.}
 
 \item{elevation_var}{For STFDF objects only. The name of the variable in the STFDF object that contains elevation data.
 If NULL, no elevation data will be used.}
-
-\item{time_dim}{The index of the time dimension in the \code{locations} matrix.
-Has to be provided if \code{seasonal_period} or \code{week_component} is not NULL.}
 }
 \value{
 An object of class iVAEspatial, inherits from class iVAE.
