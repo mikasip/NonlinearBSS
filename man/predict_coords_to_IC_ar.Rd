@@ -12,6 +12,7 @@ predict_coords_to_IC_ar(
   new_spatial_locations,
   new_time_points,
   new_elevation = NULL,
+  get_trend = FALSE,
   get_var = FALSE,
   get_ar_coefs = FALSE,
   unscaled = FALSE
@@ -32,13 +33,13 @@ predict_coords_to_IC_ar(
 
 \item{new_elevation}{(Optional) A vector of elevation values corresponding to `new_spatial_locations`.}
 
+\item{get_trend}{Logical; if `TRUE`, return the predicted trend functions of the ICs.}
+
 \item{get_var}{Logical; if `TRUE`, return the predicted variance of the ICs.}
 
 \item{get_ar_coefs}{Logical; if `TRUE`, return the predicted autoregressive (AR) coefficients of the ICs.}
 
 \item{unscaled}{Logical; if `TRUE`, return unscaled predictions (raw ICs before standardization).}
-
-\item{get_trend}{Logical; if `TRUE`, return the predicted trend functions of the ICs.}
 }
 \value{
 A list containing:

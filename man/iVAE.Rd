@@ -101,7 +101,6 @@ the original iVAE method call.}
 \description{
 Trains an identifiable variational autoencoder
 (iVAE) using the input data.
-\loadmathjax
 }
 \details{
 The method constructs and trains an identifiable variational

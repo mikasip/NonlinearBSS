@@ -44,6 +44,15 @@ If NULL, all variables will be used.}
 
 \item{ar_order}{An autoregressive order used in iVAEar.}
 
+\item{seasonal_period}{The length of the seasonal period in the time dimension.
+If provided, the temporal segmentation is done based on day of the year.}
+
+\item{max_season}{An integer giving the maximum number of seasonal periods considered. 
+Can be used in case the forecasting period have a season number which is not present in the training data.}
+
+\item{week_component}{A boolean value indicating if daily changes within a week is considered. 
+Can be used only if the data is observed daily in time.}
+
 \item{epochs}{Integer specifying the number of training epochs for the iVAE model.}
 
 \item{batch_size}{Integer specifying the batch size for training the iVAE model.}
@@ -52,6 +61,9 @@ If NULL, all variables will be used.}
 
 \item{elevation_var}{For STFDF objects only. The name of the variable in the STFDF object that contains elevation data.
 If NULL, no elevation data will be used.}
+
+\item{time_dim}{The index of the time dimension in the \code{locations} matrix.
+Has to be provided if \code{seasonal_period} or \code{week_component} is not NULL.}
 }
 \value{
 An object of class iVAEspatial, inherits from class iVAE.

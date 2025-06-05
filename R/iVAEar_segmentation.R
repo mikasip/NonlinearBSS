@@ -234,3 +234,4 @@ iVAEar_segmentation.STFDF <- function(data, segment_sizes, joint_segment_inds, l
     
     return(result)
 }
+
