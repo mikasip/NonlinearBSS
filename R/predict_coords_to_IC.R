@@ -61,72 +61,14 @@
 predict_coords_to_IC <- function(
     object, new_spatial_locations, new_time_points,
     new_elevation = NULL, get_var = FALSE, unscaled = FALSE) {
-    if (!("iVAEradial_st" %in% class(object))) {
-        stop("Object must be class of iVAEradial_st")
+    if (!("iVAEradial_st" %in% class(object)) & !("iVAEar_segmentation" %in% class(object))) {
+        stop("Object must be class of iVAEradial_st or iVAEar_segmentation")
     }
     N <- dim(new_spatial_locations)[1]
-    locations_new <- sweep(new_spatial_locations, 2, object$min_coords, "-")
-    locations_new <- sweep(locations_new, 2, object$max_coords, "/")
-    knots_1d <- sapply(object$spatial_basis, FUN = function(i) {
-        seq(0 + (1 / (i + 2)), 1 - (1 / (i + 2)), length.out = i)
-    })
-    phi_all <- matrix(0, ncol = 0, nrow = N)
-    for (i in seq_along(object$spatial_basis)) {
-        theta <- 1 / object$spatial_basis[i] * 2.5
-        knot_list <- replicate(object$spatial_dim, knots_1d[[i]], simplify = FALSE)
-        knots <- as.matrix(expand.grid(knot_list))
-        phi <- cdist(locations_new, knots) / theta
-        dist_leq_1 <- phi[which(phi <= 1)]
-        dist_g_1_ind <- which(phi > 1)
-        if (object$spatial_kernel == "gaussian") {
-            phi <- gaussian_kernel(phi)
-        } else {
-            phi[which(phi <= 1)] <- wendland_kernel(dist_leq_1)
-            phi[dist_g_1_ind] <- 0
-        }
-        phi_all <- cbind(phi_all, phi)
-    }
-    if ("week_component" %in% names(attributes(object))) {
-        if (object$week_component) {
-            day_of_week <- new_time_points %% 7
-            day_of_week_model_matrix <- model.matrix(~ 0 + as.factor(day_of_week))
-            phi_all <- cbind(phi_all, day_of_week_model_matrix)
-        }
-    }
-    if (!is.null(object$seasonal_period)) {
-        seasons <- c(
-            0:object$max_season,
-            floor(new_time_points / object$seasonal_period)
-        )
-        seasons[seasons > object$max_season] <- object$max_season
-        seasons_model_matrix <- model.matrix(~ 0 + as.factor(seasons))
-        phi_all <- cbind(
-            phi_all,
-            seasons_model_matrix[-c(1:(object$max_season + 1)), ]
-        )
-        new_time_points <- new_time_points %% object$seasonal_period + 1
-    }
-    for (i in seq_along(object$temporal_basis)) {
-        temp_knots <- c(seq(object$min_time_point, object$max_time_point,
-            length.out = object$temporal_basis[i] + 2
-        ))
-        temp_knots <- temp_knots[2:(length(temp_knots) - 1)]
-        temp_dists <- cdist(new_time_points, temp_knots)
-        kappa <- abs(temp_knots[1] - temp_knots[2])
-        phi <- exp(-0.5 * (temp_dists)^2 / kappa^2)
-        phi_all <- cbind(phi_all, phi)
-    }
-    if (!is.null(new_elevation)) {
-        for (i in seq_along(object$elevation_basis)) {
-            elevation_knots <- c(seq(object$min_elevation, object$max_elevation,
-                length.out = object$elevation_basis[i] + 2
-            ))
-            elevation_knots <- elevation_knots[2:(length(elevation_knots) - 1)]
-            elevation_dists <- cdist(new_elevation, elevation_knots)
-            kappa <- abs(elevation_knots[1] - elevation_knots[2])
-            phi <- exp(-0.5 * (elevation_dists)^2 / kappa^2)
-            phi_all <- cbind(phi_all, phi)
-        }
+    if ("iVAEradial_st" %in% class(object)) {
+        phi_all <- get_aux_data_radial(object, new_spatial_locations, new_time_points, new_elevation)
+    } else {
+        phi_all <- get_aux_data_spatial(object, cbind(new_spatial_locations, new_time_points))
     }
     if (get_var) {
         preds <- exp(as.matrix(object$prior_log_var_model(phi_all)))

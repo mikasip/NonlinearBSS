@@ -23,6 +23,7 @@ form_aux_data_spatial <- function(locations, segment_sizes,
         seasons_model_matrix <- model.matrix(~ 0 + as.factor(seasons))
         locations[, time_dim] <- locations[, time_dim] %% seasonal_period + 1
     } else {
+        seasons <- NULL
         seasons_model_matrix <- NULL
     }
     location_mins <- apply(locations, 2, min)
@@ -32,7 +33,6 @@ form_aux_data_spatial <- function(locations, segment_sizes,
     
     # Store training labels for each joint segment group
     unique_labels_list <- list()
-    max_label_per_group <- numeric()
     
     for (i in unique(joint_segment_inds)) {
         inds <- which(joint_segment_inds == i)
@@ -72,13 +72,18 @@ form_aux_data_spatial <- function(locations, segment_sizes,
     if (!is.null(day_of_week_model_matrix)) {
         aux_data <- cbind(aux_data, day_of_week_model_matrix)
     }
+    if (!is.null(seasons_model_matrix)) {
+        max_season <- max(seasons)
+    } else {
+        max_season <- NULL
+    }
     
     return(list(aux_data = aux_data, 
         min_coords = location_mins, 
         max_coords = location_maxs, 
         seasonal_period = seasonal_period, 
-        max_season = ifelse(is.null(seasons_model_matrix), NULL, max(seasons)),
-        seasons = ifelse(is.null(seasonal_period), NULL, seasons),
+        max_season = max_season,
+        seasons = seasons,
         week_component = week_component,
         unique_labels = unique_labels_list))
 }
@@ -307,7 +312,6 @@ get_aux_data_spatial <- function(object, locations) {
         }
         labels_factor <- factor(labels, levels = training_labels)
         
-        # Create model matrix - this will have consistent dimensions
         label_model_matrix <- model.matrix(~ 0 + labels_factor)
         
         aux_data <- cbind(aux_data, label_model_matrix)
