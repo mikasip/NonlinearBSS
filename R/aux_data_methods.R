@@ -74,8 +74,10 @@ form_aux_data_spatial <- function(locations, segment_sizes,
     }
     if (!is.null(seasons_model_matrix)) {
         max_season <- max(seasons)
+        min_season <- min(seasons)
     } else {
         max_season <- NULL
+        min_season <- NULL
     }
     
     return(list(aux_data = aux_data, 
@@ -83,6 +85,7 @@ form_aux_data_spatial <- function(locations, segment_sizes,
         max_coords = location_maxs, 
         seasonal_period = seasonal_period, 
         max_season = max_season,
+        min_season = min_season,
         seasons = seasons,
         week_component = week_component,
         unique_labels = unique_labels_list))
@@ -156,7 +159,16 @@ form_radial_aux_data <- function(spatial_locations, time_points, elevation = NUL
         }
     }
     aux_data <- phi_all
+    if (!is.null(seasons)) {
+        max_season <- max(seasons)
+        min_season <- min(seasons)
+    } else {
+        max_season <- NULL
+        min_season <- NULL
+    }
+    
     return(list(aux_data = aux_data, spatial_kernel = spatial_kernel, min_coords = min_coords,
+        max_season = max_season, min_season = min_season,
         max_coords = max_coords, min_time_point = min_time_point, max_time_point = max_time_point,
         min_elevation = min_elevation, max_elevation = max_elevation, seasons = seasons))
 }
@@ -195,14 +207,14 @@ get_aux_data_radial <- function(object, spatial_locations, time_points,
     }
     if (!is.null(object$seasonal_period)) {
         seasons <- c(
-            0:object$max_season,
+            object$min_season:object$max_season,
             floor(time_points / object$seasonal_period)
         )
         seasons[seasons > object$max_season] <- object$max_season
         seasons_model_matrix <- model.matrix(~ 0 + as.factor(seasons))
         phi_all <- cbind(
             phi_all,
-            seasons_model_matrix[-c(1:(object$max_season + 1)), ]
+            seasons_model_matrix[-c(1:((object$max_season - object$min_season + 1))), ]
         )
         time_points <- time_points %% object$seasonal_period + 1
     }

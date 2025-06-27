@@ -689,7 +689,7 @@ load_with_tf <- function(file) {
   object$decoder <- keras3::load_model(paste0(object$tf_model_dir, "/decoder.keras"))
   object$prior_mean_model <- keras3::load_model(paste0(object$tf_model_dir, "/prior_mean_model.keras"))
   if ("iVAEar" %in% class(object)) {
-    object$prior_mean_model <-  keras3::load_model(paste0(object$tf_model_dir, "/prior_ar_model.keras"))
+    object$prior_ar_model <-  keras3::load_model(paste0(object$tf_model_dir, "/prior_ar_model.keras"))
   }
   return(object)
 }

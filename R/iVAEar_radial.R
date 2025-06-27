@@ -185,10 +185,9 @@ iVAEar_radial.default <- function(data, spatial_locations, time_points, latent_d
     class(resVAE) <- c("iVAEradial_st", class(resVAE))
     resVAE$min_coords <- aux_data_obj$min_coords
     resVAE$max_coords <- aux_data_obj$max_coords
-    if (!is.null(seasonal_period)) {
-        resVAE$seasonal_period <- seasonal_period
-        resVAE$max_season <- ifelse(is.null(seasonal_period), NULL, max(aux_data_obj$seasons))
-    }
+    resVAE$seasonal_period <- seasonal_period
+    resVAE$max_season <- aux_data_obj$max_season
+    resVAE$min_season <- aux_data_obj$min_season
     resVAE$spatial_basis <- spatial_basis
     resVAE$temporal_basis <- temporal_basis
     resVAE$elevation_basis <- elevation_basis
