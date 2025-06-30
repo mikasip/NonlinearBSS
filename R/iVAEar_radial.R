@@ -153,7 +153,7 @@ iVAEar_radial <- function(data, ...) {
 #' @rdname iVAEar_radial
 #' @export
 iVAEar_radial.default <- function(data, spatial_locations, time_points, latent_dim, n_s,
-    elevation = NULL, spatial_dim = 2, spatial_basis = c(2, 9),
+    aux_data = NULL, elevation = NULL, spatial_dim = 2, spatial_basis = c(2, 9),
     temporal_basis = c(9, 17, 37), ar_order = 1, elevation_basis = NULL, 
     seasonal_period = NULL, max_season = NULL,
     week_component = FALSE, spatial_kernel = "gaussian", epochs, batch_size, ...) {
@@ -163,7 +163,17 @@ iVAEar_radial.default <- function(data, spatial_locations, time_points, latent_d
     original_order <- order(order_inds)
     data_ord <- data[order_inds, ]
     aux_data_obj <- form_radial_aux_data(spatial_locations, time_points, elevation, spatial_dim, spatial_basis, temporal_basis, elevation_basis, seasonal_period, max_season, spatial_kernel, week_component)
-    aux_data <- aux_data_obj$aux_data
+    if (!is.null(aux_data)) {
+        aux_data_locs <- apply(aux_data, 2, mean)
+        aux_data_sds <- apply(aux_data, 2, sd)
+        aux_data <- sweep(aux_data, 2, aux_data_locs, "-")
+        aux_data <- sweep(aux_data, 2, aux_data_sds, "/")
+        aux_data <- cbind(aux_data, aux_data_obj$aux_data)
+    } else {
+        aux_data_locs <- NULL
+        aux_data_sds <- NULL
+        aux_data <- aux_data_obj$aux_data
+    }
     aux_data_ord <- aux_data[order_inds, ]
     data_prev_list <- list()
     aux_prev_list <- list()
@@ -188,6 +198,8 @@ iVAEar_radial.default <- function(data, spatial_locations, time_points, latent_d
     resVAE$seasonal_period <- seasonal_period
     resVAE$max_season <- aux_data_obj$max_season
     resVAE$min_season <- aux_data_obj$min_season
+    resVAE$aux_data_locs <- aux_data_locs
+    resVAE$aux_data_sds <- aux_data_sds
     resVAE$spatial_basis <- spatial_basis
     resVAE$temporal_basis <- temporal_basis
     resVAE$elevation_basis <- elevation_basis

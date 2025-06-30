@@ -41,7 +41,7 @@
 #' @export
 predict_coords_to_IC_ar <- function(
     object, last_spatial_locations, last_time_points, last_elevations = NULL,
-    new_spatial_locations, new_time_points, new_elevation = NULL, 
+    new_spatial_locations, new_time_points, new_aux_data = NULL, new_elevation = NULL, 
     get_trend = FALSE, get_var = FALSE, get_ar_coefs = FALSE, unscaled = FALSE) {
     if (!("iVAEradial_st" %in% class(object)) & !("iVAEar_segmentation" %in% class(object))) {
         stop("Object must be class of iVAEradial_st or iVAEar_segmentation")
@@ -67,6 +67,11 @@ predict_coords_to_IC_ar <- function(
         phi_all <- get_aux_data_radial(object, new_spatial_locations_ord, new_time_points_ord, new_elevation_ord)
     } else {
         phi_all <- get_aux_data_spatial(object, cbind(new_spatial_locations_ord, new_time_points_ord))
+    }
+    if (!is.null(new_aux_data)) {
+        new_aux_data <- sweep(new_aux_data, 2, object$aux_data_locs, "-")
+        new_aux_data <- sweep(new_aux_data, 2, object$aux_data_sds, "/")
+        phi_all <- cbind(new_aux_data, phi_all)
     }
     if (get_var) {
         vars <- exp(as.matrix(object$prior_log_var_model(phi_all)))
