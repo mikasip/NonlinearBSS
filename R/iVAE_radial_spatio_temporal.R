@@ -113,7 +113,7 @@ iVAE_radial_spatio_temporal <- function(data, spatial_locations, time_points, la
     resVAE$temporal_basis <- temporal_basis
     resVAE$elevation_basis <- elevation_basis
     resVAE$aux_data_locs <- aux_data_locs
-    resVAE$aux_data_means <- aux_data_means
+    resVAE$aux_data_sds <- aux_data_sds
     resVAE$spatial_kernel <- aux_data_obj$spatial_kernel
     resVAE$min_time_point <- aux_data_obj$min_time_point
     resVAE$max_time_point <- aux_data_obj$max_time_point
