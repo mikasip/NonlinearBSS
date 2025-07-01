@@ -87,7 +87,9 @@ iVAE_radial_spatio_temporal <- function(data, spatial_locations, time_points, la
     temporal_basis = c(9, 17, 37), elevation_basis = NULL, seasonal_period = NULL,
     spatial_kernel = "gaussian", week_component = FALSE, epochs, batch_size, ...) {
     
-    aux_data_obj <- form_radial_aux_data(spatial_locations, time_points, elevation, spatial_dim, spatial_basis, temporal_basis, elevation_basis, seasonal_period, spatial_kernel, week_component)
+    aux_data_obj <- form_radial_aux_data(spatial_locations, time_points, elevation, spatial_dim, 
+                                         spatial_basis, temporal_basis, elevation_basis, seasonal_period, 
+                                         NULL, spatial_kernel, week_component)
     if (!is.null(aux_data)) {
         aux_data_locs <- apply(aux_data, 2, mean)
         aux_data_sds <- apply(aux_data, 2, sd)
