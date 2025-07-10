@@ -339,3 +339,130 @@ get_aux_data_spatial <- function(object, locations) {
     
     return(aux_data)
 }
+
+# Custom layer for radial basis functions
+layer_radial_basis <- keras3::Layer(
+    "RadialBasisLayer",
+    initialize = function(spatial_basis, temporal_basis, 
+                          min_coords, max_coords,
+                          min_time_point, max_time_point,
+                          spatial_kernel = "wendland") {
+    super$initialize()
+    self$spatial_basis <- as.integer(spatial_basis)
+    self$temporal_basis <- as.integer(temporal_basis)
+    self$min_coords <- tf$constant(min_coords, dtype = tf$float32)
+    self$max_coords <- tf$constant(max_coords, dtype = tf$float32)
+    self$min_time_point <- tf$constant(min_time_point, dtype = tf$float32)
+    self$max_time_point <- tf$constant(max_time_point, dtype = tf$float32)
+    self$spatial_kernel <- spatial_kernel
+    self$spatial_dim <- length(min_coords)
+  
+    # Pre-compute knots for spatial basis functions
+    self$spatial_knots <- list()
+    self$spatial_thetas <- c()
+      
+    for (i in seq_along(spatial_basis)) {
+      # Create 1D knots
+      knots_1d <- seq(0 + (1 / (spatial_basis[i] + 2)), 
+                    1 - (1 / (spatial_basis[i] + 2)), 
+                    length.out = spatial_basis[i])
+      
+      # Create grid of knots for all dimensions
+      knot_arrays <- replicate(self$spatial_dim, knots_1d, simplify = FALSE)
+      knots_grid <- expand.grid(knot_arrays)
+      
+      # Convert to tensor
+      self$spatial_knots[[i]] <- tf$constant(as.matrix(knots_grid), dtype = tf$float32)
+      self$spatial_thetas[i] <- 1 / spatial_basis[i] * 2.5
+    }
+    self$spatial_thetas <- tf$constant(self$spatial_thetas, dtype = tf$float32)
+    
+    # Pre-compute knots for temporal basis functions
+    self$temporal_knots <- list()
+    self$temporal_kappas <- c()
+    
+    for (i in seq_along(temporal_basis)) {
+      temp_knots <- seq(min_time_point, max_time_point, length.out = temporal_basis[i] + 2)
+      temp_knots <- temp_knots[2:(length(temp_knots) - 1)]
+      
+      self$temporal_knots[[i]] <- tf$constant(matrix(temp_knots, ncol = 1), dtype = tf$float32)
+      kappa <- abs(temp_knots[1] - temp_knots[2])
+      self$temporal_kappas[i] <- kappa^2
+    }
+    self$temporal_kappas <- tf$constant(self$temporal_kappas, dtype = tf$float32)
+  },
+      
+  call = function(inputs, mask = NULL) {
+    # inputs should be a list: [spatial_locations, time_points]
+    spatial_locations <- inputs[[1]]  # Shape: (batch_size, spatial_dim)
+    time_points <- inputs[[2]]        # Shape: (batch_size, 1)
+    
+    batch_size <- tf$shape(spatial_locations)[1]
+    
+    # Normalize spatial locations
+    locations_normalized <- (spatial_locations - self$min_coords) / self$max_coords
+    
+    phi_list <- list()
+    
+    # Process spatial basis functions
+    for (i in seq_along(self$spatial_basis)) {
+      # Compute distances between normalized locations and knots
+      # locations_normalized: (batch_size, spatial_dim)
+      # spatial_knots[[i]]: (num_knots, spatial_dim)
+      
+      # Expand dimensions for broadcasting
+      locs_expanded <- tf$expand_dims(locations_normalized, axis = 2L)  # (batch_size, spatial_dim, 1)
+      knots_expanded <- tf$expand_dims(self$spatial_knots[[i]], axis = 0L)  # (1, num_knots, spatial_dim)
+      knots_expanded <- tf$transpose(knots_expanded, perm = c(0L, 2L, 1L))  # (1, spatial_dim, num_knots)
+      
+      # Compute squared differences
+      diff_squared <- (locs_expanded - knots_expanded)^2  # (batch_size, spatial_dim, num_knots)
+      
+      # Sum over spatial dimensions to get distances
+      distances <- tf$sqrt(tf$reduce_sum(diff_squared, axis = 1L))  # (batch_size, num_knots)
+      
+      # Scale by theta
+      phi <- distances / self$spatial_thetas[i]
+      
+      # Apply kernel
+      if (self$spatial_kernel == "gaussian") {
+        phi <- tf$exp(-0.5 * phi^2)
+      } else {
+        # Wendland kernel: (1-r)^4 * (4*r + 1) for r <= 1, 0 otherwise
+        phi_wendland <- tf$where(
+          phi <= 1.0,
+          (1 - phi)^4 * (4 * phi + 1),
+          0.0
+        )
+        phi <- phi_wendland
+      }
+      
+      phi_list[[length(phi_list) + 1]] <- phi
+    }
+    
+    # Process temporal basis functions
+    for (i in seq_along(self$temporal_basis)) {
+      # Compute distances between time points and temporal knots
+      # time_points: (batch_size, 1)
+      # temporal_knots[[i]]: (num_temp_knots, 1)
+      
+      time_expanded <- tf$expand_dims(time_points, axis = -1L)  # (batch_size, 1, 1)
+      temp_knots_expanded <- tf$expand_dims(self$temporal_knots[[i]], axis = 0L)  # (1, num_temp_knots, 1)
+      temp_knots_expanded <- tf$transpose(temp_knots_expanded, perm = c(0L, 2L, 1L))  # (1, 1, num_temp_knots)
+      
+      # Compute temporal distances
+      temp_distances <- tf$abs(time_expanded - temp_knots_expanded)  # (batch_size, 1, num_temp_knots)
+      temp_distances <- tf$squeeze(temp_distances, axis = 1L)  # (batch_size, num_temp_knots)
+      
+      # Apply Gaussian kernel for temporal
+      phi_temp <- tf$exp(-0.5 * temp_distances^2 / self$temporal_kappas[i])
+      
+      phi_list[[length(phi_list) + 1]] <- phi_temp
+    }
+    
+    # Concatenate all basis functions
+    phi_all <- tf$concat(phi_list, axis = 1L)  # (batch_size, total_basis_functions)
+    
+    return(phi_all)
+  }
+)

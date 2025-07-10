@@ -95,13 +95,12 @@ iVAE_radial_spatio_temporal <- function(data, spatial_locations, time_points, la
         aux_data_sds <- apply(aux_data, 2, sd)
         aux_data <- sweep(aux_data, 2, aux_data_locs, "-")
         aux_data <- sweep(aux_data, 2, aux_data_sds, "/")
-        aux_data <- cbind(aux_data, aux_data_obj$aux_data)
     } else {
         aux_data_locs <- NULL
         aux_data_sds <- NULL
-        aux_data <- aux_data_obj$aux_data
     }
-    resVAE <- iVAE(data, aux_data, latent_dim, epochs = epochs, batch_size = batch_size, ...)
+    aux_data_rbf <- aux_data_obj$aux_data
+    resVAE <- iVAE(data, aux_data_rbf, aux_data, latent_dim, epochs = epochs, batch_size = batch_size, ...)
     class(resVAE) <- c("iVAEradial_st", class(resVAE))
     resVAE$min_coords <- aux_data_obj$min_coords
     resVAE$max_coords <- aux_data_obj$max_coords

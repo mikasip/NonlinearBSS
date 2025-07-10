@@ -73,15 +73,20 @@ predict_coords_to_IC <- function(
     if (!is.null(new_aux_data)) {
         new_aux_data <- sweep(new_aux_data, 2, object$aux_data_locs, "-")
         new_aux_data <- sweep(new_aux_data, 2, object$aux_data_sds, "/")
-        phi_all <- cbind(new_aux_data, phi_all)
+    }
+    if (!is.null(new_aux_data)) {
+        inputs <- cbind(phi_all, new_aux_data)
+    } else {
+        inputs <- phi_all
     }
     if (get_var) {
-        preds <- exp(as.matrix(object$prior_log_var_model(phi_all)))
+        
+        preds <- exp(as.matrix(object$prior_log_var_model(inputs)))
         if (!unscaled) {
             preds <- sweep(preds, 2, object$IC_sds^2, "/")
         }
     } else {
-        preds <- as.matrix(object$prior_mean_model(phi_all))
+        preds <- as.matrix(object$prior_mean_model(inputs))
         if (!unscaled) {
             preds <- sweep(preds, 2, object$IC_means, "-")
             preds <- sweep(preds, 2, object$IC_sds, "/")

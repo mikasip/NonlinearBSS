@@ -163,31 +163,43 @@ iVAEar_radial.default <- function(data, spatial_locations, time_points, latent_d
     original_order <- order(order_inds)
     data_ord <- data[order_inds, ]
     aux_data_obj <- form_radial_aux_data(spatial_locations, time_points, elevation, spatial_dim, spatial_basis, temporal_basis, elevation_basis, seasonal_period, max_season, spatial_kernel, week_component)
+    aux_data_rbf <- aux_data_obj$aux_data
     if (!is.null(aux_data)) {
         aux_data_locs <- apply(aux_data, 2, mean)
         aux_data_sds <- apply(aux_data, 2, sd)
         aux_data <- sweep(aux_data, 2, aux_data_locs, "-")
         aux_data <- sweep(aux_data, 2, aux_data_sds, "/")
-        aux_data <- cbind(aux_data, aux_data_obj$aux_data)
     } else {
         aux_data_locs <- NULL
         aux_data_sds <- NULL
-        aux_data <- aux_data_obj$aux_data
     }
-    aux_data_ord <- aux_data[order_inds, ]
+    aux_data_rbf_ord <- aux_data_rbf[order_inds, ]
     data_prev_list <- list()
-    aux_prev_list <- list()
+    aux_rbf_prev_list <- list()
     prev_data <- data_ord
-    prev_data_aux <- aux_data_ord
+    prev_data_aux_rbf <- aux_data_rbf_ord
     for (i in 1:ar_order) {
         data_prev_ord_i <- rbind(prev_data[1:n_s, ], prev_data[1:(n - n_s), ])
-        prev_aux_data_ord_i <- rbind(prev_data_aux[1:n_s, ], prev_data_aux[1:(n - n_s), ])
+        prev_aux_rbf_data_ord_i <- rbind(prev_data_aux_rbf[1:n_s, ], prev_data_aux_rbf[1:(n - n_s), ])
         data_prev_i <- data_prev_ord_i[original_order, ]
-        aux_prev_i <- prev_aux_data_ord_i[original_order, ]
+        aux_rbf_prev_i <- prev_aux_rbf_data_ord_i[original_order, ]
         data_prev_list[[i]] <- data_prev_i
-        aux_prev_list[[i]] <- aux_prev_i
+        aux_rbf_prev_list[[i]] <- aux_rbf_prev_i
         prev_data <- data_prev_ord_i
-        prev_data_aux <- prev_aux_data_ord_i
+        prev_data_aux_rbf <- prev_aux_rbf_data_ord_i
+    }
+    if (!is.null(aux_data)) {
+        aux_data_ord <- aux_data[order_inds, ]
+        prev_data_aux <- aux_data_ord
+        aux_prev_list <- list()
+        for (i in 1:ar_order) {
+            prev_aux_data_ord_i <- rbind(prev_data_aux[1:n_s, ], prev_data_aux[1:(n - n_s), ])
+            aux_prev_i <- prev_aux_data_ord_i[original_order, ]
+            prev_data_aux <- prev_aux_data_ord_i
+            aux_prev_list[[i]] <- aux_prev_i
+        }
+    } else {
+        aux_prev_list <- NULL
     }
  
     resVAE <- iVAEar(data, aux_data, latent_dim, data_prev_list, aux_prev_list,
