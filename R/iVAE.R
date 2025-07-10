@@ -320,7 +320,7 @@ iVAE <- function(data, aux_data_loc, aux_data = NULL, latent_dim, hidden_units =
     model_input <- list(data_scaled, aux_data_loc, mask)
   }
   hist <- vae %>% keras3::fit(model_input, data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
-  if (!is.na(aux_data)) {
+  if (!is.null(aux_data)) {
     data_inputs <- list(data_scaled, aux_data_loc, aux_data)
   } else {
     data_inputs <- list(data_scaled, aux_data_loc)
