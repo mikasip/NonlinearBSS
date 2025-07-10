@@ -75,7 +75,7 @@ predict_coords_to_IC <- function(
         new_aux_data <- sweep(new_aux_data, 2, object$aux_data_sds, "/")
     }
     if (!is.null(new_aux_data)) {
-        inputs <- cbind(phi_all, new_aux_data)
+        inputs <- list(phi_all, new_aux_data)
     } else {
         inputs <- phi_all
     }
