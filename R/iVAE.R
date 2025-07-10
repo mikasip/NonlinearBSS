@@ -320,14 +320,20 @@ iVAE <- function(data, aux_data_loc, aux_data = NULL, latent_dim, hidden_units =
     model_input <- list(data_scaled, aux_data_loc, mask)
   }
   hist <- vae %>% keras3::fit(model_input, data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
-  IC_estimates <- predict(encoder, list(data_scaled, aux_data))
+  if (!is.na(aux_data)) {
+    data_inputs <- list(data_scaled, aux_data_loc, aux_data)
+  } else {
+    data_inputs <- list(data_scaled, aux_data_loc)
+  }
+
+  IC_estimates <- predict(encoder, data_inputs)
   obs_estimates <- predict(decoder, IC_estimates)
   if (get_elbo) {
     print("Calculating ELBO...")
     if (!is.null(aux_data)) {
       IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data_loc, aux_data))
-      prior_means <- predict(prior_mean_model, aux_data_loc, aux_data)
-      prior_log_vars <- predict(prior_log_var_model, aux_data_loc, aux_data)
+      prior_means <- predict(prior_mean_model, list(aux_data_loc, aux_data))
+      prior_log_vars <- predict(prior_log_var_model, list(aux_data_loc, aux_data))
     } else {
       IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data_loc))
       prior_means <- predict(prior_mean_model, aux_data_loc)
