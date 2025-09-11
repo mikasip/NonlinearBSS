@@ -150,9 +150,7 @@
 #' cormat
 #' absolute_mean_correlation(cormat)
 #' @export
-iVAE <- function(data, aux_data_loc, aux_data = NULL, latent_dim, hidden_units = c(128, 128, 128), 
-                 aux_hidden_units_loc = c(128, 128), aux_hidden_units = c(128, 128),
-                 aux_hidden_units_final = c(128),
+iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
                  activation = "leaky_relu", source_dist = "gaussian", validation_split = 0, error_dist = "gaussian",
                  error_dist_sigma = 0.02, optimizer = NULL, lr_start = 0.001, lr_end = 0.0001,
                  get_elbo = TRUE, steps = 10000, seed = NULL, epochs, batch_size) {
@@ -187,45 +185,26 @@ iVAE <- function(data, aux_data_loc, aux_data = NULL, latent_dim, hidden_units =
   n <- as.integer(dim(data)[1])
   p <- as.integer(dim(data)[2])
   dim_aux <- as.integer(dim(aux_data)[2])
-  dim_aux_loc <- as.integer(dim(aux_data_loc)[2])
   if (n != dim(aux_data)[1]) {
     stop("Observed data and auxiliary data must have same sample size")
   }
 
   mask_input <- keras3::layer_input(p)
-  input_aux_loc <- keras3::layer_input(dim_aux_loc)
-  prior_v_loc <- input_aux_loc
-  for (n_units in aux_hidden_units_loc) {
-    prior_v_loc <- prior_v_loc %>%
-      keras3::layer_dense(units = n_units, activation = activation)
-  }
-  if (!is.null(aux_data)) {
-    input_aux <- keras3::layer_input(dim_aux)
-    prior_v_aux <- input_aux
-    for (n_units in aux_hidden_units) {
-      prior_v_aux <- prior_v_aux %>%
-        keras3::layer_dense(units = n_units, activation = activation)
-    }
-    prior_v <- keras3::layer_concatenate(list(prior_v_loc, prior_v_aux))
-  } else {
-    prior_v <- prior_v_loc
-  }
-  for (n_units in aux_hidden_units_final) {
+  input_prior <- keras3::layer_input(dim_aux)
+  prior_v <- input_prior
+  for (n_units in aux_hidden_units) {
     prior_v <- prior_v %>%
       keras3::layer_dense(units = n_units, activation = activation)
   }
   prior_mean <- prior_v %>% keras3::layer_dense(latent_dim)
   prior_log_var <- prior_v %>% keras3::layer_dense(latent_dim)
   prior_v <- keras3::layer_concatenate(list(prior_mean, prior_log_var))
-  prior_mean_model <- keras3::keras_model(list(input_aux_loc, input_aux), prior_mean)
-  prior_log_var_model <- keras3::keras_model(list(input_aux_loc, input_aux), prior_log_var)
+  prior_mean_model <- keras3::keras_model(input_prior, prior_mean)
+  prior_log_var_model <- keras3::keras_model(input_prior, prior_log_var)
 
   input_data <- keras3::layer_input(p)
-  if (!is.null(aux_data)) {
-    input <- keras3::layer_concatenate(list(input_data, input_aux_loc, input_aux))
-  } else {
-    input <- keras3::layer_concatenate(list(input_data, input_aux_loc))
-  }
+  input_aux <- keras3::layer_input(dim_aux)
+  input <- keras3::layer_concatenate(list(input_data, input_aux))
   submodel <- input
   for (n_units in hidden_units) {
     submodel <- submodel %>%
@@ -234,13 +213,8 @@ iVAE <- function(data, aux_data_loc, aux_data = NULL, latent_dim, hidden_units =
   z_mean <- submodel %>% keras3::layer_dense(latent_dim)
   z_log_var <- submodel %>% keras3::layer_dense(latent_dim)
   z_mean_and_var <- keras3::layer_concatenate(list(z_mean, z_log_var))
-  if (!is.null(aux_data)) {
-    encoder <- keras3::keras_model(list(input_data, input_aux_loc, input_aux), z_mean)
-    z_log_var_model <- keras3::keras_model(list(input_data, input_aux_loc, input_aux), z_log_var)
-  } else {
-    encoder <- keras3::keras_model(list(input_data, input_aux_loc), z_mean)
-    z_log_var_model <- keras3::keras_model(list(input_data, input_aux_loc), z_log_var)
-  }
+  encoder <- keras3::keras_model(list(input_data, input_aux), z_mean)
+  z_log_var_model <- keras3::keras_model(list(input_data, input_aux), z_log_var)
 
   sampling_layer <- switch(source_dist,
     "gaussian" = sampling_gaussian(p = latent_dim),
@@ -263,11 +237,7 @@ iVAE <- function(data, aux_data_loc, aux_data = NULL, latent_dim, hidden_units =
   decoder <- keras3::keras_model(input_decoder, output_decoder)
   final_output <- keras3::layer_concatenate(list(x_decoded_mean, z, z_mean_and_var, prior_v, mask_input))
 
-  if (!is.null(aux_data)) {
-    vae <- keras3::keras_model(list(input_data, input_aux_loc, input_aux, mask_input), final_output)
-  } else {
-    vae <- keras3::keras_model(list(input_data, input_aux_loc, mask_input), final_output)
-  }
+  vae <- keras3::keras_model(list(input_data, input_aux, input_prior, mask_input), final_output)
   vae_loss <- function(x, res) {
     x_mean <- res[, 1:p]
     z_sample <- res[, (1 + p):(p + latent_dim)]
@@ -314,31 +284,14 @@ iVAE <- function(data, aux_data_loc, aux_data = NULL, latent_dim, hidden_units =
     metrics = list(metric_reconst_accuracy, metric_kl_vae)
   )
 
-  if (!is.null(aux_data)) {
-    model_input <- list(data_scaled, aux_data_loc, aux_data, mask)
-  } else {
-    model_input <- list(data_scaled, aux_data_loc, mask)
-  }
-  hist <- vae %>% keras3::fit(model_input, data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
-  if (!is.null(aux_data)) {
-    data_inputs <- list(data_scaled, aux_data_loc, aux_data)
-  } else {
-    data_inputs <- list(data_scaled, aux_data_loc)
-  }
-
-  IC_estimates <- predict(encoder, data_inputs)
+  hist <- vae %>% keras3::fit(list(data_scaled, aux_data, aux_data, mask), data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
+  IC_estimates <- predict(encoder, list(data_scaled, aux_data))
   obs_estimates <- predict(decoder, IC_estimates)
   if (get_elbo) {
     print("Calculating ELBO...")
-    if (!is.null(aux_data)) {
-      IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data_loc, aux_data))
-      prior_means <- predict(prior_mean_model, list(aux_data_loc, aux_data))
-      prior_log_vars <- predict(prior_log_var_model, list(aux_data_loc, aux_data))
-    } else {
-      IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data_loc))
-      prior_means <- predict(prior_mean_model, aux_data_loc)
-      prior_log_vars <- predict(prior_log_var_model, aux_data_loc)
-    }
+    IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data))
+    prior_means <- predict(prior_mean_model, aux_data)
+    prior_log_vars <- predict(prior_log_var_model, aux_data)
     log_px_z <- error_log_pdf(tensorflow::tf$constant(data_scaled, "float32"), tensorflow::tf$cast(obs_estimates, "float32"), tensorflow::tf$constant(error_dist_sigma, "float32"))
     log_qz_xu <- source_log_pdf(tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$math$exp(tensorflow::tf$cast(IC_log_vars, "float32")))
     log_pz_u <- source_log_pdf(tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$cast(prior_means, "float32"), tensorflow::tf$math$exp(tensorflow::tf$cast(prior_log_vars, "float32")))
@@ -591,7 +544,7 @@ summary.iVAE <- function(object, ...) {
 #' @author Mika Sipilä
 #' @method predict iVAE
 predict.iVAE <- function(
-    object, newdata, aux_data_loc = NULL,
+    object, newdata, aux_data = NULL,
     IC_to_data = FALSE, ...) {
   if ("numeric" %in% class(newdata)) {
     newdata <- t(as.matrix(newdata))

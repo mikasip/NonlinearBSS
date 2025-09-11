@@ -8,6 +8,7 @@
 #' @param spatial_locations A matrix containing spatial locations.
 #' @param time_points A vector containing the time points.
 #' @param latent_dim A latent dimension for iVAE.
+#' @param aux_data An optional matrix containing additional covariable data.
 #' @param elevation An optional elevation vector for the data.
 #' @param spatial_dim The spatial dimension. Default is 2.
 #' @param spatial_basis The spatial resolution levels to form the spatial
@@ -100,7 +101,8 @@ iVAE_radial_spatio_temporal <- function(data, spatial_locations, time_points, la
         aux_data_sds <- NULL
     }
     aux_data_rbf <- aux_data_obj$aux_data
-    resVAE <- iVAE(data, aux_data_rbf, aux_data, latent_dim, epochs = epochs, batch_size = batch_size, ...)
+    aux_data <- cbind(aux_data_rbf, aux_data)
+    resVAE <- iVAE(data, aux_data, latent_dim, epochs = epochs, batch_size = batch_size, ...)
     class(resVAE) <- c("iVAEradial_st", class(resVAE))
     resVAE$min_coords <- aux_data_obj$min_coords
     resVAE$max_coords <- aux_data_obj$max_coords
