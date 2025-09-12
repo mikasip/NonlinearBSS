@@ -1,0 +1,43 @@
+# Metadata for Dataset: `EEA_sub_aux_IC.RData`
+
+## 1. Input Data Description  
+The dataset integrates in situ observations and satellite-derived variables, together with latent components obtained through statistical modeling.  
+
+### 1.1 In situ data (air quality monitoring stations)
+  - Source: European Air Quality Portal, managed by the European Environment Agency (EEA, 2025).  
+  - Variables: Hourly validated concentrations of O₃, NO₂, and PM₁₀ (μg/m³), aggregated to daily statistics (min, mean, max for each variable).  
+  - Stations: 154 monitoring stations across Northern Italy.  
+  - Format: Tabular data with daily aggregation by station and date.  
+
+### 1.2 Satellite-derived data (weather and pollutant variables)
+  - Weather variables: ERA5 and ERA5-Land datasets (ECMWF).  
+  - Pollutant variables: Copernicus Atmosphere Monitoring Service (CAMS, 2021).  
+  - Resolution: Collected on a **0.1° × 0.1°** regular spatial grid, aggregated from hourly to daily statistics.  
+  - Variables include LAI (high/low vegetation), relative humidity (rh), surface solar radiation (ssr), temperature (t2m), total precipitation (tp), wind direction, wind speed, CO, NH₃, NO₂, NO, O₃, PM₁₀, PM₂.₅, SO₂, VOC.  
+
+### 1.3 Coordinate and temporal information
+  - Station identifier (AirQualityStation), Longitude, Latitude.  
+  - Date (time)  
+  - Derived variables: numeric time index (`time_numeric`) and projected coordinates as meters (`X`, `Y`). Further details of the dataset can be found in Paper 3, Section 3.
+
+## 2. Output File Description  
+- File name: `EEA_sub_aux_IC.RData`  
+- Format: RData (R serialized object).  
+- Content: Tabular dataset containing:  
+  - All variables from the input data set. 
+  - Independent components (IC1–IC10): Latent components extracted using the identifiable autoregressive variational autoencoder approach (iVAEar).  
+
+## 3. Method / Model Applied  
+- Model: Identifiable autoregressive variational autoencoder (iVAEar). A detailed description of the model can be found in Paper 3, Section 2.- Considered variables: In situ observed mean O₃, mean NO₂ and mean PM₁₀, satellite-derived variables rh, srr, t2m, tp, wind speed, CO, NH₃, NO, PM₂.₅, SO₂ and VOC.
+- Purpose: To obtain lower dimensional  independent latent component representation of the in-situ observed and satellite-derived variables.
+- Details: Full methodological description can be found in Paper 3, Section 3.  
+
+## 4. Software and Scripts Used  
+- Primary language/software: R.  
+- Model implementation can be found in R package NonlinearBSS (https://github.com/mikasip/NonlinearBSS).
+
+## 5. Data Preprocessing and Assumptions  
+- In situ hourly measurements aggregated to daily mean, min, and max per pollutant and station. The mean values were considered in the analysis.
+- Satellite-derived data aggregated from hourly to daily statistics.  The variables rh, srr, t2m, tp, wind speed, CO, NH₃, NO, PM₂.₅, SO₂ and VOC were considered in the analysis.- To create a dataset with uniform spatio-temporal locations, for each station, the nearest satellite grid point were selected, thereby creating paired in situ and satellite observations in both space and time.
+- Further preprocessing details can be found in Paper 3, Section 3.
+- The main assumptions for iVAEar method can be found in Paper 3, Section 2.

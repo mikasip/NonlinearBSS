@@ -175,7 +175,7 @@ iVAEar_radial.default <- function(data, spatial_locations, time_points, latent_d
     }
     aux_data_rbf_ord <- aux_data_rbf[order_inds, ]
     data_prev_list <- list()
-    aux_rbf_prev_list <- list()
+    aux_prev_list <- list()
     prev_data <- data_ord
     prev_data_aux_rbf <- aux_data_rbf_ord
     for (i in 1:ar_order) {
@@ -184,24 +184,26 @@ iVAEar_radial.default <- function(data, spatial_locations, time_points, latent_d
         data_prev_i <- data_prev_ord_i[original_order, ]
         aux_rbf_prev_i <- prev_aux_rbf_data_ord_i[original_order, ]
         data_prev_list[[i]] <- data_prev_i
-        aux_rbf_prev_list[[i]] <- aux_rbf_prev_i
+        aux_prev_list[[i]] <- aux_rbf_prev_i
         prev_data <- data_prev_ord_i
         prev_data_aux_rbf <- prev_aux_rbf_data_ord_i
     }
     if (!is.null(aux_data)) {
         aux_data_ord <- aux_data[order_inds, ]
         prev_data_aux <- aux_data_ord
-        aux_prev_list <- list()
         for (i in 1:ar_order) {
             prev_aux_data_ord_i <- rbind(prev_data_aux[1:n_s, ], prev_data_aux[1:(n - n_s), ])
             aux_prev_i <- prev_aux_data_ord_i[original_order, ]
             prev_data_aux <- prev_aux_data_ord_i
-            aux_prev_list[[i]] <- aux_prev_i
+            aux_prev_list[[i]] <- cbind(aux_prev_list[[i]], aux_prev_i)
         }
-    } else {
-        aux_prev_list <- NULL
     }
- 
+    if (!is.null(aux_data)) {
+        aux_data <- cbind(aux_data_rbf, aux_data)
+    } else {
+        aux_data <- aux_data_rbf
+    }
+    
     resVAE <- iVAEar(data, aux_data, latent_dim, data_prev_list, aux_prev_list,
         ar_order = ar_order, epochs = epochs, batch_size = batch_size, ...)
     class(resVAE) <- c("iVAEradial_st", class(resVAE))

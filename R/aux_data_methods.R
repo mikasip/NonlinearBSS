@@ -106,7 +106,7 @@ form_radial_aux_data <- function(spatial_locations, time_points, elevation = NUL
         theta <- 1 / spatial_basis[i] * 2.5
         knot_list <- replicate(spatial_dim, knots_1d[[i]], simplify = FALSE)
         knots <- as.matrix(expand.grid(knot_list))
-        phi <- cdist(locations_new, knots) / theta
+        phi <- rdist::cdist(locations_new, knots) / theta
         dist_leq_1 <- phi[which(phi <= 1)]
         dist_g_1_ind <- which(phi > 1)
         if (spatial_kernel == "gaussian") {
@@ -137,7 +137,7 @@ form_radial_aux_data <- function(spatial_locations, time_points, elevation = NUL
     for (i in seq_along(temporal_basis)) {
         temp_knots <- c(seq(min_time_point, max_time_point, length.out = temporal_basis[i] + 2))
         temp_knots <- temp_knots[2:(length(temp_knots) - 1)]
-        temp_dists <- cdist(time_points, temp_knots)
+        temp_dists <- rdist::cdist(time_points, temp_knots)
         kappa <- abs(temp_knots[1] - temp_knots[2])
         phi <- exp(-0.5*(temp_dists)^2 / kappa^2)
         phi_all <- cbind(phi_all, phi)
@@ -152,7 +152,7 @@ form_radial_aux_data <- function(spatial_locations, time_points, elevation = NUL
         for (i in seq_along(elevation_basis)) {
             elevation_knots <- c(seq(min_elevation, max_elevation, length.out = elevation_basis[i] + 2))
             elevation_knots <- elevation_knots[2:(length(elevation_knots) - 1)]
-            elevation_dists <- cdist(elevation, elevation_knots)
+            elevation_dists <- rdist::cdist(elevation, elevation_knots)
             kappa <- abs(elevation_knots[1] - elevation_knots[2])
             phi <- exp(-0.5*(elevation_dists)^2 / kappa^2)
             phi_all <- cbind(phi_all, phi)
@@ -189,7 +189,7 @@ get_aux_data_radial <- function(object, spatial_locations, time_points,
         theta <- 1 / object$spatial_basis[i] * 2.5
         knot_list <- replicate(object$spatial_dim, knots_1d[[i]], simplify = FALSE)
         knots <- as.matrix(expand.grid(knot_list))
-        phi <- cdist(locations_new, knots) / theta
+        phi <- rdist::cdist(locations_new, knots) / theta
         dist_leq_1 <- phi[which(phi <= 1)]
         dist_g_1_ind <- which(phi > 1)
         if (object$spatial_kernel == "gaussian") {
@@ -223,7 +223,7 @@ get_aux_data_radial <- function(object, spatial_locations, time_points,
             length.out = object$temporal_basis[i] + 2
         ))
         temp_knots <- temp_knots[2:(length(temp_knots) - 1)]
-        temp_dists <- cdist(time_points, temp_knots)
+        temp_dists <- rdist::cdist(time_points, temp_knots)
         kappa <- abs(temp_knots[1] - temp_knots[2])
         phi <- exp(-0.5 * (temp_dists)^2 / kappa^2)
         phi_all <- cbind(phi_all, phi)
@@ -234,7 +234,7 @@ get_aux_data_radial <- function(object, spatial_locations, time_points,
                 length.out = object$elevation_basis[i] + 2
             ))
             elevation_knots <- elevation_knots[2:(length(elevation_knots) - 1)]
-            elevation_dists <- cdist(elevation, elevation_knots)
+            elevation_dists <- rdist::cdist(elevation, elevation_knots)
             kappa <- abs(elevation_knots[1] - elevation_knots[2])
             phi <- exp(-0.5 * (elevation_dists)^2 / kappa^2)
             phi_all <- cbind(phi_all, phi)

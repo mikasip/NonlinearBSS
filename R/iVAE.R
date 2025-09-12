@@ -258,7 +258,7 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
     optimizer <- tensorflow::tf$keras$optimizers$Adam(learning_rate = tensorflow::tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
   }
 
-  metric_reconst_accuracy <- custom_metric("metric_reconst_accuracy", function(x, res) {
+  metric_reconst_accuracy <- keras3::custom_metric("metric_reconst_accuracy", function(x, res) {
     x_mean <- res[, 1:p]
     mask <- res[, (p + 5 * latent_dim + 1):(2 * p + 5 * latent_dim)]
     log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
@@ -267,7 +267,7 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
     return(tensorflow::tf$reduce_mean(log_px_z, -1L))
   })
 
-  metric_kl_vae <- custom_metric("metric_kl_vae", function(x, res) {
+  metric_kl_vae <- keras3::custom_metric("metric_kl_vae", function(x, res) {
     z_sample <- res[, (1 + p):(p + latent_dim)]
     z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
     z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
