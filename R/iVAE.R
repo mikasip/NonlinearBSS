@@ -218,8 +218,13 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
   z_mean <- submodel %>% keras3::layer_dense(latent_dim)
   z_log_var <- submodel %>% keras3::layer_dense(latent_dim)
   z_mean_and_var <- keras3::layer_concatenate(list(z_mean, z_log_var))
-  encoder <- keras3::keras_model(list(input_data, input_aux), z_mean)
-  z_log_var_model <- keras3::keras_model(list(input_data, input_aux), z_log_var)
+  if (all(mask == 1)) {
+    encoder_input <- list(input_data, input_aux)
+  } else {
+    encoder_input <- list(input_data, input_aux, mask_input)
+  }
+  encoder <- keras3::keras_model(encoder_input, z_mean)
+  z_log_var_model <- keras3::keras_model(encoder_input, z_log_var)
 
   sampling_layer <- switch(source_dist,
     "gaussian" = sampling_gaussian(p = latent_dim),
