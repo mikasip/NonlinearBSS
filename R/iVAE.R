@@ -290,7 +290,11 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
   )
 
   hist <- vae %>% keras3::fit(list(data_scaled, aux_data, aux_data, mask), data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
-  IC_estimates <- predict(encoder, list(data_scaled, aux_data))
+  if (all(mask == 1)) {
+    IC_estimates <- encoder %>% predict(list(data_scaled, aux_data))
+  } else {
+    IC_estimates <- encoder %>% predict(list(data_scaled, aux_data, mask))
+  }
   obs_estimates <- predict(decoder, IC_estimates)
   if (get_elbo) {
     print("Calculating ELBO...")
