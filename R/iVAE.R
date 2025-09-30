@@ -204,7 +204,12 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
 
   input_data <- keras3::layer_input(p)
   input_aux <- keras3::layer_input(dim_aux)
-  input <- keras3::layer_concatenate(list(input_data, input_aux))
+  # If no missing values, do not include mask input
+  if (all(mask == 1)) {
+    input <- keras3::layer_concatenate(list(input_data, input_aux))
+  } else {
+    input <- keras3::layer_concatenate(list(input_data, input_aux, mask_input))
+  }
   submodel <- input
   for (n_units in hidden_units) {
     submodel <- submodel %>%
