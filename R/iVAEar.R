@@ -145,7 +145,9 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   data_scaled <- sweep(data_cent, 2, data_sds, "/")
   data_scaled[which(mask == 0)] <- 0
   
+  prev_mask_list <- list()
   for (i in seq_along(prev_data_list)) {
+    prev_mask_list[[i]] <- (!is.na(prev_data_list[[i]])) * 1L
     prev_data_list[[i]][which(is.na(prev_data_list[[i]]))] <- 0
     prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_means, "-")
     prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_sds, "/")
@@ -169,10 +171,16 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   for (i in 1:ar_order) {
     input_aux_i <- keras3::layer_input(dim_aux)
     input_data_i <- keras3::layer_input(p)
+    mask_input_i <- keras3::layer_input(p)
     prev_aux_inputs <- append(prev_aux_inputs, input_aux_i)
     prev_prior_means <- append(prev_prior_means, input_aux_i)
     prev_data_inputs <- append(prev_data_inputs, input_data_i)
-    prev_z <- append(prev_z, keras3::layer_concatenate(input_data_i, input_aux_i))
+    prev_mask_inputs <- append(prev_mask_inputs, mask_input_i)
+    if (all(mask == 1)) {
+      prev_z <- append(prev_z, keras3::layer_concatenate(list(input_data_i, input_aux_i)))
+    } else {
+      prev_z <- append(prev_z, keras3::layer_concatenate(list(input_data_i, input_aux_i, mask_input_i)))
+    }
   }
   for (n_units in aux_hidden_units) {
     layer <- keras3::layer_dense(units = n_units, activation = activation)
@@ -215,8 +223,8 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   z_mean <- submodel %>% z_mean_layer()
   z_log_var <- submodel %>% z_log_var_layer()
   z_mean_and_var <- keras3::layer_concatenate(list(z_mean, z_log_var))
-  encoder <- keras3::keras_model(list(input_data, aux_input), z_mean)
-  z_log_var_model <- keras3::keras_model(list(input_data, aux_input), z_log_var)
+  encoder <- keras3::keras_model(encoder_input_list, z_mean)
+  z_log_var_model <- keras3::keras_model(encoder_input_list, z_log_var)
 
   for (i in 1:ar_order) {
     prev_z[[i]] <- prev_z[[i]] %>% z_mean_layer()
