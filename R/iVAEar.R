@@ -168,6 +168,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   prev_data_inputs <- list()
   prev_z <- list()
   prev_prior_means <- list()
+  prev_mask_inputs <- list()
   for (i in 1:ar_order) {
     input_aux_i <- keras3::layer_input(dim_aux)
     input_data_i <- keras3::layer_input(p)
