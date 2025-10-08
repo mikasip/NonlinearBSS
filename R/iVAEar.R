@@ -318,18 +318,28 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   hist <- vae %>% keras3::fit(inputs, data_scaled, 
     validation_split = validation_split, shuffle = TRUE, 
     batch_size = batch_size, epochs = epochs)
-  
-  IC_estimates <- predict(encoder, list(data_scaled, aux_data))
-  IC_log_vars <- predict(z_log_var_model, list(data_scaled, 
-      aux_data))
+
+  if (all(mask == 1)) {
+    encoder_input_list <- list(data_scaled, aux_data)
+  } else {
+    encoder_input_list <- list(data_scaled, aux_data, mask)
+  }
+
+  IC_estimates <- predict(encoder, encoder_input_list)
+  IC_log_vars <- predict(z_log_var_model, encoder_input_list)
   if (get_elbo) {
     print("Calculating ELBO...")
     obs_estimates <- predict(decoder, IC_estimates)
     prior_means <- predict(prior_mean_model, aux_data)
     prior_mean_ests <- prior_means
     for (i in 1:ar_order) {
+      if (all(mask == 1)) {
+        prev_input_list <- list(prev_data_list[[i]], prev_aux_data_list[[i]])
+      } else {
+        prev_input_list <- list(prev_data_list[[i]], prev_aux_data_list[[i]], prev_mask_list[[i]])
+      }
       prior_means_prev <- predict(prior_mean_model, prev_aux_data_list[[1]])
-      IC_estimates_prev <- predict(encoder,list(prev_data_list[[1]], prev_aux_data_list[[1]]))
+      IC_estimates_prev <- predict(encoder, prev_input_list)
       prior_log_vars <- predict(prior_log_var_model, aux_data)
       prior_ars <- predict(prior_ar_model, aux_data)
       prior_mean_ests <- prior_mean_ests + prior_ars[, ((i - 1) * latent_dim + 1):(i * latent_dim)] * (IC_estimates_prev - prior_means_prev)
@@ -345,8 +355,8 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
             "float32")))
     elbo <- tensorflow::tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L)
   } else elbo <- NULL
-  
-  IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data))
+
+  IC_log_vars <- predict(z_log_var_model, encoder_input_list)
   IC_means <- colMeans(IC_estimates)
   IC_sds <- apply(IC_estimates, 2, sd)
   IC_estimates_cent <- sweep(IC_estimates, 2, IC_means, "-")
