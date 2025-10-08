@@ -147,7 +147,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   
   prev_mask_list <- list()
   for (i in seq_along(prev_data_list)) {
-    prev_mask_list[[i]] <- (!is.na(prev_data_list[[i]])) * 1L
+    prev_mask_list <- append(prev_mask_list, list((!is.na(prev_data_list[[i]])) * 1L))
     prev_data_list[[i]][which(is.na(prev_data_list[[i]]))] <- 0
     prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_means, "-")
     prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_sds, "/")
@@ -258,6 +258,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   inputs <- list(input_data, aux_input, mask_input)
   inputs <- append(inputs, prev_data_inputs)
   inputs <- append(inputs, prev_aux_inputs)
+  inputs <- append(inputs, prev_mask_inputs)
   vae <- keras3::keras_model(inputs, final_output)
   vae_loss <- function(x, res) {
     x_mean <- res[, 1:p]
@@ -294,7 +295,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     optimizer <- tensorflow::tf$keras$optimizers$Adam(learning_rate = tensorflow::tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
   }
 
-  metric_reconst_accuracy <- custom_metric("metric_reconst_accuracy", function(x, res) {
+  metric_reconst_accuracy <- keras3::custom_metric("metric_reconst_accuracy", function(x, res) {
     x_mean <- res[, 1:p]
     mask <- res[, (p + 5 * latent_dim + latent_dim * ar_order + 1):(2 * p + 5 * latent_dim + latent_dim * ar_order)]
     log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
@@ -312,6 +313,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   inputs <- list(data_scaled, aux_data, mask)
   inputs <- append(inputs, prev_data_list)  
   inputs <- append(inputs, prev_aux_data_list)
+  inputs <- append(inputs, prev_mask_list)
 
   hist <- vae %>% keras3::fit(inputs, data_scaled, 
     validation_split = validation_split, shuffle = TRUE, 
