@@ -255,10 +255,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   output <- append(output, prev_prior_means)
   final_output <- keras3::layer_concatenate(output)
 
-  inputs <- list(input_data, aux_input)
-  if (!all(mask == 1)) {
-    inputs <- append(inputs, mask_input)
-  }
+  inputs <- list(input_data, aux_input, mask_input)
   inputs <- append(inputs, prev_data_inputs)
   inputs <- append(inputs, prev_aux_inputs)
   if (!all(mask == 1)) {
@@ -318,7 +315,9 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   inputs <- list(data_scaled, aux_data, mask)
   inputs <- append(inputs, prev_data_list)  
   inputs <- append(inputs, prev_aux_data_list)
-  inputs <- append(inputs, prev_mask_list)
+  if (!all(mask == 1)) {
+    inputs <- append(inputs, prev_mask_list)
+  }
 
   hist <- vae %>% keras3::fit(inputs, data_scaled, 
     validation_split = validation_split, shuffle = TRUE, 
