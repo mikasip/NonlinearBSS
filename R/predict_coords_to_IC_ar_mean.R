@@ -139,6 +139,107 @@ predict_coords_to_IC_ar <- function(
             trends = trend, vars = vars, ar_coefs = coefs))
 }
 
+predict_coords_to_IC_ar_b <- function(
+    object, last_spatial_locations, last_time_points, last_elevations = NULL,
+    new_spatial_locations, new_time_points, new_aux_data = NULL, new_elevation = NULL, 
+    get_trend = FALSE, get_var = FALSE, get_ar_coefs = FALSE, unscaled = FALSE) {
+    if (!("iVAEradial_st" %in% class(object)) & !("iVAEar_segmentation" %in% class(object))) {
+        stop("Object must be class of iVAEradial_st or iVAEar_segmentation")
+    }
+    new_spatial_locations <- rbind(as.matrix(last_spatial_locations), as.matrix(new_spatial_locations))
+    new_time_points <- c(last_time_points, new_time_points)
+    order_inds <- order(new_time_points, new_spatial_locations[, 1], new_spatial_locations[, 2])
+    original_inds <- order(order_inds)
+    if (!is.null(new_elevation)) new_elevation <- c(last_elevations, new_elevation)
+    #ord_coords_time <- cbind(new_spatial_locations, new_time_points)
+    #if (!is.null(new_elevation)) ord_coords_time <- cbind(ord_coords_time, new_elevation)
+    #ord_coords_time <- ord_coords_time[order_inds, ]
+    N <- dim(new_spatial_locations)[1]
+    new_spatial_locations_ord <- new_spatial_locations[order_inds, ]
+    new_time_points_ord <- new_time_points[order_inds]
+    if (!is.null(new_elevation)) {
+        new_elevation_ord <- new_elevation[order_inds]
+    } else {
+        new_elevation_ord <- NULL
+    }
+    n_s_new <- nrow(as.data.frame(new_spatial_locations) %>% dplyr::distinct())
+
+    if (!is.null(new_aux_data)) {
+        new_aux_data <- sweep(new_aux_data, 2, object$aux_data_locs, "-")
+        new_aux_data <- sweep(new_aux_data, 2, object$aux_data_sds, "/")
+        new_aux_data_ord <- new_aux_data[order_inds, ]
+    } else {
+        new_aux_data_ord <- NULL
+    }
+    prior_inputs <- list(new_spatial_locations_ord, as.matrix(new_time_points_ord))
+    if (!is.null(new_elevation_ord)) prior_inputs <- append(prior_inputs, list(new_elevation_ord))
+    if (!is.null(new_aux_data_ord)) prior_inputs <- append(prior_inputs, list(new_aux_data_ord))
+    if (get_var) {
+        vars <- exp(as.matrix(object$prior_log_var_model(prior_inputs)))
+        if (!unscaled) {
+            vars <- sweep(preds, 2, object$IC_sds^2, "/")
+        }
+    } else vars <- NULL
+    if ("iVAEradial_st" %in% class(object)) {
+        orig_coords_time <- cbind(object$locations, object$time)
+        if (!is.null(object$elevation)) orig_coords_time <- cbind(orig_coords_time, object$elevation)
+    } else {
+        orig_coords_time <- object$locations
+    }
+    last_ICs_inds <- which(orig_coords_time[, 1] %in% new_spatial_locations[, 1] & 
+                        orig_coords_time[, 2] %in% new_spatial_locations[, 2] & 
+                        orig_coords_time[, 3] %in% unique(last_time_points))
+    last_IC_coords_time <- orig_coords_time[last_ICs_inds, ]
+    last_ICs <- object$IC_unscaled[last_ICs_inds, ]
+    last_IC_ord_inds <- order(last_IC_coords_time[, 3], last_IC_coords_time[, 1], last_IC_coords_time[, 2])
+    last_ICs_ord <- last_ICs[last_IC_ord_inds, ]
+    
+    # Get AR(1) coefficients for the new locations and time points
+    #phi_all_ord <- phi_all[order_inds, ]
+    ar_coeffs <- as.matrix(object$prior_ar_model(prior_inputs))
+    if (get_ar_coefs) {
+        coefs <- ar_coeffs[original_inds, ]
+        coefs <- coefs[-(1:nrow(last_ICs_ord)), ]
+    } else coefs <- NULL
+
+    prior_means <- as.matrix(object$prior_mean_model(prior_inputs))
+    if (get_trend) {
+        if (!unscaled) {
+            trend <- sweep(prior_means, 2, object$IC_means, "-")
+            trend <- sweep(trend, 2, object$IC_sds, "/")
+        }
+    } else trend <- NULL
+
+    # Predict latent components using the AR(1) process
+    preds <- matrix(0, nrow = (N), ncol = ncol(last_ICs_ord))
+        
+    unique_new_time_points <- sort(unique(new_time_points_ord))
+    preds[1:nrow(last_ICs_ord), ] <- last_ICs_ord 
+    for (t in (seq_along(unique_new_time_points))) {
+        if (t > object$ar_order) {
+            start_ind <- (t - 1) * n_s_new + 1
+            end_ind <- t * n_s_new
+            pred <- prior_means[start_ind:end_ind, ]
+            for (i in 1:object$ar_order) {
+                ar_coef <- ar_coeffs[start_ind:end_ind, ((i - 1) * object$call_params$latent_dim + 1):(i * object$call_params$latent_dim)]
+                pred_i <- preds[(start_ind - (i * n_s_new)):(end_ind - (i * n_s_new)), ]
+                mean_i <- prior_means[(start_ind - (i * n_s_new)):(end_ind - (i * n_s_new)), ]
+                pred <- pred + ar_coef * (pred_i - mean_i)
+            }
+            preds[start_ind:end_ind, ] <- pred
+        }
+    }
+    preds <- preds[original_inds, ]
+    preds <- preds[-(1:nrow(last_ICs_ord)), ]
+    if (!unscaled) {
+        preds <- sweep(preds, 2, object$IC_means, "-")
+        preds <- sweep(preds, 2, object$IC_sds, "/")
+    }
+    return(list(preds = preds, coords_time = cbind(new_spatial_locations[-(1:n_s_new), ], 
+            new_time_points[-(1:n_s_new)], new_elevation[-(1:n_s_new)]),
+            trends = trend, vars = vars, ar_coefs = coefs))
+}
+
 #' Predict Latent Independent Components for Training Data
 #'
 #' This function predicts the latent independent components (ICs) for the training data locations 

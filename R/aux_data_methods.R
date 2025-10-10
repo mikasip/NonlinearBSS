@@ -91,6 +91,48 @@ form_aux_data_spatial <- function(locations, segment_sizes,
         unique_labels = unique_labels_list))
 }
 
+form_radial_params <- function(spatial_locations, time_points, elevation = NULL,
+                               spatial_dim = 2, spatial_basis = c(2, 9),
+                               temporal_basis = c(9, 17, 37),
+                               elevation_basis = NULL, seasonal_period = NULL,
+                               max_season = NULL, spatial_kernel = "gaussian", week_component = FALSE) {
+  spatial_kernel <- match.arg(spatial_kernel, c("gaussian", "wendland"))
+  N <- nrow(spatial_locations)
+
+  min_coords <- apply(spatial_locations, 2, min)
+  locations_new <- sweep(spatial_locations, 2, min_coords, "-")
+  max_coords <- apply(locations_new, 2, max)
+
+  min_time_point <- min(time_points)
+  max_time_point <- max(time_points)
+
+  min_elevation <- if (!is.null(elevation)) min(elevation) else NULL
+  max_elevation <- if (!is.null(elevation)) max(elevation) else NULL
+
+  # seasons logic: compute max_season from data if seasonal_period provided and max_season NULL
+  seasons <- NULL
+  if (!is.null(seasonal_period)) {
+    seasons <- floor(time_points / seasonal_period)
+    if (!is.null(max_season)) {
+      seasons <- sapply(seasons, function(i) min(i, max_season))
+    }
+    if (is.null(max_season)) max_season <- max(seasons, na.rm = TRUE)
+    min_season <- if (!is.null(seasons)) min(seasons, na.rm = TRUE) else NULL
+  } else {
+    min_season <- NULL
+  }
+
+  return(list(
+    min_coords = min_coords, max_coords = max_coords,
+    min_time_point = min_time_point, max_time_point = max_time_point,
+    min_elevation = min_elevation, max_elevation = max_elevation,
+    spatial_basis = spatial_basis, temporal_basis = temporal_basis,
+    elevation_basis = elevation_basis, spatial_kernel = spatial_kernel,
+    week_component = week_component, seasonal_period = seasonal_period,
+    max_season = max_season, min_season = min_season
+  ))
+}
+
 form_radial_aux_data <- function(spatial_locations, time_points, elevation = NULL, 
     spatial_dim = 2, spatial_basis = c(2, 9), temporal_basis = c(9, 17, 37), elevation_basis = NULL, 
     seasonal_period = NULL, max_season = NULL, spatial_kernel = "gaussian", week_component = FALSE) {
@@ -340,129 +382,183 @@ get_aux_data_spatial <- function(object, locations) {
     return(aux_data)
 }
 
-# Custom layer for radial basis functions
+
 layer_radial_basis <- keras3::Layer(
-    "RadialBasisLayer",
-    initialize = function(spatial_basis, temporal_basis, 
-                          min_coords, max_coords,
-                          min_time_point, max_time_point,
-                          spatial_kernel = "wendland") {
+  "RadialBasisLayer",
+  initialize = function(spatial_basis, temporal_basis,
+                        min_coords, max_coords,
+                        min_time_point, max_time_point,
+                        spatial_kernel = "wendland",
+                        week_component = FALSE,
+                        seasonal_period = NULL,
+                        max_season = NULL,
+                        min_season = NULL,
+                        elevation_basis = NULL,
+                        min_elevation = NULL,
+                        max_elevation = NULL) {
     super$initialize()
     self$spatial_basis <- as.integer(spatial_basis)
     self$temporal_basis <- as.integer(temporal_basis)
-    self$min_coords <- tf$constant(min_coords, dtype = tf$float32)
-    self$max_coords <- tf$constant(max_coords, dtype = tf$float32)
-    self$min_time_point <- tf$constant(min_time_point, dtype = tf$float32)
-    self$max_time_point <- tf$constant(max_time_point, dtype = tf$float32)
+    self$min_coords <- tensorflow::tf$constant(min_coords, dtype = "float32")
+    self$max_coords <- tensorflow::tf$constant(max_coords, dtype = "float32")
     self$spatial_kernel <- spatial_kernel
-    self$spatial_dim <- length(min_coords)
-  
-    # Pre-compute knots for spatial basis functions
+    self$spatial_dim <- as.integer(length(min_coords))
+
+    self$seasonal_period <- if (!is.null(seasonal_period)) as.integer(seasonal_period) else NULL
+    # FIXED: Set effective min/max to match baseline behavior after modulo
+    if (!is.null(self$seasonal_period)) {
+      min_time_point_eff <- 1.0
+      max_time_point_eff <- as.numeric(self$seasonal_period)
+    } else {
+      min_time_point_eff <- as.numeric(min_time_point)
+      max_time_point_eff <- as.numeric(max_time_point)
+    }
+    self$min_time_point <- tensorflow::tf$constant(min_time_point_eff, dtype = "float32")
+    self$max_time_point <- tensorflow::tf$constant(max_time_point_eff, dtype = "float32")
+
+    # Precompute spatial knots + thetas
     self$spatial_knots <- list()
-    self$spatial_thetas <- c()
-      
+    thetas <- numeric(length(spatial_basis))
     for (i in seq_along(spatial_basis)) {
-      # Create 1D knots
-      knots_1d <- seq(0 + (1 / (spatial_basis[i] + 2)), 
-                    1 - (1 / (spatial_basis[i] + 2)), 
-                    length.out = spatial_basis[i])
-      
-      # Create grid of knots for all dimensions
+      knots_1d <- seq(0 + (1 / (spatial_basis[i] + 2)),
+                      1 - (1 / (spatial_basis[i] + 2)),
+                      length.out = spatial_basis[i])
       knot_arrays <- replicate(self$spatial_dim, knots_1d, simplify = FALSE)
-      knots_grid <- expand.grid(knot_arrays)
-      
-      # Convert to tensor
-      self$spatial_knots[[i]] <- tf$constant(as.matrix(knots_grid), dtype = tf$float32)
-      self$spatial_thetas[i] <- 1 / spatial_basis[i] * 2.5
+      knots_grid <- as.matrix(expand.grid(knot_arrays))
+      self$spatial_knots[[i]] <- tensorflow::tf$constant(knots_grid, dtype = "float32")
+      thetas[i] <- 1 / spatial_basis[i] * 2.5
     }
-    self$spatial_thetas <- tf$constant(self$spatial_thetas, dtype = tf$float32)
-    
-    # Pre-compute knots for temporal basis functions
+    self$spatial_thetas <- tensorflow::tf$constant(thetas, dtype = "float32")
+
+    # Precompute temporal knots + kappas
     self$temporal_knots <- list()
-    self$temporal_kappas <- c()
-    
+    kappas <- numeric(length(temporal_basis))
     for (i in seq_along(temporal_basis)) {
-      temp_knots <- seq(min_time_point, max_time_point, length.out = temporal_basis[i] + 2)
+      temp_knots <- seq(min_time_point_eff, max_time_point_eff, length.out = temporal_basis[i] + 2)
       temp_knots <- temp_knots[2:(length(temp_knots) - 1)]
-      
-      self$temporal_knots[[i]] <- tf$constant(matrix(temp_knots, ncol = 1), dtype = tf$float32)
+      self$temporal_knots[[i]] <- tensorflow::tf$constant(matrix(temp_knots, ncol = 1), dtype = "float32")
       kappa <- abs(temp_knots[1] - temp_knots[2])
-      self$temporal_kappas[i] <- kappa^2
+      kappas[i] <- kappa^2
     }
-    self$temporal_kappas <- tf$constant(self$temporal_kappas, dtype = tf$float32)
+    self$temporal_kappas <- tensorflow::tf$constant(kappas, dtype = "float32")
+
+    # Elevation params
+    self$elevation_basis <- if (!is.null(elevation_basis)) as.integer(elevation_basis) else NULL
+    if (!is.null(min_elevation)) self$min_elevation <- tensorflow::tf$constant(min_elevation, dtype = "float32") else self$min_elevation <- NULL
+    if (!is.null(max_elevation)) self$max_elevation <- tensorflow::tf$constant(max_elevation, dtype = "float32") else self$max_elevation <- NULL
+
+    # FIXED: Store unique season indices for proper one-hot encoding
+    self$week_component <- week_component
+    self$max_season <- if (!is.null(max_season)) as.integer(max_season) else NULL
+    self$min_season <- if (!is.null(min_season)) as.integer(min_season) else 0L
+    
+    # For one-hot encoding, we need the actual number of unique seasons
+    # This should match what model.matrix would create
+    if (!is.null(self$seasonal_period) && !is.null(self$max_season)) {
+      # Compute how many unique seasons exist in the range
+      self$n_seasons <- as.integer(self$max_season - self$min_season + 1L)
+    } else {
+      self$n_seasons <- NULL
+    }
   },
-      
+
   call = function(inputs, mask = NULL) {
-    # inputs should be a list: [spatial_locations, time_points]
-    spatial_locations <- inputs[[1]]  # Shape: (batch_size, spatial_dim)
-    time_points <- inputs[[2]]        # Shape: (batch_size, 1)
-    
-    batch_size <- tf$shape(spatial_locations)[1]
-    
-    # Normalize spatial locations
+    spatial_locations <- inputs[[1]]
+    time_points <- inputs[[2]]
+    has_elevation <- length(inputs) >= 3
+    elevation <- if (has_elevation) inputs[[3]] else NULL
+
+    # normalize spatial
     locations_normalized <- (spatial_locations - self$min_coords) / self$max_coords
-    
+
     phi_list <- list()
-    
-    # Process spatial basis functions
+
+    # Spatial RBFs (these are correct!)
     for (i in seq_along(self$spatial_basis)) {
-      # Compute distances between normalized locations and knots
-      # locations_normalized: (batch_size, spatial_dim)
-      # spatial_knots[[i]]: (num_knots, spatial_dim)
-      
-      # Expand dimensions for broadcasting
-      locs_expanded <- tf$expand_dims(locations_normalized, axis = 2L)  # (batch_size, spatial_dim, 1)
-      knots_expanded <- tf$expand_dims(self$spatial_knots[[i]], axis = 0L)  # (1, num_knots, spatial_dim)
-      knots_expanded <- tf$transpose(knots_expanded, perm = c(0L, 2L, 1L))  # (1, spatial_dim, num_knots)
-      
-      # Compute squared differences
-      diff_squared <- (locs_expanded - knots_expanded)^2  # (batch_size, spatial_dim, num_knots)
-      
-      # Sum over spatial dimensions to get distances
-      distances <- tf$sqrt(tf$reduce_sum(diff_squared, axis = 1L))  # (batch_size, num_knots)
-      
-      # Scale by theta
+      locs_expanded <- tensorflow::tf$expand_dims(locations_normalized, axis = 2L)
+      knots_expanded <- tensorflow::tf$expand_dims(self$spatial_knots[[i]], axis = 0L)
+      knots_expanded <- tensorflow::tf$transpose(knots_expanded, perm = c(0L, 2L, 1L))
+      diff_sq <- (locs_expanded - knots_expanded)^2
+      distances <- tensorflow::tf$sqrt(tensorflow::tf$reduce_sum(diff_sq, axis = 1L))
       phi <- distances / self$spatial_thetas[i]
-      
-      # Apply kernel
+
       if (self$spatial_kernel == "gaussian") {
-        phi <- tf$exp(-0.5 * phi^2)
+        phi <- tensorflow::tf$exp(- (phi^2))
       } else {
-        # Wendland kernel: (1-r)^4 * (4*r + 1) for r <= 1, 0 otherwise
-        phi_wendland <- tf$where(
-          phi <= 1.0,
-          (1 - phi)^4 * (4 * phi + 1),
-          0.0
-        )
-        phi <- phi_wendland
+        inside <- phi <= 1.0
+        w <- ((1 - phi)^6) * ((35 * (phi^2) + 18 * phi + 3) / 3)
+        phi <- tensorflow::tf$where(inside, w, tensorflow::tf$zeros_like(w))
       }
-      
       phi_list[[length(phi_list) + 1]] <- phi
     }
-    
-    # Process temporal basis functions
+
+    if (self$week_component) {
+      dow <- tensorflow::tf$math$mod(tensorflow::tf$cast(time_points, "int32"), 7L)
+      one_hot_week <- tensorflow::tf$one_hot(dow, 7L)
+      one_hot_week <- tensorflow::tf$reshape(one_hot_week, shape = c(-1L, 7L))
+      phi_list[[length(phi_list) + 1]] <- tensorflow::tf$cast(one_hot_week, "float32")
+    }
+
+    # FIXED: Seasonal encoding with proper depth matching baseline
+    if (!is.null(self$seasonal_period)) {
+      seasons_raw <- tensorflow::tf$math$floordiv(
+        tensorflow::tf$cast(time_points, "int32"), 
+        as.integer(self$seasonal_period)
+      )
+      
+      # Cap at max_season if provided
+      if (!is.null(self$max_season)) {
+        seasons_raw <- tensorflow::tf$minimum(seasons_raw, as.integer(self$max_season))
+      }
+      
+      # FIXED: Adjust to start from 0 for one-hot encoding
+      seasons_adj <- seasons_raw - as.integer(self$min_season)
+      
+      # FIXED: Use n_seasons for depth to match model.matrix behavior
+      depth <- if (!is.null(self$n_seasons)) self$n_seasons else 1L
+      season_onehot <- tensorflow::tf$one_hot(seasons_adj, depth)
+      season_onehot <- tensorflow::tf$reshape(season_onehot, shape = c(-1L, depth))
+      phi_list[[length(phi_list) + 1]] <- tensorflow::tf$cast(season_onehot, "float32")
+
+      # FIXED: Add 1 to match baseline (range [1, seasonal_period] instead of [0, seasonal_period-1])
+      time_for_temporal <- tensorflow::tf$cast(
+        tensorflow::tf$math$mod(
+          tensorflow::tf$cast(time_points, "int32"), 
+          as.integer(self$seasonal_period)
+        ), 
+        "float32"
+      ) + 1.0  # <-- THIS IS THE KEY FIX!
+    } else {
+      time_for_temporal <- tensorflow::tf$cast(time_points, "float32")
+    }
+
+    # Temporal RBFs (now with corrected time range)
     for (i in seq_along(self$temporal_basis)) {
-      # Compute distances between time points and temporal knots
-      # time_points: (batch_size, 1)
-      # temporal_knots[[i]]: (num_temp_knots, 1)
-      
-      time_expanded <- tf$expand_dims(time_points, axis = -1L)  # (batch_size, 1, 1)
-      temp_knots_expanded <- tf$expand_dims(self$temporal_knots[[i]], axis = 0L)  # (1, num_temp_knots, 1)
-      temp_knots_expanded <- tf$transpose(temp_knots_expanded, perm = c(0L, 2L, 1L))  # (1, 1, num_temp_knots)
-      
-      # Compute temporal distances
-      temp_distances <- tf$abs(time_expanded - temp_knots_expanded)  # (batch_size, 1, num_temp_knots)
-      temp_distances <- tf$squeeze(temp_distances, axis = 1L)  # (batch_size, num_temp_knots)
-      
-      # Apply Gaussian kernel for temporal
-      phi_temp <- tf$exp(-0.5 * temp_distances^2 / self$temporal_kappas[i])
-      
+      time_expanded <- tensorflow::tf$expand_dims(time_for_temporal, axis = -1L)
+      temp_knots_expanded <- tensorflow::tf$expand_dims(self$temporal_knots[[i]], axis = 0L)
+      temp_knots_expanded <- tensorflow::tf$transpose(temp_knots_expanded, perm = c(0L, 2L, 1L))
+      temp_dist <- tensorflow::tf$abs(time_expanded - temp_knots_expanded)
+      temp_dist <- tensorflow::tf$squeeze(temp_dist, axis = 1L)
+      phi_temp <- tensorflow::tf$exp(-0.5 * (temp_dist^2) / self$temporal_kappas[i])
       phi_list[[length(phi_list) + 1]] <- phi_temp
     }
-    
-    # Concatenate all basis functions
-    phi_all <- tf$concat(phi_list, axis = 1L)  # (batch_size, total_basis_functions)
-    
+
+    # Elevation RBFs (these look correct)
+    if (!is.null(self$elevation_basis) && !is.null(elevation) && !is.null(self$min_elevation) && !is.null(self$max_elevation)) {
+      elev_norm <- (elevation - self$min_elevation) / (self$max_elevation - self$min_elevation)
+      for (i in seq_along(self$elevation_basis)) {
+        elev_knots <- seq(0, 1, length.out = self$elevation_basis[i] + 2)
+        elev_knots <- elev_knots[2:(length(elev_knots) - 1)]
+        knots_t <- tensorflow::tf$constant(matrix(elev_knots, ncol = 1), dtype = "float32")
+        elev_exp <- tensorflow::tf$expand_dims(elev_norm, axis = -1L)
+        dist <- tensorflow::tf$abs(elev_exp - knots_t)
+        kappa <- abs(elev_knots[1] - elev_knots[2])
+        phi_e <- tensorflow::tf$exp(-0.5 * dist^2 / (kappa^2))
+        phi_list[[length(phi_list) + 1]] <- phi_e
+      }
+    }
+
+    phi_all <- tensorflow::tf$concat(phi_list, axis = 1L)
     return(phi_all)
   }
 )

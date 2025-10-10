@@ -258,7 +258,9 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   inputs <- list(input_data, aux_input, mask_input)
   inputs <- append(inputs, prev_data_inputs)
   inputs <- append(inputs, prev_aux_inputs)
-  inputs <- append(inputs, prev_mask_inputs)
+  if (!all(mask == 1)) {
+    inputs <- append(inputs, prev_mask_inputs)
+  }
   vae <- keras3::keras_model(inputs, final_output)
   vae_loss <- function(x, res) {
     x_mean <- res[, 1:p]
@@ -409,7 +411,9 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
   data_scaled <- sweep(data_cent, 2, data_sds, "/")
   data_scaled[which(mask == 0)] <- 0
 
+  prev_mask_list <- list()
   for (i in seq_along(prev_data_list)) {
+    prev_mask_list <- append(prev_mask_list, list((!is.na(prev_data_list[[i]])) * 1L))
     prev_data_list[[i]][which(is.na(prev_data_list[[i]]))] <- 0
     prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_means, "-")
     prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_sds, "/")
@@ -467,6 +471,7 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
   prev_spatial_inputs <- list()
   prev_time_inputs <- list()
   prev_elev_inputs <- list()
+  prev_mask_inputs <- list()
   prev_aux_extra_inputs <- list()
   prev_z <- list()
   prev_prior_means <- list()
@@ -503,7 +508,14 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
     }
 
     prev_aux_inputs <- prev_aux_i
-    prev_z <- append(prev_z, keras3::layer_concatenate(list(input_data_i, prev_aux_inputs)))
+    if (!all(mask == 1)) {
+      mask_input_i <- keras3::layer_input(shape = p)
+      prev_mask_inputs <- append(prev_mask_inputs, mask_input_i)
+      prev_z_input <- keras3::layer_concatenate(list(input_data_i, prev_aux_i, mask_input_i))
+    } else {
+      prev_z_input <- keras3::layer_concatenate(list(input_data_i, prev_aux_i))
+    }
+    prev_z <- append(prev_z, prev_z_input)
     prev_prior_means <- append(prev_prior_means, prev_aux_inputs) # will be projected later to prior means
   }
 
@@ -539,9 +551,8 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
     prev_prior_means[[i]] <- prev_prior_means[[i]] %>% prior_mean_layer()
   }
 
-  # --- encoder network: uses input_data and aux_input (aux_input is rbf+extra inside the graph)
   mask_input <- keras3::layer_input(p)
-  input_data <- keras3::layer_input(shape = p)
+  input_data <- keras3::layer_input(p)
   if (all(mask == 1)) {
     encoder_input_list <- list(input_data, aux_input)
   } else {
@@ -562,8 +573,14 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
   z_mean <- submodel %>% z_mean_layer()
   z_log_var <- submodel %>% z_log_var_layer()
   z_mean_and_var <- keras3::layer_concatenate(list(z_mean, z_log_var))
-  encoder <- keras3::keras_model(c(list(input_data, spatial_input, temporal_input, if (!is.null(elevation_input)) elevation_input, aux_input_extra)), z_mean)
-  z_log_var_model <- keras3::keras_model(c(list(input_data, spatial_input, temporal_input, if (!is.null(elevation_input)) elevation_input, aux_input_extra)), z_log_var)
+  encoder_inputs <- list(input_data, spatial_input, temporal_input)
+  if (!is.null(elevation_input)) encoder_inputs <- append(encoder_inputs, elevation_input)
+  if (!is.null(aux_input_extra)) encoder_inputs <- append(encoder_inputs, aux_input_extra)
+  if (!all(mask == 1)) {
+    encoder_inputs <- append(encoder_inputs, mask_input)
+  }
+  encoder <- keras3::keras_model(encoder_inputs, z_mean)
+  z_log_var_model <- keras3::keras_model(encoder_inputs, z_log_var)
 
   for (i in 1:ar_order) {
     prev_z[[i]] <- prev_z[[i]] %>% z_mean_layer()
@@ -590,19 +607,21 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
   decoder <- keras3::keras_model(input_decoder, output_decoder)
 
   # final concatenation output (matches original layout)
-  output_list <- list(x_decoded_mean, z, z_mean_and_var, prior_v, mask = keras3::layer_input(shape = p))
+  output_list <- list(x_decoded_mean, z, z_mean_and_var, prior_v, mask_input)
   output_list <- append(output_list, prev_z)
   output_list <- append(output_list, prev_prior_means)
   final_output <- keras3::layer_concatenate(output_list)
 
   # Build vae inputs in exact consistent order:
-  vae_inputs <- list(input_data, spatial_input, temporal_input, if (!is.null(elevation_input)) elevation_input, output_list[[5]])  # mask placeholder
-  vae_input <- list(input_data, spatial_input, temporal_input, mask_input)
+  vae_inputs <- list(input_data, spatial_input, temporal_input, mask_input)
+  if (!is.null(elevation_input)) vae_inputs <- append(vae_inputs, elevation_input)
+  if (!is.null(aux_input_extra)) vae_inputs <- append(vae_inputs, aux_input_extra)
   vae_inputs <- append(vae_inputs, prev_data_inputs)
   vae_inputs <- append(vae_inputs, prev_spatial_inputs)
   vae_inputs <- append(vae_inputs, prev_time_inputs)
   if (!is.null(elevation_input)) vae_inputs <- append(vae_inputs, prev_elev_inputs)
   if (!is.null(aux_input_extra)) vae_inputs <- append(vae_inputs, prev_aux_extra_inputs)
+  if (!all(mask == 1)) vae_inputs <- append(vae_inputs, prev_mask_inputs)
 
   vae <- keras3::keras_model(vae_inputs, final_output)
 
@@ -642,7 +661,7 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
     )
   }
 
-  metric_reconst_accuracy <- custom_metric("metric_reconst_accuracy", function(x, res) {
+  metric_reconst_accuracy <- keras3::custom_metric("metric_reconst_accuracy", function(x, res) {
     x_mean <- res[, 1:p]
     mask <- res[, (p + 5 * latent_dim + latent_dim * ar_order + 1):(2 * p + 5 * latent_dim + latent_dim * ar_order)]
     log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
@@ -664,12 +683,13 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
   inputs_to_fit <- append(inputs_to_fit, prev_time_list)
   if (!is.null(elevation)) inputs_to_fit <- append(inputs_to_fit, lapply(prev_spatial_list, function(i) NULL)) # placeholder - you must pass prev_elevation_list if you have them
   if (!is.null(aux_extra)) inputs_to_fit <- append(inputs_to_fit, prev_aux_extra_list)
+  if (!all(mask == 1)) inputs_to_fit <- append(inputs_to_fit, prev_mask_list)
 
   # Fit
   hist <- vae %>% keras3::fit(inputs_to_fit, data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
 
   # Encoder/prior predictions (use the same input format: data, spatial, time, (elev), (aux_extra))
-  encoder_inputs_for_predict <- list(data_scaled, spatial_locations, time_points)
+  encoder_inputs_for_predict <- list(data_scaled, spatial_locations, time_points, mask)
   if (!is.null(elevation)) encoder_inputs_for_predict <- append(encoder_inputs_for_predict, list(elevation))
   if (!is.null(aux_extra)) encoder_inputs_for_predict <- append(encoder_inputs_for_predict, list(aux_extra))
 
@@ -679,13 +699,21 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
   # ELBO calculation: use prior_mean_model and prior_log_var_model with spatial/time/aux inputs
   if (get_elbo) {
     obs_estimates <- predict(decoder, IC_estimates)
-    prior_mean_ests <- predict(prior_mean_model, c(list(spatial_locations, time_points), if (!is.null(elevation)) list(elevation), if (!is.null(aux_extra)) list(aux_extra)))
+    prior_inputs <- list(spatial_locations, time_points)
+    if (!is.null(elevation)) prior_inputs <- append(prior_inputs, list(elevation))
+    if (!is.null(aux_extra)) prior_inputs <- append(prior_inputs, list(aux_extra))
+    prior_mean_ests <- predict(prior_mean_model, prior_inputs)
     # add AR corrections from prev lists
     for (i in 1:ar_order) {
-      prior_means_prev <- predict(prior_mean_model, c(list(prev_spatial_list[[i]], prev_time_list[[i]]), if (!is.null(elevation)) list(NULL), if (!is.null(aux_extra)) list(prev_aux_extra_list[[i]])))
-      IC_estimates_prev <- predict(encoder, c(list(prev_data_list[[i]], prev_spatial_list[[i]], prev_time_list[[i]]), if (!is.null(elevation)) list(NULL), if (!is.null(aux_extra)) list(prev_aux_extra_list[[i]])))
-      prior_log_vars <- predict(prior_log_var_model, c(list(spatial_locations, time_points), if (!is.null(elevation)) list(elevation), if (!is.null(aux_extra)) list(aux_extra)))
-      prior_ars <- predict(prior_ar_model, c(list(spatial_locations, time_points), if (!is.null(elevation)) list(elevation), if (!is.null(aux_extra)) list(aux_extra)))
+      prev_prior_inputs <- list(prev_spatial_list[[i]], prev_time_list[[i]])
+      if (!is.null(elevation)) prev_prior_inputs <- append(prev_prior_inputs, list(prev_elev_inputs[[i]]))
+      if (!is.null(aux_extra)) prev_prior_inputs <- append(prev_prior_inputs, list(prev_aux_extra_list[[i]]))
+      prior_means_prev <- predict(prior_mean_model, prev_prior_inputs)
+      prev_enc_inputs <- append(list(prev_data_list[[i]]), prev_prior_inputs)
+      if (!all(mask == 1)) prev_enc_inputs <- append(prev_enc_inputs, list(prev_mask_list[[i]]))
+      IC_estimates_prev <- predict(encoder, prev_enc_inputs)
+      prior_log_vars <- predict(prior_log_var_model, prev_prior_inputs)
+      prior_ars <- predict(prior_ar_model, prev_prior_inputs)
       prior_mean_ests <- prior_mean_ests + prior_ars[, ((i - 1) * latent_dim + 1):(i * latent_dim)] * (IC_estimates_prev - prior_means_prev)
     }
 
