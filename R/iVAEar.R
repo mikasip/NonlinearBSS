@@ -371,6 +371,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   iVAE_object <- list(
     IC_unscaled = IC_estimates, IC = IC_estimates_scaled, data_dim = p, ar_order = ar_order,
     sample_size = n, prior_ar_model = prior_ar_model, prior_mean_model = prior_mean_model,
+    prior_log_var_model = prior_log_var_model,
     aux_dim = dim_aux, encoder = encoder, decoder = decoder, data_means = data_means,
     data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds, call_params = call_params, elbo = elbo, 
     metrics = hist, call = deparse(sys.call()), DNAME = paste(deparse(substitute(data)))
@@ -736,6 +737,7 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
   iVAE_object <- list(
     IC_unscaled = IC_estimates, IC = IC_estimates_scaled, data_dim = p, ar_order = ar_order,
     sample_size = n, prior_ar_model = prior_ar_model, prior_mean_model = prior_mean_model,
+    prior_log_var_model = prior_log_var_model,
     aux_dim = NULL, encoder = encoder, decoder = decoder, data_means = data_means,
     data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds, call_params = call_params, elbo = elbo,
     metrics = hist, call = deparse(sys.call()), DNAME = paste(deparse(substitute(data)))
