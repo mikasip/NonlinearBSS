@@ -80,7 +80,6 @@ predict_coords_to_IC <- function(
         inputs <- phi_all
     }
     if (get_var) {
-        
         preds <- exp(as.matrix(object$prior_log_var_model(inputs)))
         if (!unscaled) {
             preds <- sweep(preds, 2, object$IC_sds^2, "/")

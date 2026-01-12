@@ -260,17 +260,20 @@ predict_coords_to_IC_ar_b <- function(
 #'   - `ar_coefs`: A matrix of predicted autoregressive coefficients of ICs if `get_ar_coefs = TRUE`, otherwise `NULL`.
 #' 
 #' @export
-predict_coords_to_IC_ar_train_data <- function(object, get_var = FALSE, 
-    get_ar_coefs = FALSE, get_trend = FALSE, unscaled = FALSE) {
-    if (!("iVAEradial_st" %in% class(object)) & !("iVAEar_segmentation" %in% class(object))) {
+predict_coords_to_IC_ar_train_data <- function(object, get_var = FALSE, get_ar_coefs = FALSE, get_trend = FALSE, 
+    unscaled = FALSE) {
+    if (!("iVAEradial_st" %in% class(object)) & !("iVAEar_segmentation" %in% 
+        class(object))) {
         stop("Object must be class of iVAEradial_st or iVAEar_segmentation")
     }
     N <- nrow(object$locations)
     if ("iVAEradial_st" %in% class(object)) {
         time_points <- object$time
-    } else if (!is.null(object$time_dim)) {
+    }
+    else if (!is.null(object$time_dim)) {
         time_points <- object$locations[, object$time_dim]
-    } else {
+    }
+    else {
         stop("Object of class iVAEar_segmentation must have time dimension defined")
     }
     n_t <- length(unique(time_points))
@@ -278,49 +281,51 @@ predict_coords_to_IC_ar_train_data <- function(object, get_var = FALSE,
     time_ord <- order(time_points)
     orig_ord <- order(time_ord)
     if ("iVAEradial_st" %in% class(object)) {
-        phi_all <- get_aux_data_radial(object, object$locations, time_points, object$elevation)
-    } else {
+        phi_all <- get_aux_data_radial(object, object$locations, 
+            time_points, object$elevation)
+    }
+    else {
         phi_all <- get_aux_data_spatial(object, object$locations)
     }
     if (get_var) {
         vars <- exp(as.matrix(object$prior_log_var_model(phi_all)))
-        if (!unscaled) {
-            preds <- sweep(vars, 2, object$IC_sds^2, "/")
-        }
-    } else vars <- NULL
-
-    # Get AR(1) coefficients for the new locations and time points
-    ar_coeffs <- as.matrix(object$prior_ar_model(phi_all))[time_ord, ]
-
-    if (get_ar_coefs) return (ar_coeffs[orig_ord, ])
-
-    prior_means <- as.matrix(object$prior_mean_model(phi_all))[time_ord, ]
-    if (get_trend) {
-        if (!unscaled) {
-            prior_means <- sweep(prior_means, 2, object$IC_means, "-")
-            prior_means <- sweep(prior_means, 2, object$IC_sds, "/")
-        }
-        return(prior_means[orig_ord, ])
     }
+    else vars <- NULL
+    ar_coeffs <- as.matrix(object$prior_ar_model(phi_all))[time_ord, 
+        ]
+    prior_means <- as.matrix(object$prior_mean_model(phi_all))[time_ord, 
+        ]
+    if (get_trend) {
+        if (unscaled) {
+            prior_means <- sweep(prior_means, 2, object$IC_means, 
+                "-")
+            prior_means <- sweep(prior_means, 2, object$IC_sds, 
+                "/")
+        }
+        trends <- prior_means[orig_ord, ]
+    } else trends <- NULL
     prev_prior_mean_list <- list()
     prev_ICs_list <- list()
     prev_ICs <- object$IC_unscaled[time_ord, ]
     prev_prior_means <- prior_means
     latent_dim <- object$call_params$latent_dim
     for (i in 1:object$ar_order) {
-        prev_prior_means <- rbind(matrix(0, ncol = latent_dim, nrow = n_s), prev_prior_means[-((N - n_s + 1): N), ])
-        prev_ICs <- rbind(matrix(0, ncol = latent_dim, nrow = n_s), prev_ICs[-((N - n_s + 1): N), ])
-        prior_means <- prior_means + ar_coeffs[, ((i - 1) * latent_dim + 1):(i * latent_dim)] * (prev_ICs - prev_prior_means)
+        prev_prior_means <- rbind(matrix(0, ncol = latent_dim, 
+            nrow = n_s), prev_prior_means[-((N - n_s + 1):N), 
+            ])
+        prev_ICs <- rbind(matrix(0, ncol = latent_dim, nrow = n_s), 
+            prev_ICs[-((N - n_s + 1):N), ])
+        prior_means <- prior_means + ar_coeffs[, ((i - 1) * latent_dim + 
+            1):(i * latent_dim)] * (prev_ICs - prev_prior_means)
     }
-    # Predict latent components using the AR(1) process
     preds <- prior_means
-    if (!unscaled) {
+    if (unscaled) {
         preds <- sweep(preds, 2, object$IC_means, "-")
         preds <- sweep(preds, 2, object$IC_sds, "/")
     }
     preds <- preds[orig_ord, ]
-    #preds <- rbind(rep(0, object$latent_dim), preds[1:(nrow(preds) - 1), ])
-    return(preds)
+    return(list(preds = preds, trends = trends, vars = vars, ar_coefs = ar_coeffs[orig_ord, ]))
 }
+
 
 

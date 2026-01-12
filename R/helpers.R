@@ -70,6 +70,11 @@ logsumexp <- function(a, slope = 0.1) {
     log(exp(slope * a) + exp(a)) - log(2)
 }
 
+smooth_leaky_relu <- function(a, alpha = 0.05, eps = 0.1) {
+    a <- 0.5 * ((1 + alpha) * a + (1 - alpha) * sqrt(a^2 + eps))
+    return(a)
+}
+
 gaussian_kernel <- function(d) {
     exp(-d^2)
 }
@@ -149,6 +154,8 @@ mix_data_over_determinated <- function(
             mixed_data <- apply(mixed_data, c(1, 2), xtanh)
         } else if (nonlinearity == "elu") {
             mixed_data <- apply(mixed_data, c(1, 2), elu)
+        } else if (nonlinearity == "smooth_lrelu") {
+            mixed_data <- apply(mixed_data, c(1, 2), smooth_leaky_relu)
         } else {
             mixed_data <- apply(mixed_data, c(1, 2), lrelu)
         }
@@ -236,6 +243,8 @@ mix_data <- function(data, n_layers = 1, nonlinearity = "elu") {
                 mixed_data <- apply(mixed_data, c(1, 2), leaky_softplus)
             } else if (nonlinearity == "logsumexp") {
                 mixed_data <- apply(mixed_data, c(1, 2), logsumexp)
+            } else if (nonlinearity == "smooth_lrelu") {
+                mixed_data <- apply(mixed_data, c(1, 2), smooth_leaky_relu)
             } else {
                 mixed_data <- apply(mixed_data, c(1, 2), lrelu)
             }
