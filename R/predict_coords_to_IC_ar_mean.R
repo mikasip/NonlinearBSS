@@ -74,11 +74,13 @@ predict_coords_to_IC_ar <- function(
         phi_all <- cbind(new_aux_data, phi_all)
     }
     if (get_var) {
-        vars <- exp(as.matrix(object$prior_log_var_model(phi_all)))
-        if (!unscaled) {
-            vars <- sweep(preds, 2, object$IC_sds^2, "/")
-        }
-    } else vars <- NULL
+        prior_vars <- exp(as.matrix(object$prior_log_var_model(phi_all)))
+        pred_vars  <- matrix(0, nrow = N, ncol = ncol(last_ICs_ord))
+        # last_ICs_ord rows stay 0 — they are "observed" with no uncertainty
+    } else {
+        prior_vars <- NULL
+        pred_vars  <- NULL
+    }
     if ("iVAEradial_st" %in% class(object)) {
         orig_coords_time <- cbind(object$locations, object$time)
         if (!is.null(object$elevation)) orig_coords_time <- cbind(orig_coords_time, object$elevation)
@@ -126,6 +128,18 @@ predict_coords_to_IC_ar <- function(
                 pred <- pred + ar_coef * (pred_i - mean_i)
             }
             preds[start_ind:end_ind, ] <- pred
+
+            if (get_var) {
+                var_t <- prior_vars[start_ind:end_ind, ]   # innovation variance
+                for (i in 1:object$ar_order) {
+                    ar_coef <- ar_coeffs[start_ind:end_ind,
+                                ((i-1)*object$call_params$latent_dim + 1):
+                                ( i   *object$call_params$latent_dim)]
+                    var_i   <- pred_vars[(start_ind - i*n_s_new):(end_ind - i*n_s_new), ]
+                    var_t   <- var_t + ar_coef^2 * var_i   # variance propagates via α²
+                }
+                pred_vars[start_ind:end_ind, ] <- var_t
+            }
         }
     }
     preds <- preds[original_inds, ]
@@ -133,6 +147,16 @@ predict_coords_to_IC_ar <- function(
     if (!unscaled) {
         preds <- sweep(preds, 2, object$IC_means, "-")
         preds <- sweep(preds, 2, object$IC_sds, "/")
+    }
+    if (get_var) {
+        pred_vars <- pred_vars[original_inds, ]
+        pred_vars <- pred_vars[-(1:nrow(last_ICs_ord)), ]
+        if (!unscaled) {
+            pred_vars <- sweep(pred_vars, 2, object$IC_sds^2, "/")  # divide vars by IC_sds²
+        }
+        vars <- pred_vars
+    } else {
+        vars <- NULL
     }
     return(list(preds = preds, coords_time = cbind(new_spatial_locations[-(1:n_s_new), ], 
             new_time_points[-(1:n_s_new)], new_elevation[-(1:n_s_new)]),
