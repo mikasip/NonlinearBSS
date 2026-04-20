@@ -148,9 +148,9 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   prev_mask_list <- list()
   for (i in seq_along(prev_data_list)) {
     prev_mask_list <- append(prev_mask_list, list((!is.na(prev_data_list[[i]])) * 1L))
-    prev_data_list[[i]][which(is.na(prev_data_list[[i]]))] <- 0
     prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_means, "-")
     prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_sds, "/")
+    prev_data_list[[i]][which(is.na(prev_data_list[[i]]))] <- 0
   }
 
   if (!is.null(seed)) {
