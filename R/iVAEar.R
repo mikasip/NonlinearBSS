@@ -114,7 +114,7 @@
 iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_list, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
                      activation = "leaky_relu", source_dist = "gaussian", validation_split = 0, error_dist = "gaussian",
                      error_dist_sigma = 0.01, optimizer = NULL, lr_start = 0.001, lr_end = 0.0001, ar_order = 1,
-                     steps = 10000, seed = NULL, get_elbo = TRUE, epochs, batch_size) {
+                     add_mask_to_encoder = TRUE, steps = 10000, seed = NULL, get_elbo = TRUE, epochs, batch_size) {
   source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
   source_log_pdf <- switch(source_dist,
     "gaussian" = norm_log_pdf,
@@ -172,15 +172,17 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   for (i in 1:ar_order) {
     input_aux_i <- keras3::layer_input(dim_aux)
     input_data_i <- keras3::layer_input(p)
-    mask_input_i <- keras3::layer_input(p)
+    if (add_mask_to_encoder) {
+      mask_input_i <- keras3::layer_input(p)
+    } else mask_input_i <- NULL
     prev_aux_inputs <- append(prev_aux_inputs, input_aux_i)
     prev_prior_means <- append(prev_prior_means, input_aux_i)
     prev_data_inputs <- append(prev_data_inputs, input_data_i)
     prev_mask_inputs <- append(prev_mask_inputs, mask_input_i)
-    if (all(mask == 1)) {
-      prev_z <- append(prev_z, keras3::layer_concatenate(list(input_data_i, input_aux_i)))
-    } else {
+    if (!all(mask == 1) && add_mask_to_encoder) {
       prev_z <- append(prev_z, keras3::layer_concatenate(list(input_data_i, input_aux_i, mask_input_i)))
+    } else if (add_mask_to_encoder) {
+      prev_z <- append(prev_z, keras3::layer_concatenate(list(input_data_i, input_aux_i)))
     }
   }
   for (n_units in aux_hidden_units) {
@@ -205,10 +207,10 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   }
 
   input_data <- keras3::layer_input(p)
-  if (all(mask == 1)) {
-    encoder_input_list <- list(input_data, aux_input)
-  } else {
+  if (!all(mask == 1) && add_mask_to_encoder) {
     encoder_input_list <- list(input_data, aux_input, mask_input)
+  } else {
+    encoder_input_list <- list(input_data, aux_input)
   }
   input <- keras3::layer_concatenate(encoder_input_list)
   submodel <- input
