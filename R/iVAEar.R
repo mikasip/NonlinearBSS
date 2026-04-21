@@ -323,10 +323,10 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     validation_split = validation_split, shuffle = TRUE, 
     batch_size = batch_size, epochs = epochs)
 
-  if (all(mask == 1)) {
-    encoder_input_list <- list(data_scaled, aux_data)
-  } else {
+  if (!all(mask == 1) && add_mask_to_encoder) {
     encoder_input_list <- list(data_scaled, aux_data, mask)
+  } else {
+    encoder_input_list <- list(data_scaled, aux_data)
   }
 
   IC_estimates <- predict(encoder, encoder_input_list)
