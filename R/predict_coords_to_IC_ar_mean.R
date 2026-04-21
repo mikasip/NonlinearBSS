@@ -73,14 +73,6 @@ predict_coords_to_IC_ar <- function(
         new_aux_data <- sweep(new_aux_data, 2, object$aux_data_sds, "/")
         phi_all <- cbind(new_aux_data, phi_all)
     }
-    if (get_var) {
-        prior_vars <- exp(as.matrix(object$prior_log_var_model(phi_all)))
-        pred_vars  <- matrix(0, nrow = N, ncol = ncol(last_ICs_ord))
-        # last_ICs_ord rows stay 0 — they are "observed" with no uncertainty
-    } else {
-        prior_vars <- NULL
-        pred_vars  <- NULL
-    }
     if ("iVAEradial_st" %in% class(object)) {
         orig_coords_time <- cbind(object$locations, object$time)
         if (!is.null(object$elevation)) orig_coords_time <- cbind(orig_coords_time, object$elevation)
@@ -94,6 +86,14 @@ predict_coords_to_IC_ar <- function(
     last_ICs <- object$IC_unscaled[last_ICs_inds, ]
     last_IC_ord_inds <- order(last_IC_coords_time[, 3], last_IC_coords_time[, 1], last_IC_coords_time[, 2])
     last_ICs_ord <- last_ICs[last_IC_ord_inds, ]
+    if (get_var) {
+        prior_vars <- exp(as.matrix(object$prior_log_var_model(phi_all)))
+        pred_vars  <- matrix(0, nrow = N, ncol = ncol(last_ICs_ord))
+        # last_ICs_ord rows stay 0 — they are "observed" with no uncertainty
+    } else {
+        prior_vars <- NULL
+        pred_vars  <- NULL
+    }
     
     # Get AR(1) coefficients for the new locations and time points
     #phi_all_ord <- phi_all[order_inds, ]
@@ -133,9 +133,9 @@ predict_coords_to_IC_ar <- function(
                 var_t <- prior_vars[start_ind:end_ind, ]   # innovation variance
                 for (i in 1:object$ar_order) {
                     ar_coef <- ar_coeffs[start_ind:end_ind,
-                                ((i-1)*object$call_params$latent_dim + 1):
-                                ( i   *object$call_params$latent_dim)]
-                    var_i   <- pred_vars[(start_ind - i*n_s_new):(end_ind - i*n_s_new), ]
+                                ((i - 1) * object$call_params$latent_dim + 1):
+                                ( i * object$call_params$latent_dim)]
+                    var_i   <- pred_vars[(start_ind - i * n_s_new):(end_ind - i * n_s_new), ]
                     var_t   <- var_t + ar_coef^2 * var_i   # variance propagates via α²
                 }
                 pred_vars[start_ind:end_ind, ] <- var_t
