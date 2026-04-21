@@ -153,7 +153,7 @@
 iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
                  activation = "leaky_relu", source_dist = "gaussian", validation_split = 0, error_dist = "gaussian",
                  error_dist_sigma = 0.02, optimizer = NULL, lr_start = 0.001, lr_end = 0.0001,
-                 add_mask_to_encoder = TRUE, get_elbo = TRUE, steps = 10000, seed = NULL, epochs, batch_size) {
+                 add_mask_to_encoder = TRUE, get_elbo = FALSE, steps = 10000, seed = NULL, epochs, batch_size) {
   source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
   source_log_pdf <- switch(source_dist,
     "gaussian" = norm_log_pdf,
@@ -218,10 +218,10 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
   z_mean <- submodel %>% keras3::layer_dense(latent_dim)
   z_log_var <- submodel %>% keras3::layer_dense(latent_dim)
   z_mean_and_var <- keras3::layer_concatenate(list(z_mean, z_log_var))
-  if (all(mask == 1)) {
-    encoder_input <- list(input_data, input_aux)
-  } else {
+  if (!all(mask == 1) && add_mask_to_encoder) {
     encoder_input <- list(input_data, input_aux, mask_input)
+  } else {
+    encoder_input <- list(input_data, input_aux)
   }
   encoder <- keras3::keras_model(encoder_input, z_mean)
   z_log_var_model <- keras3::keras_model(encoder_input, z_log_var)
@@ -295,10 +295,10 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
   )
 
   hist <- vae %>% keras3::fit(list(data_scaled, aux_data, aux_data, mask), data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
-  if (all(mask == 1)) {
-    IC_estimates <- encoder %>% predict(list(data_scaled, aux_data))
-  } else {
+  if (!all(mask == 1) && add_mask_to_encoder) {
     IC_estimates <- encoder %>% predict(list(data_scaled, aux_data, mask))
+  } else {
+    IC_estimates <- encoder %>% predict(list(data_scaled, aux_data))
   }
   obs_estimates <- predict(decoder, IC_estimates)
   if (get_elbo) {

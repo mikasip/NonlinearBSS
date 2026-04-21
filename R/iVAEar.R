@@ -114,7 +114,7 @@
 iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_list, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
                      activation = "leaky_relu", source_dist = "gaussian", validation_split = 0, error_dist = "gaussian",
                      error_dist_sigma = 0.01, optimizer = NULL, lr_start = 0.001, lr_end = 0.0001, ar_order = 1,
-                     add_mask_to_encoder = TRUE, steps = 10000, seed = NULL, get_elbo = TRUE, epochs, batch_size) {
+                     add_mask_to_encoder = TRUE, steps = 10000, seed = NULL, get_elbo = FALSE, epochs, batch_size) {
   source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
   source_log_pdf <- switch(source_dist,
     "gaussian" = norm_log_pdf,
@@ -337,10 +337,10 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     prior_means <- predict(prior_mean_model, aux_data)
     prior_mean_ests <- prior_means
     for (i in 1:ar_order) {
-      if (all(mask == 1)) {
-        prev_input_list <- list(prev_data_list[[i]], prev_aux_data_list[[i]])
-      } else {
+      if (!all(mask == 1) && add_mask_to_encoder) {
         prev_input_list <- list(prev_data_list[[i]], prev_aux_data_list[[i]], prev_mask_list[[i]])
+      } else {
+        prev_input_list <- list(prev_data_list[[i]], prev_aux_data_list[[i]])
       }
       prior_means_prev <- predict(prior_mean_model, prev_aux_data_list[[1]])
       IC_estimates_prev <- predict(encoder, prev_input_list)
