@@ -258,7 +258,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   inputs <- list(input_data, aux_input, mask_input)
   inputs <- append(inputs, prev_data_inputs)
   inputs <- append(inputs, prev_aux_inputs)
-  if (!all(mask == 1)) {
+  if (!all(mask == 1) && add_mask_to_encoder) {
     inputs <- append(inputs, prev_mask_inputs)
   }
   vae <- keras3::keras_model(inputs, final_output)
@@ -315,7 +315,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   inputs <- list(data_scaled, aux_data, mask)
   inputs <- append(inputs, prev_data_list)  
   inputs <- append(inputs, prev_aux_data_list)
-  if (!all(mask == 1)) {
+  if (!all(mask == 1) && add_mask_to_encoder) {
     inputs <- append(inputs, prev_mask_list)
   }
 
