@@ -153,7 +153,7 @@
 iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
                  activation = "leaky_relu", source_dist = "gaussian", validation_split = 0, error_dist = "gaussian",
                  error_dist_sigma = 0.02, optimizer = NULL, lr_start = 0.001, lr_end = 0.0001,
-                 get_elbo = TRUE, steps = 10000, seed = NULL, epochs, batch_size) {
+                 add_mask_to_encoder = TRUE, get_elbo = TRUE, steps = 10000, seed = NULL, epochs, batch_size) {
   source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
   source_log_pdf <- switch(source_dist,
     "gaussian" = norm_log_pdf,
@@ -205,10 +205,10 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
   input_data <- keras3::layer_input(p)
   input_aux <- keras3::layer_input(dim_aux)
   # If no missing values, do not include mask input
-  if (all(mask == 1)) {
-    input <- keras3::layer_concatenate(list(input_data, input_aux))
-  } else {
+  if (!all(mask == 1) && add_mask_to_encoder) {
     input <- keras3::layer_concatenate(list(input_data, input_aux, mask_input))
+  } else {
+    input <- keras3::layer_concatenate(list(input_data, input_aux))
   }
   submodel <- input
   for (n_units in hidden_units) {

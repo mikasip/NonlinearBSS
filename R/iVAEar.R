@@ -172,9 +172,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   for (i in 1:ar_order) {
     input_aux_i <- keras3::layer_input(dim_aux)
     input_data_i <- keras3::layer_input(p)
-    if (add_mask_to_encoder) {
-      mask_input_i <- keras3::layer_input(p)
-    } else mask_input_i <- NULL
+    mask_input_i <- keras3::layer_input(p)
     prev_aux_inputs <- append(prev_aux_inputs, input_aux_i)
     prev_prior_means <- append(prev_prior_means, input_aux_i)
     prev_data_inputs <- append(prev_data_inputs, input_data_i)
