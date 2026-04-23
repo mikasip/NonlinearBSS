@@ -303,7 +303,11 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
   obs_estimates <- predict(decoder, IC_estimates)
   if (get_elbo) {
     print("Calculating ELBO...")
-    IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data))
+    if (!all(mask == 1) && add_mask_to_encoder) {
+      IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data, mask))
+    } else {
+      IC_log_vars <- predict(z_log_var_model, list(data_scaled, aux_data))
+    }
     prior_means <- predict(prior_mean_model, aux_data)
     prior_log_vars <- predict(prior_log_var_model, aux_data)
     log_px_z <- error_log_pdf(tensorflow::tf$constant(data_scaled, "float32"), tensorflow::tf$cast(obs_estimates, "float32"), tensorflow::tf$constant(error_dist_sigma, "float32"))

@@ -135,8 +135,8 @@ predict_coords_to_IC_ar <- function(
                     ar_coef <- ar_coeffs[start_ind:end_ind,
                                 ((i - 1) * object$call_params$latent_dim + 1):
                                 ( i * object$call_params$latent_dim)]
-                    var_i   <- pred_vars[(start_ind - i * n_s_new):(end_ind - i * n_s_new), ]
-                    var_t   <- var_t + ar_coef^2 * var_i   # variance propagates via α²
+                    var_i <- pred_vars[(start_ind - i * n_s_new):(end_ind - i * n_s_new), ]
+                    var_t <- var_t + ar_coef^2 * var_i   # variance propagates via ar_coef^2
                 }
                 pred_vars[start_ind:end_ind, ] <- var_t
             }
