@@ -68,7 +68,8 @@
 iVAE_spatial <- function(
     data, locations, segment_sizes,
     joint_segment_inds = rep(1, length(segment_sizes)), latent_dim, batch_size, epochs, ...) {
-    aux_data <- form_aux_data_spatial(locations, segment_sizes, joint_segment_inds)
+    aux_data_obj <- form_aux_data_spatial(locations, segment_sizes, joint_segment_inds)
+    aux_data <- aux_data_obj$aux_data
     resVAE <- iVAE(data, aux_data, latent_dim, batch_size = batch_size, epochs = epochs, ...)
     class(resVAE) <- c("iVAEspatial", class(resVAE))
     resVAE$spatial_dim <- dim(locations)[2]
