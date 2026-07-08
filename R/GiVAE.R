@@ -1,45 +1,3 @@
- ------------------------------------------------------------------------------
-# Internal helper: pre-build padded neighbor data matrices from adj_list
-# Returns one matrix per neighbor slot k (1 .. max_n_adj), where row i holds
-# the data/aux of the k-th neighbor of observation i (zeros if no k-th neighbor).
-# This mirrors how iVAEar constructs prev_data_list for AR lags.
-# ------------------------------------------------------------------------------
- 
-.build_neighbor_matrices <- function(data_scaled, aux_data, adj_list) {
-  n         <- nrow(data_scaled)
-  p         <- ncol(data_scaled)
-  K         <- ncol(aux_data)
-  max_n_adj <- max(sapply(adj_list, length))
- 
-  neigh_data_list <- vector("list", max_n_adj)
-  neigh_aux_list  <- vector("list", max_n_adj)
-  # neigh_valid_mat[i, k] = 1 iff observation i has at least k neighbors
-  neigh_valid_mat <- matrix(0L, nrow = n, ncol = max_n_adj)
- 
-  for (k in seq_len(max_n_adj)) {
-    nd <- matrix(0.0, nrow = n, ncol = p)
-    na <- matrix(0.0, nrow = n, ncol = K)
-    for (i in seq_len(n)) {
-      if (length(adj_list[[i]]) >= k) {
-        j              <- adj_list[[i]][k]
-        nd[i, ]        <- data_scaled[j, ]
-        na[i, ]        <- aux_data[j, ]
-        neigh_valid_mat[i, k] <- 1L
-      }
-    }
-    neigh_data_list[[k]] <- nd
-    neigh_aux_list[[k]]  <- na
-  }
- 
-  list(
-    neigh_data_list = neigh_data_list,
-    neigh_aux_list  = neigh_aux_list,
-    neigh_valid_mat = neigh_valid_mat,
-    max_n_adj       = as.integer(max_n_adj)
-  )
-}
-
-
 # ------------------------------------------------------------------------------
 # GiVAE base function
 # ------------------------------------------------------------------------------
@@ -159,7 +117,7 @@ GiVAE <- function(
   #   neigh_aux_list[[k]][i,]  = aux_data[adj_list[[i]][k],]     (or 0)
   #   neigh_valid_mat[i,k]     = 1 iff obs i has >= k neighbors
   # This mirrors iVAEar's construction of prev_data_list for AR lags.
-  neigh_obj       <- .build_neighbor_matrices(data_scaled, aux_data, adj_list)
+  neigh_obj       <- build_neighbor_matrices(data_scaled, aux_data, adj_list)
   neigh_data_list <- neigh_obj$neigh_data_list
   neigh_aux_list  <- neigh_obj$neigh_aux_list
   neigh_valid_mat <- neigh_obj$neigh_valid_mat

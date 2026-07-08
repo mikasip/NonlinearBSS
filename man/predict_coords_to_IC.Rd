@@ -8,6 +8,7 @@ predict_coords_to_IC(
   object,
   new_spatial_locations,
   new_time_points,
+  new_aux_data = NULL,
   new_elevation = NULL,
   get_var = FALSE,
   unscaled = FALSE

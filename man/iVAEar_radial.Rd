@@ -3,6 +3,7 @@
 \name{iVAEar_radial}
 \alias{iVAEar_radial}
 \alias{iVAEar_radial.default}
+\alias{iVAEar_radial_b}
 \alias{iVAEar_radial.STFDF}
 \title{iVAEar with Radial Basis Functions for Spatial-Temporal Data}
 \usage{
@@ -14,6 +15,29 @@ iVAEar_radial(data, ...)
   time_points,
   latent_dim,
   n_s,
+  aux_data = NULL,
+  elevation = NULL,
+  spatial_dim = 2,
+  spatial_basis = c(2, 9),
+  temporal_basis = c(9, 17, 37),
+  ar_order = 1,
+  elevation_basis = NULL,
+  seasonal_period = NULL,
+  max_season = NULL,
+  week_component = FALSE,
+  spatial_kernel = "gaussian",
+  epochs,
+  batch_size,
+  ...
+)
+
+iVAEar_radial_b(
+  data,
+  spatial_locations,
+  time_points,
+  latent_dim,
+  n_s,
+  aux_data = NULL,
   elevation = NULL,
   spatial_dim = 2,
   spatial_basis = c(2, 9),

@@ -9,6 +9,7 @@ iVAE_radial_spatio_temporal(
   spatial_locations,
   time_points,
   latent_dim,
+  aux_data = NULL,
   elevation = NULL,
   spatial_dim = 2,
   spatial_basis = c(2, 9),
@@ -16,6 +17,7 @@ iVAE_radial_spatio_temporal(
   elevation_basis = NULL,
   seasonal_period = NULL,
   spatial_kernel = "gaussian",
+  week_component = FALSE,
   epochs,
   batch_size,
   ...
@@ -29,6 +31,8 @@ iVAE_radial_spatio_temporal(
 \item{time_points}{A vector containing the time points.}
 
 \item{latent_dim}{A latent dimension for iVAE.}
+
+\item{aux_data}{An optional matrix containing additional covariable data.}
 
 \item{elevation}{An optional elevation vector for the data.}
 

@@ -11,6 +11,7 @@ predict_coords_to_IC_ar(
   last_elevations = NULL,
   new_spatial_locations,
   new_time_points,
+  new_aux_data = NULL,
   new_elevation = NULL,
   get_trend = FALSE,
   get_var = FALSE,

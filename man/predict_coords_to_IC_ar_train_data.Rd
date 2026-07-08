@@ -8,6 +8,7 @@ predict_coords_to_IC_ar_train_data(
   object,
   get_var = FALSE,
   get_ar_coefs = FALSE,
+  get_trend = FALSE,
   unscaled = FALSE
 )
 }
@@ -18,9 +19,9 @@ predict_coords_to_IC_ar_train_data(
 
 \item{get_ar_coefs}{Logical; if `TRUE`, return the autoregressive (AR) coefficients instead of IC predictions.}
 
-\item{unscaled}{Logical; if `TRUE`, return unscaled predictions (raw ICs before standardization).}
-
 \item{get_trend}{Logical; if `TRUE`, return the predicted trend functions of the ICs.}
+
+\item{unscaled}{Logical; if `TRUE`, return unscaled predictions (raw ICs before standardization).}
 }
 \value{
 A list containing:

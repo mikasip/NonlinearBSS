@@ -21,9 +21,10 @@ iVAEar(
   lr_start = 0.001,
   lr_end = 1e-04,
   ar_order = 1,
+  add_mask_to_encoder = TRUE,
   steps = 10000,
   seed = NULL,
-  get_elbo = TRUE,
+  get_elbo = FALSE,
   epochs,
   batch_size
 )
