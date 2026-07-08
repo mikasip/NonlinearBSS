@@ -388,7 +388,7 @@ GiVAE <- function(
   )
  
   # ---- Extract results -------------------------------------------------------
-  IC_est    <- keras3::predict(encoder, list(data_scaled, aux_data))
+  IC_est    <- predict(encoder, list(data_scaled, aux_data))
   IC_means  <- colMeans(IC_est)
   IC_sds    <- apply(IC_est, 2, sd)
   IC_scaled <- scale(IC_est, center = IC_means, scale = IC_sds)
