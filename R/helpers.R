@@ -257,6 +257,109 @@ mix_data <- function(data, n_layers = 1, nonlinearity = "elu") {
     return(mixed_data)
 }
 
+#' Mix Gaussian Latent Components to Poisson Rates
+#' @description
+#' Mixes Gaussian latent components using orthonormal transformations
+#' and nonlinear functions to produce rate parameters for Poisson distributions.
+#' This function mirrors `mix_data` but ensures positive outputs suitable for
+#' Poisson rate parameters (λ > 0). \loadmathjax
+#'
+#' @param data An n × p matrix of Gaussian latent components.
+#' @param n_layers Integer number of mixing layers. Default 1.
+#' @param nonlinearity Character specifying the nonlinearity to use in each layer:
+#'   "elu" (default), "xtanh", "exp_arctan", "leaky_softplus", "logsumexp",
+#'   "smooth_lrelu", or "lrelu".
+#' @param final_activation Character specifying the final activation to ensure
+#'   positive output: "exp" (default) or "softplus".
+#'   - "exp": Applies \mjeqn{\exp(\cdot)}{ascii}, simple but can produce extreme values
+#'   - "softplus": Applies \mjeqn{\log(1 + \exp(\cdot))}{ascii}, more numerically stable
+#' @param normalize Logical indicating whether to normalize after each mixing layer.
+#'   Default TRUE. When FALSE and `final_activation = "softplus"`, provides
+#'   naturally bounded positive outputs.
+#'
+#' @return An n × p matrix of non-negative rate parameters suitable for Poisson distributions.
+#'
+#' @details
+#' The mixing process:
+#' 1. For each of n_layers iterations:
+#'    - Apply random orthonormalized matrix A via \mjeqn{\mathbf{A} \mathbf{x}^T}{ascii}
+#'    - Apply nonlinearity element-wise
+#'    - Normalize if `normalize = TRUE` (scales to unit variance)
+#' 2. Apply final orthonormalized transform
+#' 3. Normalize (if requested)
+#' 4. Apply final activation (exp or softplus) to ensure λ > 0
+#'
+#' The orthonormalization preserves injectivity of the mixing, maintaining
+#' identifiability properties crucial for blind source separation.
+#'
+#' @examples
+#' latent_data <- matrix(rnorm(300), ncol = 3)
+#'
+#' # Option A: exp activation (potential for large rates)
+#' rates_exp <- mix_data_poisson(latent_data, 2, "elu", final_activation = "exp")
+#'
+#' # Option B: softplus activation (bounded, stable)
+#' rates_softplus <- mix_data_poisson(latent_data, 2, "elu",
+#'   final_activation = "softplus", normalize = FALSE
+#' )
+#'
+#' # Generate Poisson data from rates
+#' poisson_data <- apply(rates_exp, c(1, 2), function(lambda) rpois(1, lambda))
+#'
+#' @export
+mix_data_poisson <- function(data, n_layers = 1, nonlinearity = "elu",
+                             final_activation = "exp", normalize = TRUE) {
+  # Validate inputs
+  final_activation <- match.arg(final_activation, c("exp", "softplus"))
+
+  hidden_dim <- dim(data)[2]
+  mixed_data <- data
+
+  if (n_layers > 1) {
+    for (i in 2:n_layers) {
+      A <- matrix(runif(hidden_dim^2, -1, 1), ncol = hidden_dim)
+      A <- l2normalize(A)
+      mixed_data <- t(A %*% t(mixed_data))
+      if (normalize) {
+        mixed_data <- mixed_data / mean(sqrt(diag(var(mixed_data))))
+      }
+      if (nonlinearity == "xtanh") {
+        mixed_data <- apply(mixed_data, c(1, 2), xtanh)
+      } else if (nonlinearity == "elu") {
+        mixed_data <- apply(mixed_data, c(1, 2), elu)
+      } else if (nonlinearity == "exp_arctan") {
+        mixed_data <- apply(mixed_data, c(1, 2), exp_arctan)
+      } else if (nonlinearity == "leaky_softplus") {
+        mixed_data <- apply(mixed_data, c(1, 2), leaky_softplus)
+      } else if (nonlinearity == "logsumexp") {
+        mixed_data <- apply(mixed_data, c(1, 2), logsumexp)
+      } else if (nonlinearity == "smooth_lrelu") {
+        mixed_data <- apply(mixed_data, c(1, 2), smooth_leaky_relu)
+      } else {
+        mixed_data <- apply(mixed_data, c(1, 2), lrelu)
+      }
+    }
+  }
+
+  # Final orthonormalized transform
+  A <- matrix(runif(hidden_dim^2, -1, 1), ncol = hidden_dim)
+  A <- l2normalize(A)
+  mixed_data <- t(A %*% t(mixed_data))
+
+  if (normalize) {
+    mixed_data <- mixed_data / mean(sqrt(diag(var(mixed_data))))
+  }
+
+  # Apply final activation to ensure positive output
+  if (final_activation == "exp") {
+    mixed_data <- apply(mixed_data, c(1, 2), exp)
+  } else if (final_activation == "softplus") {
+    mixed_data <- apply(mixed_data, c(1, 2), function(x) log(1 + exp(x)))
+  }
+
+  return(mixed_data)
+}
+
 #' Generate Nonstationary Spatial Data by Segments
 #' @description Generates nonstationary Gaussian spatial data with
 #' changing mean and variance by segments. \loadmathjax
