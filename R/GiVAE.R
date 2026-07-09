@@ -19,8 +19,9 @@
 #' @param data       N x P matrix of observed data.
 #' @param aux_data   N x K matrix of auxiliary data (e.g. Laplacian eigenvectors).
 #' @param latent_dim Integer number of latent components.
-#' @param adj_list   List of length N; each element is a 1-based integer vector
-#'   of neighbor indices for that observation.
+#' @param adj_list   Either a single adjacency list (list of length N, each
+#'   element a 1-based integer vector of neighbor indices for that observation)
+#'   or a list of such adjacency lists, one per graph.
 #' @param learn_edge_weights Logical. If TRUE, learn an MLP-based attention model
 #'   for asymmetric edge weights using \eqn{(u_i, u_j)}. Default FALSE.
 #' @param rho_max Numeric in (0,1). Hard upper bound on the spatial coupling
@@ -97,7 +98,22 @@ GiVAE <- function(
   K <- as.integer(ncol(aux_data))
  
   if (n != nrow(aux_data))   stop("data and aux_data must have the same number of rows")
-  if (n != length(adj_list)) stop("length(adj_list) must equal nrow(data)")
+  if (learn_edge_weights) {
+    warning("learn_edge_weights is currently ignored in GiVAE; graph aggregation uses graph-specific rho and beta weights.")
+  }
+  if (is.null(adj_list) || length(adj_list) == 0L) stop("adj_list must not be empty")
+  if (is.list(adj_list[[1]]) && length(adj_list[[1]]) > 0L) {
+    graph_adj_lists <- adj_list
+  } else {
+    graph_adj_lists <- list(adj_list)
+  }
+  if (!all(vapply(graph_adj_lists, is.list, logical(1)))) {
+    stop("adj_list must be either a single adjacency list or a list of adjacency lists")
+  }
+  if (!all(vapply(graph_adj_lists, function(g) length(g) == n, logical(1)))) {
+    stop("each graph adjacency list must have length nrow(data)")
+  }
+  n_graphs <- length(graph_adj_lists)
  
   # ---- Data scaling ----------------------------------------------------------
   # Poisson: leave as raw counts (decoder outputs log-rate)
@@ -112,16 +128,46 @@ GiVAE <- function(
   }
  
   # ---- Pre-build neighbor matrices -------------------------------------------
-  # For each neighbor slot k = 1..max_n_adj:
-  #   neigh_data_list[[k]][i,] = data_scaled[adj_list[[i]][k],]  (or 0)
-  #   neigh_aux_list[[k]][i,]  = aux_data[adj_list[[i]][k],]     (or 0)
-  #   neigh_valid_mat[i,k]     = 1 iff obs i has >= k neighbors
-  # This mirrors iVAEar's construction of prev_data_list for AR lags.
-  neigh_obj       <- build_neighbor_matrices(data_scaled, aux_data, adj_list)
-  neigh_data_list <- neigh_obj$neigh_data_list
-  neigh_aux_list  <- neigh_obj$neigh_aux_list
-  neigh_valid_mat <- neigh_obj$neigh_valid_mat
-  max_n_adj       <- neigh_obj$max_n_adj
+  # Build one set of padded neighbor matrices per graph and use a common
+  # maximum neighbor slot count across graphs so the model can aggregate them.
+  graph_neigh_objs <- lapply(graph_adj_lists, function(g) {
+    build_neighbor_matrices(data_scaled, aux_data, g)
+  })
+  max_n_adj <- max(vapply(graph_neigh_objs, function(obj) obj$max_n_adj, integer(1)))
+ 
+  graph_neigh_data_list <- vector("list", n_graphs)
+  graph_neigh_aux_list  <- vector("list", n_graphs)
+  graph_neigh_valid_mats <- vector("list", n_graphs)
+  for (g in seq_len(n_graphs)) {
+    obj <- graph_neigh_objs[[g]]
+    if (obj$max_n_adj < max_n_adj) {
+      pad_data_list <- obj$neigh_data_list
+      pad_aux_list  <- obj$neigh_aux_list
+      pad_valid_mat <- obj$neigh_valid_mat
+      if (ncol(pad_valid_mat) < max_n_adj) {
+        pad_valid_mat <- cbind(
+          pad_valid_mat,
+          matrix(0L, nrow = n, ncol = max_n_adj - ncol(pad_valid_mat))
+        )
+      }
+      for (k in seq.int(obj$max_n_adj + 1L, max_n_adj)) {
+        pad_data_list[[k]] <- matrix(0.0, nrow = n, ncol = p)
+        pad_aux_list[[k]]  <- matrix(0.0, nrow = n, ncol = K)
+      }
+      graph_neigh_data_list[[g]] <- pad_data_list
+      graph_neigh_aux_list[[g]]  <- pad_aux_list
+      graph_neigh_valid_mats[[g]] <- pad_valid_mat
+    } else {
+      graph_neigh_data_list[[g]] <- obj$neigh_data_list
+      graph_neigh_aux_list[[g]]  <- obj$neigh_aux_list
+      graph_neigh_valid_mats[[g]] <- obj$neigh_valid_mat
+    }
+  }
+ 
+  neigh_valid_mat <- do.call(cbind, graph_neigh_valid_mats)
+  if (!is.matrix(neigh_valid_mat)) {
+    neigh_valid_mat <- matrix(neigh_valid_mat, nrow = n)
+  }
  
   if (!is.null(seed)) tensorflow::tf$keras$utils$set_random_seed(as.integer(seed))
   latent_dim <- as.integer(latent_dim)
@@ -130,27 +176,32 @@ GiVAE <- function(
   input_data  <- keras3::layer_input(p)           # current observation
   input_aux   <- keras3::layer_input(K)            # current auxiliary
  
-  # One pair of inputs per neighbor slot (same pattern as iVAEar's prev inputs)
-  neigh_data_inputs <- lapply(seq_len(max_n_adj), function(k) keras3::layer_input(p))
-  neigh_aux_inputs  <- lapply(seq_len(max_n_adj), function(k) keras3::layer_input(K))
+  # One pair of inputs per graph and neighbor slot
+  neigh_data_inputs <- vector("list", n_graphs)
+  neigh_aux_inputs  <- vector("list", n_graphs)
+  for (g in seq_len(n_graphs)) {
+    neigh_data_inputs[[g]] <- lapply(seq_len(max_n_adj), function(k) keras3::layer_input(p))
+    neigh_aux_inputs[[g]]  <- lapply(seq_len(max_n_adj), function(k) keras3::layer_input(K))
+  }
  
-  # Binary validity flags: which neighbor slots are filled for each observation
-  input_neigh_valid <- keras3::layer_input(max_n_adj)
+  # Binary validity flags: which graph/slot pairs are filled for each observation
+  input_neigh_valid <- keras3::layer_input(n_graphs * max_n_adj)
  
   # ---- Encoder with shared layers applied to current + all neighbor slots ----
-  # Exactly mirrors how iVAEar applies the same dense layers to current and
-  # prev_data to produce prev_z encodings.
- 
-  # Running tensors: enc_current for obs i, neigh_enc[[k]] for k-th neighbor
   enc_current <- keras3::layer_concatenate(list(input_data, input_aux))
-  neigh_enc   <- lapply(seq_len(max_n_adj), function(k)
-    keras3::layer_concatenate(list(neigh_data_inputs[[k]], neigh_aux_inputs[[k]]))
-  )
+  neigh_enc   <- vector("list", n_graphs)
+  for (g in seq_len(n_graphs)) {
+    neigh_enc[[g]] <- lapply(seq_len(max_n_adj), function(k) {
+      keras3::layer_concatenate(list(neigh_data_inputs[[g]][[k]], neigh_aux_inputs[[g]][[k]]))
+    })
+  }
  
   for (n_units in hidden_units) {
     shared_enc_layer <- keras3::layer_dense(units = n_units, activation = activation)
     enc_current      <- enc_current %>% shared_enc_layer()
-    neigh_enc        <- lapply(neigh_enc, function(h) h %>% shared_enc_layer())
+    for (g in seq_len(n_graphs)) {
+      neigh_enc[[g]] <- lapply(neigh_enc[[g]], function(h) h %>% shared_enc_layer())
+    }
   }
  
   z_mean_layer    <- keras3::layer_dense(units = latent_dim)
@@ -165,8 +216,10 @@ GiVAE <- function(
   z_log_var_model <- keras3::keras_model(list(input_data, input_aux), z_log_var)
  
   # Neighbor encodings: same z_mean_layer applied to each neighbor slot
-  # neigh_z[[k]] shape: (batch, latent_dim)  — encoder mean for k-th neighbor
-  neigh_z <- lapply(neigh_enc, function(h) h %>% z_mean_layer())
+  neigh_z <- vector("list", n_graphs)
+  for (g in seq_len(n_graphs)) {
+    neigh_z[[g]] <- lapply(neigh_enc[[g]], function(h) h %>% z_mean_layer())
+  }
  
   # ---- Prior networks --------------------------------------------------------
   # Prior log-variance network: aux -> log(sigma^2)  [drives identifiability]
@@ -177,34 +230,36 @@ GiVAE <- function(
   prior_log_var       <- prior_v %>% keras3::layer_dense(units = latent_dim)
   prior_log_var_model <- keras3::keras_model(input_aux, prior_log_var)
  
-  # Rho network: aux -> (0, 1)  [scaled by rho_max in the loss]
-  # Separate network so rho and sigma have independent parameter sets
-  rho_v <- input_aux
+  # Graph-specific rho and beta heads from aux data.
+  # Use a shared base network (shared parameters) and independent final
+  # output layers per graph. This keeps most parameters shared while
+  # allowing lightweight graph-specific heads.
+  rho_outs <- vector("list", n_graphs)
+  beta_outs <- vector("list", n_graphs)
+  rho_models <- vector("list", n_graphs)
+  beta_models <- vector("list", n_graphs)
+
+  # Shared base applied to aux_data
+  base_v <- input_aux
   for (n_units in aux_hidden_units) {
-    rho_v <- rho_v %>% keras3::layer_dense(units = n_units, activation = activation)
+    base_v <- base_v %>% keras3::layer_dense(units = n_units, activation = activation)
   }
-  rho_out   <- rho_v %>% keras3::layer_dense(units = 1L, activation = "sigmoid")
-  rho_model <- keras3::keras_model(input_aux, rho_out)
- 
-  # ---- Optional edge weight model: [u_i, u_j] -> score ----------------------
-  # Score is later softmaxed over valid neighbors in the loss function.
-  # Taking both u_i and u_j as input ensures asymmetric weights w_ij != w_ji.
-  if (learn_edge_weights) {
-    edge_scores <- lapply(seq_len(max_n_adj), function(k) {
-      # Concatenate aux of target i with aux of k-th neighbor j
-      edge_in_k <- keras3::layer_concatenate(list(input_aux, neigh_aux_inputs[[k]]))
-      ew_h      <- edge_in_k
-      for (n_units in edge_hidden_units) {
-        ew_h <- ew_h %>% keras3::layer_dense(units = n_units, activation = activation)
-      }
-      # Scalar score per (i, j) pair
-      ew_h %>% keras3::layer_dense(units = 1L)   # (batch, 1)
-    })
-    # Concatenate to (batch, max_n_adj)
-    edge_scores_concat <- keras3::layer_concatenate(edge_scores)
-  } else {
-    edge_scores_concat <- NULL
+
+  for (g in seq_len(n_graphs)) {
+    # Independent final heads attached to the shared base
+    rho_out_g  <- base_v %>% keras3::layer_dense(units = 1L, activation = "sigmoid", name = paste0("rho_out_g", g))
+    beta_out_g <- base_v %>% keras3::layer_dense(units = 1L, name = paste0("beta_out_g", g))
+
+    rho_outs[[g]]  <- rho_out_g
+    beta_outs[[g]] <- beta_out_g
+
+    # expose per-graph keras models (they will share the base layers)
+    rho_models[[g]]  <- keras3::keras_model(input_aux, rho_out_g)
+    beta_models[[g]] <- keras3::keras_model(input_aux, beta_out_g)
   }
+
+  rho_out  <- keras3::layer_concatenate(rho_outs)
+  beta_out <- keras3::layer_concatenate(beta_outs)
  
   # ---- Sampling and decoder --------------------------------------------------
   sampling_layer <- switch(source_dist,
@@ -233,13 +288,14 @@ GiVAE <- function(
   #   p+L+1 : p+2L                                  z_mean
   #   p+2L+1 : p+3L                                 z_log_var
   #   p+3L+1 : p+4L                                 prior_log_var
-  #   p+4L+1                                        rho_out            (1 column)
-  #   p+4L+2 : p+4L+1+M*L                           neigh_z concat     (M = max_n_adj)
-  #   p+4L+M*L+2 : p+4L+M*L+1+M                    neigh_valid
-  #   (if learn_edge_weights) p+4L+M*L+M+2 : +M     edge_scores
- 
-  # Concatenate neighbor z encodings: (batch, max_n_adj * latent_dim)
-  neigh_z_concat <- keras3::layer_concatenate(neigh_z)
+  #   p+4L+1 : p+4L+G                               rho_out           (G columns)
+  #   p+4L+G+1 : p+4L+2G                            beta_out          (G columns)
+  #   p+4L+2G+1 : p+4L+2G+G*M*L                     neigh_z concat    (G graphs)
+  #   remaining columns                             neigh_valid        (G*M columns)
+  graph_neigh_z_concat <- lapply(seq_len(n_graphs), function(g) {
+    keras3::layer_concatenate(neigh_z[[g]])
+  })
+  neigh_z_concat <- keras3::layer_concatenate(graph_neigh_z_concat)
  
   output_parts <- list(
     x_decoded,
@@ -248,25 +304,27 @@ GiVAE <- function(
     z_log_var,
     prior_log_var,
     rho_out,
+    beta_out,
     neigh_z_concat,
     input_neigh_valid
   )
-  if (learn_edge_weights) output_parts <- append(output_parts, list(edge_scores_concat))
   final_output <- keras3::layer_concatenate(output_parts)
  
   # ---- Full VAE model --------------------------------------------------------
   all_inputs <- c(
     list(input_data, input_aux),
-    neigh_data_inputs,
-    neigh_aux_inputs,
+    unlist(neigh_data_inputs, recursive = FALSE),
+    unlist(neigh_aux_inputs, recursive = FALSE),
     list(input_neigh_valid)
   )
   vae <- keras3::keras_model(all_inputs, final_output)
  
   # ---- Loss function ---------------------------------------------------------
-  # Mirrors iVAEar loss: parse the concatenated output, reconstruct the prior
-  # mean from neighbor encodings, compute ELBO.
+  # Parse the concatenated output, reconstruct the prior mean from each graph's
+  # neighbor encodings, combine them with graph-specific rho and beta weights,
+  # and compute the ELBO.
   L   <- latent_dim   # shorthand captured in closure
+  G   <- n_graphs
   M   <- max_n_adj
   rho <- rho_max
  
@@ -276,62 +334,53 @@ GiVAE <- function(
     # ---- Parse output slices (matching layout above) ----
     x_recon    <- res[, 1:p]
     z_samp     <- res[, (p + 1L):(p + L)]
-    z_mn       <- res[, (p + L + 1L):(p + 2L * L)]
-    z_lv       <- res[, (p + 2L * L + 1L):(p + 3L * L)]
-    prior_lv   <- res[, (p + 3L * L + 1L):(p + 4L * L)]
-    rho_v      <- res[, (p + 4L * L + 1L):(p + 4L * L + 1L)]  # (batch, 1)
+    z_mn       <- res[, (p + L + 1L):(p + 2L)]
+    z_lv       <- res[, (p + 2L + 1L):(p + 3L)]
+    prior_lv   <- res[, (p + 3L + 1L):(p + 4L)]
+    rho_v      <- res[, (p + 4L + 1L):(p + 4L + G)]   # (batch, G)
+    beta_v     <- res[, (p + 4L + G + 1L):(p + 4L + 2 * G)]  # (batch, G)
  
-    nz_start   <- p + 4L * L + 2L
-    nz_end     <- p + 4L * L + 1L + M * L
-    neigh_z_v  <- res[, nz_start:nz_end]           # (batch, M*L)
+    neigh_start <- p + 4L + 2 * G + 1L
+    neigh_end   <- neigh_start + G * M * L - 1L
+    neigh_z_v   <- res[, neigh_start:neigh_end]                # (batch, G*M*L)
  
-    val_start  <- nz_end + 1L
-    val_end    <- nz_end + M
-    valid_v    <- res[, val_start:val_end]          # (batch, M)  binary
+    valid_start <- neigh_end + 1L
+    valid_end   <- valid_start + G * M - 1L
+    valid_v     <- res[, valid_start:valid_end]                # (batch, G*M)  binary
  
-    # ---- Compute edge weights -----------------------------------------------
-    if (learn_edge_weights) {
-      es_start <- val_end + 1L
-      es_end   <- val_end + M
-      esc_v    <- res[, es_start:es_end]            # (batch, M) raw scores
+    beta_weights <- tf$nn$softmax(beta_v, axis = 1L)           # (batch, G)
  
-      # Mask out invalid neighbors before softmax
-      big_neg      <- (1.0 - tf$cast(valid_v, "float32")) * 1e9
-      attn_weights <- tf$nn$softmax(esc_v - big_neg, axis = 1L)  # (batch, M)
-    }
+    # ---- Weighted sum of graph-specific neighbor encodings ------------------
+    z_neigh_sum_total <- tf$zeros_like(z_mn)  # (batch, L)
  
-    # ---- Weighted sum of neighbor encodings ----------------------------------
-    z_neigh_sum <- tf$zeros_like(z_mn)  # (batch, L)
+    for (g in seq_len(G)) {
+      z_neigh_sum_g <- tf$zeros_like(z_mn)  # (batch, L)
+      for (k in seq_len(M)) {
+        slot_idx <- (g - 1L) * M + k
+        slot_start <- (slot_idx - 1L) * L + 1L
+        slot_end   <- slot_start + L - 1L
+        z_k <- neigh_z_v[, slot_start:slot_end]
  
-    for (k in seq_len(M)) {
-      # k-th neighbor encoding: (batch, L)
-      z_k <- neigh_z_v[, ((k - 1L) * L + 1L):(k * L)]
- 
-      if (learn_edge_weights) {
-        # Learned attention weight for k-th neighbor: (batch, 1)
-        w_k <- tf$expand_dims(attn_weights[, k], axis = 1L)
-      } else {
-        # Uniform: weight = validity flag, will be divided by count below
-        w_k <- tf$expand_dims(
-          tf$cast(valid_v[, k], "float32"),
+        valid_k <- tf$expand_dims(
+          tf$cast(valid_v[, slot_idx], "float32"),
           axis = 1L
         )
+        z_neigh_sum_g <- z_neigh_sum_g + valid_k * z_k
       }
-      z_neigh_sum <- z_neigh_sum + w_k * z_k
-    }
  
-    if (!learn_edge_weights) {
-      # Divide by number of valid neighbors to get mean
-      n_valid      <- tf$maximum(
-        tf$reduce_sum(tf$cast(valid_v, "float32"), axis = 1L, keepdims = TRUE),
+      n_valid_g <- tf$maximum(
+        tf$reduce_sum(tf$cast(valid_v[, ((g - 1L) * M + 1L):(g * M)], "float32"), axis = 1L, keepdims = TRUE),
         1.0
       )
-      z_neigh_sum <- z_neigh_sum / n_valid
-    }
-    # (With softmax weights they already sum to 1 over valid neighbors)
+      z_neigh_sum_g <- z_neigh_sum_g / n_valid_g
  
-    # ---- SAR prior mean: rho(u_i) * neighbor aggregate ----------------------
-    prior_mean <- rho_v * rho * z_neigh_sum   # rho_v in (0,1), rho = rho_max scalar
+      graph_weight <- tf$expand_dims(beta_weights[, g], axis = 1L)
+      rho_g        <- tf$expand_dims(rho_v[, g], axis = 1L)
+      z_neigh_sum_total <- z_neigh_sum_total + graph_weight * rho_g * z_neigh_sum_g
+    }
+ 
+    # ---- SAR prior mean: rho_max * sum_g [rho_g * beta_g * z_neigh_sum_g] ----
+    prior_mean <- rho * z_neigh_sum_total
  
     # ---- ELBO terms ----------------------------------------------------------
     log_px_z  <- error_log_pdf(x, x_recon, tensorflow::tf$constant(error_dist_sigma, "float32"))
@@ -370,11 +419,14 @@ GiVAE <- function(
  
   # ---- Assemble training inputs ----------------------------------------------
   # Order must match all_inputs defined above:
-  #   [data, aux, neigh_data_1..M, neigh_aux_1..M, neigh_valid]
+  #   [data, aux, neigh_data_graph1_slot1..graphG_slotM,
+  #    neigh_aux_graph1_slot1..graphG_slotM, neigh_valid]
+  neigh_data_fit_list <- unlist(graph_neigh_data_list, recursive = FALSE)
+  neigh_aux_fit_list  <- unlist(graph_neigh_aux_list, recursive = FALSE)
   fit_inputs <- c(
     list(data_scaled, aux_data),
-    neigh_data_list,
-    neigh_aux_list,
+    neigh_data_fit_list,
+    neigh_aux_fit_list,
     list(neigh_valid_mat)
   )
  
@@ -403,11 +455,13 @@ GiVAE <- function(
     aux_dim             = K,
     encoder             = encoder,
     decoder             = decoder,
-    rho_model           = rho_model,
+    rho_models          = rho_models,
+    beta_models         = beta_models,
     prior_log_var_model = prior_log_var_model,
-    learn_edge_weights  = learn_edge_weights,
+    learn_edge_weights  = FALSE,
     rho_max             = rho_max,
     max_n_adj           = max_n_adj,
+    n_graphs            = n_graphs,
     data_means          = data_means,
     data_sds            = data_sds,
     adj_list            = adj_list,
@@ -475,6 +529,7 @@ print.GiVAE <- function(x, ...) {
   cat("  Aux dim (K):        ", x$aux_dim, "\n")
   cat("  Sample size (N):    ", x$sample_size, "\n")
   cat("  Max neighbors (M):  ", x$max_n_adj, "\n")
+  cat("  Graphs (G):         ", x$n_graphs, "\n")
   cat("  Source dist:        ", x$call_params$source_dist, "\n")
   cat("  Error dist:         ", x$call_params$error_dist, "\n")
   cat("  rho_max:            ", x$call_params$rho_max, "\n")
