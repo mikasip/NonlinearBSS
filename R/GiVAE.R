@@ -450,7 +450,7 @@ GiVAE <- function(
     aux_dim             = K,
     encoder             = encoder,
     decoder             = decoder,
-    rho_models          = rho_models,
+    rho_model          = rho_model,
     beta_models         = beta_models,
     prior_log_var_model = prior_log_var_model,
     learn_edge_weights  = FALSE,
