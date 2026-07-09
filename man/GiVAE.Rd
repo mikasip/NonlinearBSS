@@ -35,8 +35,9 @@ GiVAE(
 
 \item{latent_dim}{Integer number of latent components.}
 
-\item{adj_list}{List of length N; each element is a 1-based integer vector
-of neighbor indices for that observation.}
+\item{adj_list}{Either a single adjacency list (list of length N, each
+element a 1-based integer vector of neighbor indices for that observation)
+or a list of such adjacency lists, one per graph.}
 
 \item{learn_edge_weights}{Logical. If TRUE, learn an MLP-based attention model
 for asymmetric edge weights using \eqn{(u_i, u_j)}. Default FALSE.}

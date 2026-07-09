@@ -9,11 +9,18 @@ GiVAE_laplacian(data, adj_list, latent_dim, K = 10, epochs, batch_size, ...)
 \arguments{
 \item{data}{N x P matrix of observed data.}
 
-\item{adj_list}{List of length N of 1-based integer neighbor index vectors.}
+\item{adj_list}{Either a single adjacency list (list of length N of 1-based
+integer neighbor index vectors) or a list of adjacency lists (one per graph),
+each of which must be length N. When providing multiple adjacency lists,
+supply \\code{K} as an integer vector giving the number of eigenvectors per
+graph.}
 
 \item{latent_dim}{Integer number of latent components.}
 
-\item{K}{Integer, number of Laplacian eigenvectors to use. Default 10.}
+\item{K}{Integer or integer vector. If a single integer and multiple graphs
+are provided, the same \\code{K} is used for all graphs. If a vector, its
+length must match the number of adjacency lists; each entry gives the number
+of eigenvectors to compute for the corresponding graph.}
 
 \item{epochs, batch_size}{Training parameters.}
 

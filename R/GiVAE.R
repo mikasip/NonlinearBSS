@@ -230,35 +230,28 @@ GiVAE <- function(
   prior_log_var       <- prior_v %>% keras3::layer_dense(units = latent_dim)
   prior_log_var_model <- keras3::keras_model(input_aux, prior_log_var)
  
-  # Graph-specific rho and beta heads from aux data.
-  # Use a shared base network (shared parameters) and independent final
-  # output layers per graph. This keeps most parameters shared while
-  # allowing lightweight graph-specific heads.
-  rho_outs <- vector("list", n_graphs)
+  # Prior parameter heads: single combined rho (total dependence) and
+  # graph-specific beta (relative proportions across graphs).
+  # Shared base applied to aux_data
   beta_outs <- vector("list", n_graphs)
-  rho_models <- vector("list", n_graphs)
   beta_models <- vector("list", n_graphs)
 
-  # Shared base applied to aux_data
   base_v <- input_aux
   for (n_units in aux_hidden_units) {
     base_v <- base_v %>% keras3::layer_dense(units = n_units, activation = activation)
   }
 
+  # Single combined rho head (shared across graphs)
+  rho_out <- base_v %>% keras3::layer_dense(units = 1L, activation = "sigmoid", name = "rho_out")
+  rho_model <- keras3::keras_model(input_aux, rho_out)
+
+  # Graph-specific beta heads (independent final layers)
   for (g in seq_len(n_graphs)) {
-    # Independent final heads attached to the shared base
-    rho_out_g  <- base_v %>% keras3::layer_dense(units = 1L, activation = "sigmoid", name = paste0("rho_out_g", g))
     beta_out_g <- base_v %>% keras3::layer_dense(units = 1L, name = paste0("beta_out_g", g))
-
-    rho_outs[[g]]  <- rho_out_g
     beta_outs[[g]] <- beta_out_g
-
-    # expose per-graph keras models (they will share the base layers)
-    rho_models[[g]]  <- keras3::keras_model(input_aux, rho_out_g)
     beta_models[[g]] <- keras3::keras_model(input_aux, beta_out_g)
   }
 
-  rho_out  <- keras3::layer_concatenate(rho_outs)
   beta_out <- keras3::layer_concatenate(beta_outs)
  
   # ---- Sampling and decoder --------------------------------------------------
@@ -288,9 +281,9 @@ GiVAE <- function(
   #   p+L+1 : p+2L                                  z_mean
   #   p+2L+1 : p+3L                                 z_log_var
   #   p+3L+1 : p+4L                                 prior_log_var
-  #   p+4L+1 : p+4L+G                               rho_out           (G columns)
-  #   p+4L+G+1 : p+4L+2G                            beta_out          (G columns)
-  #   p+4L+2G+1 : p+4L+2G+G*M*L                     neigh_z concat    (G graphs)
+  #   p+4L+1 : p+4L+1                               rho_out           (1 column)
+  #   p+4L+2 : p+4L+1+G                             beta_out          (G columns)
+  #   p+4L+2+G : p+4L+1+G+G*M*L                     neigh_z concat    (G graphs)
   #   remaining columns                             neigh_valid        (G*M columns)
   graph_neigh_z_concat <- lapply(seq_len(n_graphs), function(g) {
     keras3::layer_concatenate(neigh_z[[g]])
@@ -337,10 +330,10 @@ GiVAE <- function(
     z_mn       <- res[, (p + L + 1L):(p + 2L)]
     z_lv       <- res[, (p + 2L + 1L):(p + 3L)]
     prior_lv   <- res[, (p + 3L + 1L):(p + 4L)]
-    rho_v      <- res[, (p + 4L + 1L):(p + 4L + G)]   # (batch, G)
-    beta_v     <- res[, (p + 4L + G + 1L):(p + 4L + 2 * G)]  # (batch, G)
- 
-    neigh_start <- p + 4L + 2 * G + 1L
+    rho_v      <- res[, (p + 4L + 1L):(p + 4L + 1L)]   # (batch, 1)
+    beta_v     <- res[, (p + 4L + 2L):(p + 4L + 1L + G)]  # (batch, G)
+
+    neigh_start <- p + 4L + G + 2L
     neigh_end   <- neigh_start + G * M * L - 1L
     neigh_z_v   <- res[, neigh_start:neigh_end]                # (batch, G*M*L)
  
@@ -349,10 +342,13 @@ GiVAE <- function(
     valid_v     <- res[, valid_start:valid_end]                # (batch, G*M)  binary
  
     beta_weights <- tf$nn$softmax(beta_v, axis = 1L)           # (batch, G)
- 
+
     # ---- Weighted sum of graph-specific neighbor encodings ------------------
     z_neigh_sum_total <- tf$zeros_like(z_mn)  # (batch, L)
- 
+
+    # single combined rho scalar per observation
+    rho_scalar <- tf$expand_dims(rho_v[, 1L], axis = 1L)  # (batch, 1)
+
     for (g in seq_len(G)) {
       z_neigh_sum_g <- tf$zeros_like(z_mn)  # (batch, L)
       for (k in seq_len(M)) {
@@ -360,23 +356,22 @@ GiVAE <- function(
         slot_start <- (slot_idx - 1L) * L + 1L
         slot_end   <- slot_start + L - 1L
         z_k <- neigh_z_v[, slot_start:slot_end]
- 
+
         valid_k <- tf$expand_dims(
           tf$cast(valid_v[, slot_idx], "float32"),
           axis = 1L
         )
         z_neigh_sum_g <- z_neigh_sum_g + valid_k * z_k
       }
- 
+
       n_valid_g <- tf$maximum(
         tf$reduce_sum(tf$cast(valid_v[, ((g - 1L) * M + 1L):(g * M)], "float32"), axis = 1L, keepdims = TRUE),
         1.0
       )
       z_neigh_sum_g <- z_neigh_sum_g / n_valid_g
- 
+
       graph_weight <- tf$expand_dims(beta_weights[, g], axis = 1L)
-      rho_g        <- tf$expand_dims(rho_v[, g], axis = 1L)
-      z_neigh_sum_total <- z_neigh_sum_total + graph_weight * rho_g * z_neigh_sum_g
+      z_neigh_sum_total <- z_neigh_sum_total + graph_weight * rho_scalar * z_neigh_sum_g
     }
  
     # ---- SAR prior mean: rho_max * sum_g [rho_g * beta_g * z_neigh_sum_g] ----
