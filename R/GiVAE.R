@@ -102,11 +102,11 @@ GiVAE <- function(
     warning("learn_edge_weights is currently ignored in GiVAE; graph aggregation uses graph-specific rho and beta weights.")
   }
   if (is.null(adj_list) || length(adj_list) == 0L) stop("adj_list must not be empty")
-  if (is.list(adj_list[[1]]) && length(adj_list[[1]]) > 0L) {
-    graph_adj_lists <- adj_list
-  } else {
-    graph_adj_lists <- list(adj_list)
-  }
+ if (is.list(adj_list[[1]])) {
+    graph_adj_lists <- adj_list        # list of adjacency lists
+} else {
+    graph_adj_lists <- list(adj_list)  # single adjacency list, wrap it
+}
   if (!all(vapply(graph_adj_lists, is.list, logical(1)))) {
     stop("adj_list must be either a single adjacency list or a list of adjacency lists")
   }
@@ -327,13 +327,12 @@ GiVAE <- function(
     # ---- Parse output slices (matching layout above) ----
     x_recon    <- res[, 1:p]
     z_samp     <- res[, (p + 1L):(p + L)]
-    z_mn       <- res[, (p + L + 1L):(p + 2L)]
-    z_lv       <- res[, (p + 2L + 1L):(p + 3L)]
-    prior_lv   <- res[, (p + 3L + 1L):(p + 4L)]
-    rho_v      <- res[, (p + 4L + 1L):(p + 4L + 1L)]   # (batch, 1)
-    beta_v     <- res[, (p + 4L + 2L):(p + 4L + 1L + G)]  # (batch, G)
-
-    neigh_start <- p + 4L + G + 2L
+    z_mn     <- res[, (p + L + 1L):(p + 2L * L)]
+    z_lv     <- res[, (p + 2L * L + 1L):(p + 3L * L)]
+    prior_lv <- res[, (p + 3L * L + 1L):(p + 4L * L)]
+    rho_v    <- res[, (p + 4L * L + 1L):(p + 4L * L + 1L)]
+    beta_v   <- res[, (p + 4L * L + 2L):(p + 4L * L + 1L + G)]
+    neigh_start <- p + 4L * L + G + 2L
     neigh_end   <- neigh_start + G * M * L - 1L
     neigh_z_v   <- res[, neigh_start:neigh_end]                # (batch, G*M*L)
  
@@ -345,9 +344,6 @@ GiVAE <- function(
 
     # ---- Weighted sum of graph-specific neighbor encodings ------------------
     z_neigh_sum_total <- tf$zeros_like(z_mn)  # (batch, L)
-
-    # single combined rho scalar per observation
-    rho_scalar <- tf$expand_dims(rho_v[, 1L], axis = 1L)  # (batch, 1)
 
     for (g in seq_len(G)) {
       z_neigh_sum_g <- tf$zeros_like(z_mn)  # (batch, L)
@@ -371,7 +367,7 @@ GiVAE <- function(
       z_neigh_sum_g <- z_neigh_sum_g / n_valid_g
 
       graph_weight <- tf$expand_dims(beta_weights[, g], axis = 1L)
-      z_neigh_sum_total <- z_neigh_sum_total + graph_weight * rho_scalar * z_neigh_sum_g
+      z_neigh_sum_total <- z_neigh_sum_total + graph_weight * rho_v * z_neigh_sum_g
     }
  
     # ---- SAR prior mean: rho_max * sum_g [rho_g * beta_g * z_neigh_sum_g] ----
