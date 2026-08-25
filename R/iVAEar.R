@@ -670,7 +670,8 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
 
   if (is.null(optimizer)) {
     optimizer <- tensorflow::tf$keras$optimizers$Adam(
-      learning_rate = tensorflow::tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2)
+      learning_rate = tensorflow::tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2),
+      clipnorm = 1.0
     )
   }
 
