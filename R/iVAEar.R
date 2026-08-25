@@ -380,6 +380,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     sample_size = n, prior_ar_model = prior_ar_model, prior_mean_model = prior_mean_model,
     prior_log_var_model = prior_log_var_model,
     aux_dim = dim_aux, encoder = encoder, decoder = decoder, data_means = data_means,
+    mask = mask, add_mask_to_encoder = add_mask_to_encoder,
     data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds, call_params = call_params, elbo = elbo, 
     metrics = hist, call = deparse(sys.call()), DNAME = paste(deparse(substitute(data)))
   )

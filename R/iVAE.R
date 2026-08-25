@@ -325,7 +325,8 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
     IC_unscaled = IC_estimates, IC = IC_estimates_scaled, data_dim = p,
     sample_size = n, prior_mean_model = prior_mean_model, prior_log_var_model = prior_log_var_model,
     aux_dim = dim_aux, encoder = encoder, decoder = decoder, data_means = data_means,
-    data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds,
+    data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds, 
+    mask = mask, add_mask_to_encoder = add_mask_to_encoder,
     call_params = call_params, elbo = elbo, metrics = hist, call = deparse(sys.call()),
     DNAME = paste(deparse(substitute(data)))
   )
@@ -612,7 +613,14 @@ predict.iVAE <- function(
   } else {
     newdata_cent <- sweep(newdata, 2, object$data_means, "-")
     newdata_scaled <- sweep(newdata_cent, 2, object$data_sds, "/")
-    IC_est <- object$encoder(list(newdata_scaled, aux_data))
+    if (!all(object$mask == 1) && object$add_mask_to_encoder) {
+      new_mask <- (!is.na(newdata)) * 1L
+      new_mask[which(new_mask == 0)] <- 0
+      new_mask[which(new_mask == 1)] <- 1
+      IC_est <- object$encoder(list(newdata_scaled, aux_data, new_mask))
+    } else {
+      IC_est <- object$encoder(list(newdata_scaled, aux_data))
+    }
     IC_est <- as.matrix(IC_est)
     IC_est_cent <- sweep(IC_est, 2, object$IC_means, "-")
     IC_est_scaled <- sweep(IC_est_cent, 2, object$IC_sds, "/")
