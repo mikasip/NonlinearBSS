@@ -290,7 +290,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
       }
     }
     if (error_dist == "poisson") {
-      x_mean <- tensorflow::tf$math$exp(x_mean)
+      x <- tensorflow::tf$math$exp(x)
     }
     log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
       
