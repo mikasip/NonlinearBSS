@@ -120,7 +120,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     "gaussian" = norm_log_pdf,
     "laplace" = laplace_log_pdf,
   )
-  error_dist <- match.arg(error_dist, c("gaussian", "laplace", "huber"))
+  error_dist <- match.arg(error_dist, c("gaussian", "laplace", "huber", "poisson"))
   error_log_pdf <- switch(error_dist,
     "gaussian" = norm_log_pdf,
     "laplace" = laplace_log_pdf,
