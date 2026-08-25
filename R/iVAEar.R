@@ -289,6 +289,9 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
         prior_mean_final <- prior_mean_final + ar_prev_mult[, ((i - 1) * latent_dim + 1):(i * latent_dim)]
       }
     }
+    if (error_dist == "poisson") {
+      x_mean <- tensorflow::tf$math$exp(x_mean)
+    }
     log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
       
     masked_log_px_z <- log_px_z_unreduced * mask
