@@ -144,6 +144,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     data_means  <- rep(0.0, p)
     data_sds    <- rep(1.0, p)
     data_scaled <- data * 1.0
+    data_scaled[which(mask == 0)] <- 0
   } else {
     data_means <- colMeans(data, na.rm = TRUE)
     data_sds <- apply(data, 2, function(col) { sd(col, na.rm = TRUE) })
