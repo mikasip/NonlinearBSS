@@ -401,8 +401,8 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
 
   source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
   source_log_pdf <- switch(source_dist, "gaussian" = norm_log_pdf, "laplace" = laplace_log_pdf)
-  error_dist <- match.arg(error_dist, c("gaussian","laplace","huber"))
-  error_log_pdf <- switch(error_dist, "gaussian" = norm_log_pdf, "laplace" = laplace_log_pdf, "huber" = huber_loss)
+  error_dist <- match.arg(error_dist, c("gaussian", "laplace", "huber", "poisson"))
+  error_log_pdf <- switch(error_dist, "gaussian" = norm_log_pdf, "laplace" = laplace_log_pdf, "huber" = huber_loss, "poisson" = poisson_log_pdf)
 
   call_params <- list(latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
                       error_dist_sigma = error_dist_sigma, hidden_units = hidden_units,
