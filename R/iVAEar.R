@@ -125,6 +125,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     "gaussian" = norm_log_pdf,
     "laplace" = laplace_log_pdf,
     "huber" = huber_loss,
+    "poisson"  = poisson_log_pdf
   )
   call_params <- list(
     latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
@@ -139,11 +140,17 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
   n <- as.integer(dim(data)[1])
   p <- as.integer(dim(data)[2])
 
-  data_means <- colMeans(data, na.rm = TRUE)
-  data_sds <- apply(data, 2, function(col) { sd(col, na.rm = TRUE) })
-  data_cent <- sweep(data, 2, data_means, "-")
-  data_scaled <- sweep(data_cent, 2, data_sds, "/")
-  data_scaled[which(mask == 0)] <- 0
+  if (error_dist == "poisson") {
+    data_means  <- rep(0.0, p)
+    data_sds    <- rep(1.0, p)
+    data_scaled <- data * 1.0
+  } else {
+    data_means <- colMeans(data, na.rm = TRUE)
+    data_sds <- apply(data, 2, function(col) { sd(col, na.rm = TRUE) })
+    data_cent <- sweep(data, 2, data_means, "-")
+    data_scaled <- sweep(data_cent, 2, data_sds, "/")
+    data_scaled[which(mask == 0)] <- 0
+  }
   
   prev_mask_list <- list()
   for (i in seq_along(prev_data_list)) {
