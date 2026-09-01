@@ -120,12 +120,13 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     "gaussian" = norm_log_pdf,
     "laplace" = laplace_log_pdf,
   )
-  error_dist <- match.arg(error_dist, c("gaussian", "laplace", "huber", "poisson"))
+  error_dist <- match.arg(error_dist, c("gaussian", "laplace", "huber", "poisson", "bernoulli"))
   error_log_pdf <- switch(error_dist,
     "gaussian" = norm_log_pdf,
     "laplace" = laplace_log_pdf,
     "huber" = huber_loss,
-    "poisson"  = poisson_log_pdf
+    "poisson"  = poisson_log_pdf,
+    "bernoulli" = bernoulli_log_pdf
   )
   call_params <- list(
     latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
@@ -144,6 +145,18 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     data_means  <- rep(0.0, p)
     data_sds    <- rep(1.0, p)
     data_scaled <- data * 1.0
+    data_scaled[which(mask == 0)] <- 0
+  } else if (error_dist == "bernoulli") {
+    # Expect binary data in {0,1}. If not, warn and threshold at 0.5.
+    if (!all((data[!is.na(data)] %in% c(0,1)))) {
+      warning("Data for 'bernoulli' error_dist is not binary; casting values > 0.5 to 1, else 0")
+      data_bin <- ifelse(data > 0.5, 1L, 0L)
+    } else {
+      data_bin <- data
+    }
+    data_means <- rep(0.0, p)
+    data_sds <- rep(1.0, p)
+    data_scaled <- data_bin * 1.0
     data_scaled[which(mask == 0)] <- 0
   } else {
     data_means <- colMeans(data, na.rm = TRUE)
@@ -254,7 +267,13 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
       dense_layer()
     output_decoder <- output_decoder %>% dense_layer()
   }
-  out_layer <- keras3::layer_dense(units = p)
+  if (error_dist == "poisson") {
+    out_layer <- keras3::layer_dense(units = p)
+  } else if (error_dist == "bernoulli") {
+    out_layer <- keras3::layer_dense(units = p, activation = "sigmoid")
+  } else {
+    out_layer <- keras3::layer_dense(units = p)
+  }
   x_decoded_mean <- x_decoded_mean %>% out_layer()
   output_decoder <- output_decoder %>% out_layer()
   decoder <- keras3::keras_model(input_decoder, output_decoder)
@@ -403,8 +422,8 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
 
   source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
   source_log_pdf <- switch(source_dist, "gaussian" = norm_log_pdf, "laplace" = laplace_log_pdf)
-  error_dist <- match.arg(error_dist, c("gaussian", "laplace", "huber", "poisson"))
-  error_log_pdf <- switch(error_dist, "gaussian" = norm_log_pdf, "laplace" = laplace_log_pdf, "huber" = huber_loss, "poisson" = poisson_log_pdf)
+  error_dist <- match.arg(error_dist, c("gaussian", "laplace", "huber", "poisson", "bernoulli"))
+  error_log_pdf <- switch(error_dist, "gaussian" = norm_log_pdf, "laplace" = laplace_log_pdf, "huber" = huber_loss, "poisson" = poisson_log_pdf, "bernoulli" = bernoulli_log_pdf)
 
   call_params <- list(latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
                       error_dist_sigma = error_dist_sigma, hidden_units = hidden_units,
@@ -416,12 +435,30 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
   n <- as.integer(dim(data)[1])
   p <- as.integer(dim(data)[2])
 
-  # scale data same as before
-  data_means <- colMeans(data, na.rm = TRUE)
-  data_sds <- apply(data, 2, function(col) { sd(col, na.rm = TRUE) })
-  data_cent <- sweep(data, 2, data_means, "-")
-  data_scaled <- sweep(data_cent, 2, data_sds, "/")
-  data_scaled[which(mask == 0)] <- 0
+  # scale data same as before (special-case poisson/bernoulli)
+  if (error_dist == "poisson") {
+    data_means  <- rep(0.0, p)
+    data_sds    <- rep(1.0, p)
+    data_scaled <- data * 1.0
+    data_scaled[which(mask == 0)] <- 0
+  } else if (error_dist == "bernoulli") {
+    if (!all((data[!is.na(data)] %in% c(0,1)))) {
+      warning("Data for 'bernoulli' error_dist is not binary; casting values > 0.5 to 1, else 0")
+      data_bin <- ifelse(data > 0.5, 1L, 0L)
+    } else {
+      data_bin <- data
+    }
+    data_means <- rep(0.0, p)
+    data_sds <- rep(1.0, p)
+    data_scaled <- data_bin * 1.0
+    data_scaled[which(mask == 0)] <- 0
+  } else {
+    data_means <- colMeans(data, na.rm = TRUE)
+    data_sds <- apply(data, 2, function(col) { sd(col, na.rm = TRUE) })
+    data_cent <- sweep(data, 2, data_means, "-")
+    data_scaled <- sweep(data_cent, 2, data_sds, "/")
+    data_scaled[which(mask == 0)] <- 0
+  }
 
   prev_mask_list <- list()
   for (i in seq_along(prev_data_list)) {
@@ -613,7 +650,13 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
     x_decoded_mean <- x_decoded_mean %>% dense_layer()
     output_decoder <- output_decoder %>% dense_layer()
   }
-  out_layer <- keras3::layer_dense(units = p)
+  if (error_dist == "poisson") {
+    out_layer <- keras3::layer_dense(units = p)
+  } else if (error_dist == "bernoulli") {
+    out_layer <- keras3::layer_dense(units = p, activation = "sigmoid")
+  } else {
+    out_layer <- keras3::layer_dense(units = p)
+  }
   x_decoded_mean <- x_decoded_mean %>% out_layer()
   output_decoder <- output_decoder %>% out_layer()
   decoder <- keras3::keras_model(input_decoder, output_decoder)
