@@ -88,11 +88,18 @@ predict_coords_to_IC_ar <- function(
     last_ICs_ord <- last_ICs[last_IC_ord_inds, ]
     if (get_var) {
         prior_vars <- exp(as.matrix(object$prior_log_var_model(phi_all)))
-        pred_vars  <- matrix(0, nrow = N, ncol = ncol(last_ICs_ord))
-        # last_ICs_ord rows stay 0 — they are "observed" with no uncertainty
+        L <- ncol(last_ICs_ord)
+        R <- object$ar_order
+        # Sigma[[r]][[rp]]: n_s_new x L matrix of Cov(y_{t-r}, y_{t-rp}) in the current window
+        Sigma <- vector("list", R)
+        for (r in 1:R) {
+            Sigma[[r]] <- vector("list", R)
+            for (rp in 1:R) Sigma[[r]][[rp]] <- matrix(0, nrow = n_s_new, ncol = L)
+        }
+        pred_vars <- matrix(0, nrow = N, ncol = L)   # observed ICs stay 0
     } else {
         prior_vars <- NULL
-        pred_vars  <- NULL
+        pred_vars <- NULL
     }
     
     # Get AR(1) coefficients for the new locations and time points
@@ -130,14 +137,38 @@ predict_coords_to_IC_ar <- function(
             preds[start_ind:end_ind, ] <- pred
 
             if (get_var) {
-                var_t <- prior_vars[start_ind:end_ind, ]   # innovation variance
-                for (i in 1:object$ar_order) {
-                    ar_coef <- ar_coeffs[start_ind:end_ind,
-                                ((i - 1) * object$call_params$latent_dim + 1):
-                                ( i * object$call_params$latent_dim)]
-                    var_i <- pred_vars[(start_ind - i * n_s_new):(end_ind - i * n_s_new), ]
-                    var_t <- var_t + ar_coef^2 * var_i   # variance propagates via ar_coef^2
+                a <- vector("list", R)
+                for (i in 1:R) {
+                    a[[i]] <- ar_coeffs[start_ind:end_ind,
+                                ((i - 1) * object$call_params$latent_dim + 1):(i * object$call_params$latent_dim)]
                 }
+
+                # variance: innovation + sum_r sum_rp a_r a_rp Sigma[r,rp]
+                var_t <- prior_vars[start_ind:end_ind, ]
+                for (r in 1:R) for (rp in 1:R) var_t <- var_t + a[[r]] * a[[rp]] * Sigma[[r]][[rp]]
+
+                # cross-covariances of y_t with y_{t-1},...,y_{t-R+1}
+                new_cross <- vector("list", max(R - 1, 0))
+                if (R > 1) {
+                    for (j in 1:(R - 1)) {
+                        cc <- matrix(0, nrow = n_s_new, ncol = L)
+                        for (r in 1:R) cc <- cc + a[[r]] * Sigma[[r]][[j]]
+                        new_cross[[j]] <- cc
+                    }
+                }
+
+                # slide the window forward: (y_t, y_{t-1}, ..., y_{t-R+1})
+                Sigma_new <- vector("list", R)
+                for (r in 1:R) Sigma_new[[r]] <- vector("list", R)
+                Sigma_new[[1]][[1]] <- var_t
+                if (R > 1) {
+                    for (j in 1:(R - 1)) {
+                        Sigma_new[[1]][[j + 1]] <- new_cross[[j]]
+                        Sigma_new[[j + 1]][[1]] <- new_cross[[j]]
+                    }
+                    for (r in 1:(R - 1)) for (rp in 1:(R - 1)) Sigma_new[[r + 1]][[rp + 1]] <- Sigma[[r]][[rp]]
+                }
+                Sigma <- Sigma_new
                 pred_vars[start_ind:end_ind, ] <- var_t
             }
         }
