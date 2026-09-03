@@ -338,7 +338,7 @@ iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_lis
     loss = vae_loss,
     metrics = list(metric_reconst_accuracy)
   )
-
+  
   inputs <- list(data_scaled, aux_data, mask)
   inputs <- append(inputs, prev_data_list)  
   inputs <- append(inputs, prev_aux_data_list)
@@ -743,7 +743,8 @@ iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data
   hist <- vae %>% keras3::fit(inputs_to_fit, data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
 
   # Encoder/prior predictions (use the same input format: data, spatial, time, (elev), (aux_extra))
-  encoder_inputs_for_predict <- list(data_scaled, spatial_locations, time_points, mask)
+  encoder_inputs_for_predict <- list(data_scaled, spatial_locations, time_points)
+  if (!all(mask == 1)) encoder_inputs_for_predict <- append(encoder_inputs_for_predict, list(mask))
   if (!is.null(elevation)) encoder_inputs_for_predict <- append(encoder_inputs_for_predict, list(elevation))
   if (!is.null(aux_extra)) encoder_inputs_for_predict <- append(encoder_inputs_for_predict, list(aux_extra))
 
