@@ -20,7 +20,9 @@
 #' Either "gaussian" or "laplace".
 #' @param error_dist Distribution for the model error.
 #' Either "gaussian" or "laplace".
-#' @param error_dist_sigma A standard deviation for error_dist.
+#' @param error_dist_sigma A standard deviation for error_dist. If a numeric
+#' vector of length 2 is supplied, it is interpreted as the start and end values
+#' of a linear schedule over the training steps.
 #' @param optimizer A keras optimizer for the tensorflow model.
 #' A default is Adam optimizer with polynomial decay.
 #' @param lr_start A starting learning rate for the default optimizer.
@@ -150,6 +152,33 @@
 #' cormat
 #' absolute_mean_correlation(cormat)
 #' @export
+.compute_error_dist_sigma <- function(error_dist_sigma, current_step, total_steps) {
+  if (length(error_dist_sigma) == 1L) {
+    return(as.numeric(error_dist_sigma))
+  }
+  if (length(error_dist_sigma) != 2L) {
+    stop("`error_dist_sigma` must be a single numeric value or a numeric vector of length 2 specifying the start and end values of a linear schedule.")
+  }
+  if (!is.numeric(error_dist_sigma)) {
+    stop("`error_dist_sigma` must be numeric.")
+  }
+
+  progress <- tryCatch(as.numeric(current_step), error = function(e) NULL)
+  if (!is.null(progress)) {
+    progress <- min(max(progress / max(as.numeric(total_steps), 1), 0), 1)
+    sigma_start <- as.numeric(error_dist_sigma[1])
+    sigma_end <- as.numeric(error_dist_sigma[2])
+    return(sigma_start + (sigma_end - sigma_start) * progress)
+  }
+
+  sigma_start <- tensorflow::tf$cast(error_dist_sigma[1], "float32")
+  sigma_end <- tensorflow::tf$cast(error_dist_sigma[2], "float32")
+  total_steps <- tensorflow::tf$cast(max(as.numeric(total_steps), 1), "float32")
+  current_step <- tensorflow::tf$cast(current_step, "float32")
+  progress <- tensorflow::tf$clip_by_value(current_step / total_steps, 0, 1)
+  sigma_start + (sigma_end - sigma_start) * progress
+}
+
 iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
                  activation = "leaky_relu", source_dist = "gaussian", validation_split = 0, error_dist = "gaussian",
                  error_dist_sigma = 0.02, optimizer = NULL, lr_start = 0.001, lr_end = 0.0001,
@@ -256,7 +285,7 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
     prior_mean_v <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
     prior_log_v <- res[, (p + 4 * latent_dim + 1):(p + 5 * latent_dim)]
     mask <- res[, (p + 5 * latent_dim + 1):(2 * p + 5 * latent_dim)]
-    log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
+    log_px_z_unreduced <- error_log_pdf(x, x_mean, error_dist_sigma_value(), reduce = FALSE)
     masked_log_px_z <- log_px_z_unreduced * mask
     log_px_z <- tensorflow::tf$reduce_sum(masked_log_px_z, axis = -1L)
     log_qz_xu <- source_log_pdf(z_sample, z_mean, tensorflow::tf$math$exp(z_logvar))
@@ -268,10 +297,17 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
     optimizer <- tensorflow::tf$keras$optimizers$Adam(learning_rate = tensorflow::tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
   }
 
+  error_dist_sigma_value <- function() {
+    if (length(error_dist_sigma) != 2L) {
+      return(tensorflow::tf$constant(error_dist_sigma, "float32"))
+    }
+    .compute_error_dist_sigma(error_dist_sigma, optimizer$iterations, steps)
+  }
+
   metric_reconst_accuracy <- keras3::custom_metric("metric_reconst_accuracy", function(x, res) {
     x_mean <- res[, 1:p]
     mask <- res[, (p + 5 * latent_dim + 1):(2 * p + 5 * latent_dim)]
-    log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
+    log_px_z_unreduced <- error_log_pdf(x, x_mean, error_dist_sigma_value(), reduce = FALSE)
     masked_log_px_z <- log_px_z_unreduced * mask
     log_px_z <- tensorflow::tf$reduce_sum(masked_log_px_z, axis = -1L)
     return(tensorflow::tf$reduce_mean(log_px_z, -1L))
@@ -310,7 +346,7 @@ iVAE <- function(data, aux_data, latent_dim, hidden_units = c(128, 128, 128), au
     }
     prior_means <- predict(prior_mean_model, aux_data)
     prior_log_vars <- predict(prior_log_var_model, aux_data)
-    log_px_z <- error_log_pdf(tensorflow::tf$constant(data_scaled, "float32"), tensorflow::tf$cast(obs_estimates, "float32"), tensorflow::tf$constant(error_dist_sigma, "float32"))
+    log_px_z <- error_log_pdf(tensorflow::tf$constant(data_scaled, "float32"), tensorflow::tf$cast(obs_estimates, "float32"), error_dist_sigma_value())
     log_qz_xu <- source_log_pdf(tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$math$exp(tensorflow::tf$cast(IC_log_vars, "float32")))
     log_pz_u <- source_log_pdf(tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$cast(prior_means, "float32"), tensorflow::tf$math$exp(tensorflow::tf$cast(prior_log_vars, "float32")))
     elbo <- tensorflow::tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L)
