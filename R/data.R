@@ -1,0 +1,44 @@
+#' Air Pollution in Northern Italy
+#'
+#' Daily mean concentrations of ozone, nitrogen dioxide and particulate
+#' matter at 50 air quality monitoring stations in Northern Italy from 1
+#' January 2020 to 31 May 2022. The data are a complete space-time grid of
+#' 50 stations and 882 days.
+#'
+#' The data have been analysed with identifiable variational autoencoders,
+#' together with satellite-derived weather and air pollution variables, for
+#' ozone modelling with missing values and auxiliary covariates in
+#' *Environmetrics* \insertCite{sipila2026missing}{NonlinearBSS} and for
+#' interpretable dimension reduction in *Spatial Statistics*
+#' \insertCite{sipila2026interpretable}{NonlinearBSS}.
+#'
+#' @format A data frame with 44100 rows and 8 variables:
+#' \describe{
+#'   \item{time}{Date of the observation.}
+#'   \item{time_numeric}{Date as the number of days since 1 January 1970.}
+#'   \item{AirQualityStation}{Identifier of the monitoring station.}
+#'   \item{Latitude, Longitude}{Location of the station (WGS 84).}
+#'   \item{mean_O3}{Daily mean ozone concentration (\eqn{\mu g/m^3}).}
+#'   \item{mean_NO2}{Daily mean nitrogen dioxide concentration
+#'   (\eqn{\mu g/m^3}).}
+#'   \item{mean_PM10}{Daily mean concentration of particulate matter with
+#'   diameter below 10 \eqn{\mu m} (\eqn{\mu g/m^3}).}
+#' }
+#' @source European Air Quality Portal of the European Environment Agency
+#'   (EEA), \url{https://www.eea.europa.eu/en/datahub}. Hourly validated
+#'   measurements aggregated to daily means.
+#' @references \insertAllCited{}
+#' @examples
+#' str(pollution_northern_italy)
+#' \donttest{
+#' if (tf_available()) {
+#'   fit <- iVAEar(pollution_northern_italy,
+#'                 aux = aux_rbf(spatial_basis = c(2, 5),
+#'                               temporal_basis = c(9, 17)),
+#'                 coords = c("Longitude", "Latitude"), time = "time",
+#'                 vars = c("mean_O3", "mean_NO2", "mean_PM10"),
+#'                 epochs = 2, verbose = 0)
+#'   summary(fit)
+#' }
+#' }
+"pollution_northern_italy"

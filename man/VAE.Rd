@@ -5,101 +5,121 @@
 \title{Variational Autoencoder}
 \usage{
 VAE(
-  data,
-  latent_dim,
+  x,
+  latent_dim = NULL,
+  vars = NULL,
   hidden_units = c(128, 128, 128),
-  validation_split = 0,
   activation = "leaky_relu",
-  source_dist = "gaussian",
-  error_dist = "gaussian",
+  source_dist = c("gaussian", "laplace"),
+  error_dist = c("gaussian", "laplace", "huber", "poisson", "bernoulli"),
   error_dist_sigma = 0.01,
+  mask_encoder = TRUE,
   optimizer = NULL,
   lr_start = 0.01,
   lr_end = 1e-04,
   steps = 10000,
+  epochs = 100,
+  batch_size = 64,
+  validation_split = 0,
+  validation_data = NULL,
+  callbacks = NULL,
   seed = NULL,
-  epochs,
-  batch_size
+  verbose = 1
 )
 }
 \arguments{
-\item{data}{A matrix with P columns and n rows}
+\item{x}{The observed data. See Details for the supported formats.}
 
-\item{latent_dim}{A latent dimension for VAE}
+\item{latent_dim}{The number of latent components. Defaults to the number
+of observed variables.}
 
-\item{hidden_units}{K-dimensional vector giving the number of
-hidden units for K layers in encoder and K layers in decoder.}
+\item{vars}{Names or indices of the observed variables. Defaults to all
+numeric columns not used for \code{coords}, \code{time}, \code{group} or \code{aux}.}
 
-\item{validation_split}{Proportion of data used for validation}
+\item{hidden_units}{Numbers of units in the hidden layers of the encoder
+(the decoder uses the reverse order).}
 
-\item{activation}{Activation function for the hidden layers.}
+\item{activation}{Activation function of the hidden layers.}
 
-\item{source_dist}{Distribution for the latent source.
-Either "gaussian" or "laplace".}
+\item{source_dist}{Distribution of the latent components given the
+auxiliary variables, \code{"gaussian"} or \code{"laplace"}.}
 
-\item{error_dist}{Distribution for the model error.
-Either "gaussian" or "laplace".}
+\item{error_dist}{Distribution of the reconstruction error: \code{"gaussian"},
+\code{"laplace"}, \code{"huber"}, \code{"poisson"} (count data, the decoder gives log
+rates) or \code{"bernoulli"} (binary data).}
 
-\item{error_dist_sigma}{A standard deviation for error_dist.}
+\item{error_dist_sigma}{Scale of the reconstruction error (the variance for
+\code{"gaussian"}). A vector of length two defines a linear schedule from the
+first to the second value over \code{steps} training steps.}
 
-\item{optimizer}{A keras optimizer for the tensorflow model.
-A default is Adam optimizer with polynomial decay.}
+\item{mask_encoder}{Logical. Give the missing value indicators to the
+encoder when \code{x} contains missing values?}
 
-\item{lr_start}{A starting learning rate for the default optimizer.}
+\item{optimizer}{A Keras optimizer. Defaults to Adam with a polynomial
+learning rate decay from \code{lr_start} to \code{lr_end} over \code{steps} steps.}
 
-\item{lr_end}{A ending learning rate for the default optimizer.}
+\item{lr_start, lr_end}{Initial and final learning rate of the default
+optimizer.}
 
-\item{steps}{A number of learning steps between lr_start and lr_end
-for the default optimizer.}
+\item{steps}{Number of training steps (batches) for the learning rate
+decay and the \code{error_dist_sigma} schedule.}
 
-\item{seed}{Seed for the tensorflow model. Should be used instead of
-set.seed(seed).}
+\item{epochs}{Number of training epochs.}
 
-\item{epochs}{A number of epochs for training.}
+\item{batch_size}{Batch size.}
 
-\item{batch_size}{A batch size for training.}
+\item{validation_split}{Proportion of the observations used for
+validation. Keras takes the last observations, not a random subset.}
+
+\item{validation_data}{Optional validation data, used instead of
+\code{validation_split}: either data in the same format as \code{x} (column names
+given in \code{coords}, \code{time} and \code{group} are used for it as well), or a list
+with elements \code{x} and, as needed, \code{coords}, \code{time}, \code{group} and \code{aux}
+(values of auxiliary variables given as matrices, see \code{\link[=predict.nlbss]{predict.nlbss()}}).}
+
+\item{callbacks}{A list of Keras callbacks, for example
+\code{list(keras3::callback_early_stopping(patience = 5))}.}
+
+\item{seed}{Optional random seed for reproducible training. Use this
+instead of \code{\link[=set.seed]{set.seed()}}; the random number state of the R session is
+restored after fitting.}
+
+\item{verbose}{Verbosity of the training: 0 (silent), 1 (progress bar) or
+2 (one line per epoch).}
 }
 \value{
-An object of class VAE.
-\item{IC_unscaled}{Unscaled latent components.}
-\item{IC}{The latent component with
-zero mean and unit variance.}
-\item{data_dim}{The dimension of the original data.}
-\item{metrics}{Metrics of the training for each epoch.}
-\item{sample_size}{Sample size of
-the data.}
-\item{call_params}{The params for
-the original VAE method call.}
-\item{encoder}{The trained encoder.}
-\item{decoder}{The trained decoder.}
-\item{IC_means}{The means of the
-unscaled latent components.}
-\item{IC_means}{The standard devivations
-of the unscaled latent components.}
-\item{call}{The of how the method was called.}
-\item{DNAME}{The of the original data.}
+An object of class \code{c("VAE", "nlbss")}, see \code{\link[=iVAE]{iVAE()}}.
 }
 \description{
-Trains a variational autoencoder (VAE) using the input data.
+Fits a variational autoencoder (VAE) \insertCite{kingma2013auto}{NonlinearBSS}
+with a standard normal (or Laplace) prior for the latent components. The
+model is meant for i.i.d. data.
 }
 \details{
-The method constructs and trains a variational autoencoder (VAE)
-\insertCite{kingma2013auto}{NonlinearBSS} based on the given parameters.
-VAE is composed of an encoder and a decoder. The encoder transforms the
-original data into a latent representation. The decoder aims to
-transform the latent representation back to the original data.
-The variational approximation is obtained by using a reparametrization
-trick to sample a new value using the mean and the standard deviation
-given by the encoder.
+The VAE consists of an encoder giving the mean and variance of the
+approximate posterior \eqn{q(z | x)} and a decoder mapping the latent
+components back to the data. A sample from the posterior is drawn with the
+reparametrisation trick and the networks are trained by maximising the
+evidence lower bound
+\deqn{E_{q(z|x)}[\log p(x | z) + \log p(z) - \log q(z | x)].}{
+E_q(z|x) [log p(x|z) + log p(z) - log q(z|x)].}
+
+Unlike \code{\link[=iVAE]{iVAE()}}, a VAE is not identifiable
+\insertCite{hyvarinen1999nonlinear}{NonlinearBSS}: the latent components are only
+determined up to an arbitrary invertible transformation and need not
+correspond to the true sources. The method is mainly useful as a baseline
+or for dimension reduction.
 }
 \examples{
-p <- 3
-n <- 1000
-latent_data <- matrix(rnorm(p * n), ncol = p, nrow = n)
-mixed_data <- mix_data(latent_data, 2, "elu")
-res <- VAE(mixed_data, p, hidden_units = c(128, 64, 32), 
-lr_start = 0.0001, epochs = 1, batch_size = 64)
+\dontshow{if (tf_available()) withAutoprint(\{ # examplesIf}
+x <- mix_data(matrix(rnorm(3000), ncol = 3), n_layers = 2)
+fit <- VAE(x, latent_dim = 3, epochs = 5, verbose = 0, seed = 1)
+fit
+\dontshow{\}) # examplesIf}
 }
 \references{
 \insertAllCited{}
+}
+\seealso{
+\code{\link[=iVAE]{iVAE()}}
 }

@@ -5,198 +5,227 @@
 \title{Identifiable Variational Autoencoder}
 \usage{
 iVAE(
-  data,
-  aux_data,
-  latent_dim,
+  x,
+  aux = NULL,
+  latent_dim = NULL,
+  coords = NULL,
+  time = NULL,
+  group = NULL,
+  vars = NULL,
+  batch_aux = FALSE,
   hidden_units = c(128, 128, 128),
   aux_hidden_units = c(128, 128, 128),
   activation = "leaky_relu",
-  source_dist = "gaussian",
-  validation_split = 0,
-  error_dist = "gaussian",
+  source_dist = c("gaussian", "laplace"),
+  error_dist = c("gaussian", "laplace", "huber", "poisson", "bernoulli"),
   error_dist_sigma = 0.02,
+  mask_encoder = TRUE,
   optimizer = NULL,
   lr_start = 0.001,
   lr_end = 1e-04,
-  add_mask_to_encoder = TRUE,
-  get_elbo = FALSE,
   steps = 10000,
+  epochs = 100,
+  batch_size = 64,
+  validation_split = 0,
+  validation_data = NULL,
+  callbacks = NULL,
   seed = NULL,
-  epochs,
-  batch_size
+  verbose = 1
 )
 }
 \arguments{
-\item{data}{A matrix with P columns and N rows containing the observed data.}
+\item{x}{The observed data. See Details for the supported formats.}
 
-\item{aux_data}{A matrix with D columns and N rows
-containing the auxiliary data.}
+\item{aux}{Auxiliary data: a numeric matrix with one row per observation,
+a specification such as \code{\link[=aux_rbf]{aux_rbf()}} or \code{\link[=aux_segments]{aux_segments()}}, or a list of
+these. See Details.}
 
-\item{latent_dim}{A latent dimension for iVAE}
+\item{latent_dim}{The number of latent components. Defaults to the number
+of observed variables.}
 
-\item{hidden_units}{K-dimensional vector giving the number of
-hidden units for K layers in encoder and K layers in decoder.}
+\item{coords}{Spatial coordinates, a matrix with one row per observation
+or names of columns in \code{x}. Taken from the object for spatial formats.}
 
-\item{aux_hidden_units}{K-dimensional vector giving the number of
-hidden units for K layers in auxiliary function.}
+\item{time}{Time points (numeric, \code{Date} or \code{POSIXct}) or the name of a
+column in \code{x}. Taken from the object for time series formats.}
 
-\item{activation}{Activation function for the hidden layers.}
+\item{group}{Identifier of the series an observation belongs to (for
+example a station), or names of columns in \code{x}. Only needed for
+\code{\link[=iVAEar]{iVAEar()}} when the series are not identified by the coordinates.}
 
-\item{source_dist}{Distribution for the latent source.
-Either "gaussian" or "laplace".}
+\item{vars}{Names or indices of the observed variables. Defaults to all
+numeric columns not used for \code{coords}, \code{time}, \code{group} or \code{aux}.}
 
-\item{validation_split}{Proportion of data used for validation}
+\item{batch_aux}{Logical. Compute the auxiliary variables batch-wise
+inside the network?}
 
-\item{error_dist}{Distribution for the model error.
-Either "gaussian" or "laplace".}
+\item{hidden_units}{Numbers of units in the hidden layers of the encoder
+(the decoder uses the reverse order).}
 
-\item{error_dist_sigma}{A standard deviation for error_dist.}
+\item{aux_hidden_units}{Numbers of units in the hidden layers of the
+auxiliary function.}
 
-\item{optimizer}{A keras optimizer for the tensorflow model.
-A default is Adam optimizer with polynomial decay.}
+\item{activation}{Activation function of the hidden layers.}
 
-\item{lr_start}{A starting learning rate for the default optimizer.}
+\item{source_dist}{Distribution of the latent components given the
+auxiliary variables, \code{"gaussian"} or \code{"laplace"}.}
 
-\item{lr_end}{A ending learning rate for the default optimizer.}
+\item{error_dist}{Distribution of the reconstruction error: \code{"gaussian"},
+\code{"laplace"}, \code{"huber"}, \code{"poisson"} (count data, the decoder gives log
+rates) or \code{"bernoulli"} (binary data).}
 
-\item{get_elbo}{Logical. If TRUE, the model returns the final ELBO value. Default is FALSE.}
+\item{error_dist_sigma}{Scale of the reconstruction error (the variance for
+\code{"gaussian"}). A vector of length two defines a linear schedule from the
+first to the second value over \code{steps} training steps.}
 
-\item{steps}{A number of learning steps between lr_start and lr_end
-for the default optimizer.}
+\item{mask_encoder}{Logical. Give the missing value indicators to the
+encoder when \code{x} contains missing values?}
 
-\item{seed}{Seed for the tensorflow model. Should be used instead of
-set.seed(seed).}
+\item{optimizer}{A Keras optimizer. Defaults to Adam with a polynomial
+learning rate decay from \code{lr_start} to \code{lr_end} over \code{steps} steps.}
 
-\item{epochs}{A number of epochs for training.}
+\item{lr_start, lr_end}{Initial and final learning rate of the default
+optimizer.}
 
-\item{batch_size}{A batch size for training.}
+\item{steps}{Number of training steps (batches) for the learning rate
+decay and the \code{error_dist_sigma} schedule.}
+
+\item{epochs}{Number of training epochs.}
+
+\item{batch_size}{Batch size.}
+
+\item{validation_split}{Proportion of the observations used for
+validation. Keras takes the last observations, not a random subset.}
+
+\item{validation_data}{Optional validation data, used instead of
+\code{validation_split}: either data in the same format as \code{x} (column names
+given in \code{coords}, \code{time} and \code{group} are used for it as well), or a list
+with elements \code{x} and, as needed, \code{coords}, \code{time}, \code{group} and \code{aux}
+(values of auxiliary variables given as matrices, see \code{\link[=predict.nlbss]{predict.nlbss()}}).}
+
+\item{callbacks}{A list of Keras callbacks, for example
+\code{list(keras3::callback_early_stopping(patience = 5))}.}
+
+\item{seed}{Optional random seed for reproducible training. Use this
+instead of \code{\link[=set.seed]{set.seed()}}; the random number state of the R session is
+restored after fitting.}
+
+\item{verbose}{Verbosity of the training: 0 (silent), 1 (progress bar) or
+2 (one line per epoch).}
 }
 \value{
-An object of class iVAE.
-\item{IC_unscaled}{Unscaled latent variable estimates.}
-\item{IC}{Scaled latent variable estimates.}
-\item{data_dim}{Dimension of the observed data.}
-\item{sample_size}{Sample size of the training data.}
-\item{aux_dim}{The dimension of auxiliary variable vector.}
-\item{prior_mean_model}{A model, which outputs the means estimated by
-the auxiliary function.}
-\item{prior_log_var_model}{A model, which outputs the logarithmic variances 
-estimated by the auxiliary function.}
-\item{encoder}{The trained encoder.}
-\item{decoder}{The trained decoder.}
-\item{data_means}{The means of the
-original data.}
-\item{data_sds}{The standard deviations of the
-original data.}
-\item{IC_means}{The means of the
-unscaled latent components.}
-\item{IC_sds}{The standard deviations of the
-unscaled latent components.}
-\item{call_params}{The params for
-the original iVAE method call.}
-\item{elbo}{The ELBO value after training the model.}
-\item{metrics}{Metrics of the training for each epoch.}
-\item{call}{An output of how the method was called.}
-\item{DNAME}{The name of the original data.}
+An object of class \code{c("iVAE", "nlbss")}, a list with elements
+\item{S}{Matrix of the estimated latent components, standardised.}
+\item{S_unscaled}{The encoder means before standardisation.}
+\item{S_center, S_scale}{Means and standard deviations used in the
+standardisation.}
+\item{elbo}{The evidence lower bound of the fitted model, evaluated at
+the encoder means.}
+\item{history}{Training metrics for each epoch.}
+\item{aux}{The fitted auxiliary data specifications.}
+\item{prior}{Prior means, log variances and AR coefficients for the
+training data (unscaled).}
+\item{data_center, data_scale}{Means and standard deviations used to
+standardise the data.}
+\item{data}{Coordinates, time points and format of the data.}
+\item{spec, weights}{Network specification and trained weights.}
+\item{call, data_name}{The function call and the name of the data.}
+
+Use \link[=components.nlbss]{components()} to get the components in the input format, and \link[=predict.nlbss]{predict()},
+\link[=fitted.nlbss]{fitted()}, \link[=summary.nlbss]{summary()} and \link[=plot.nlbss]{plot()} for further analysis.
 }
 \description{
-Trains an identifiable variational autoencoder
-(iVAE) using the input data.
+Fits an identifiable variational autoencoder (iVAE)
+\insertCite{Khemakhem2020}{NonlinearBSS} for nonlinear blind source
+separation. The method can be used for any data for which auxiliary
+variables explaining the nonstationarity of the latent components are
+available, in particular for time series, spatial
+\insertCite{sipila2024spatial}{NonlinearBSS} and spatio-temporal data
+\insertCite{sipila2024modelling}{NonlinearBSS}.
 }
 \details{
-The method constructs and trains an identifiable variational
-autoencoder (iVAE) \insertCite{Khemakhem2020}{NonlinearBSS}
-based on the given parameters.
-iVAE is composed of an encoder \mjeqn{g}{ascii}, a decoder
-\mjeqn{h}{ascii} and
-an auxiliary function \mjeqn{w}{ascii}.
-The encoder transforms the original data
-\mjeqn{x}{ascii} into a mean and a variace
-vectors.
-The mean and the variance are then used to sample a latent representation by
-using a reparametrization trick \insertCite{kingma2013auto}{NonlinearBSS}.
-The decoder aims to transform the latent representation
-\mjeqn{z}{ascii} back to the
-original data. The auxiliary function estimates the mean and the
-variance of the data based on the auxiliary
-data.
-The functions \mjeqn{g}{ascii}, \mjeqn{h}{ascii}
-and \mjeqn{w}{ascii} are deep neural networks
-with parameters
-\mjeqn{\lambda=(\lambda_g, \lambda_h, \lambda_w)^\top}{ascii}.
-The parameters are learned by minimizing the lower bound of the data
-log-likelihood:
-\mjdeqn{
-\mathcal{L}(\theta |  x,  u) \geq
-E_{q_{ \theta_{ g}}( z| x, u)} (
-log \, p_{ \theta_{ h}}(x | z)  +
-log \, p_{ \theta_{w}}(z | u) -
-log \, q_{\theta_{g}}(z | x, u) ).
-}{ascii}
+The observed data \eqn{x} are assumed to be generated as \eqn{x = f(z)},
+where \eqn{f} is an unknown injective mixing function and the latent
+components \eqn{z_1, \dots, z_L} are independent given auxiliary variables
+\eqn{u}. iVAE consists of an encoder \eqn{g(x, u)} giving the mean and
+variance of the approximate posterior \eqn{q(z | x, u)}, a decoder
+\eqn{h(z)} estimating the inverse of the encoder (the mixing function), and
+an auxiliary function \eqn{w(u)} giving the mean and variance of the prior
+\eqn{p(z | u)}. All three are fully connected neural networks, trained by
+maximising the evidence lower bound
+\deqn{E_{q(z|x,u)}[\log p(x | z) + \log p(z | u) - \log q(z | x, u)].}{
+E_q(z|x,u) [log p(x|z) + log p(z|u) - log q(z|x,u)].}
+The first term is the reconstruction accuracy, controlled by \code{error_dist}
+and \code{error_dist_sigma}: decreasing \code{error_dist_sigma} gives more weight to
+the reconstruction. The remaining terms make the posterior close to the
+prior, which leads to independent components. When the variances of the
+latent components vary sufficiently with \eqn{u}, the components are
+identifiable up to permutation and componentwise transformations
+\insertCite{Khemakhem2020,Hyvarinen2019}{NonlinearBSS}. For spatial data,
+segmentations and radial basis functions of the coordinates are suitable
+auxiliary variables \insertCite{sipila2024spatial}{NonlinearBSS}, and for
+spatio-temporal data the corresponding spatio-temporal versions
+\insertCite{sipila2024modelling}{NonlinearBSS}.
 
-In the loss function, \mjeqn{ log \, p_{ \theta_{ h}}(x | z)}{ascii}
-controls the reconstruction error, and have the distribution based on the
-parameter \code{error_dist} where \code{gaussian} or
-\code{laplace} are currently supported. The location of
-the distribution is the original data and the scale parameter
-is given by \code{error_dist_sigma}. The default value for
-\code{error_dist_sigma} is \code{0.02}. By decreasing the value,
-the loss function emphasizes more the reconstruction error and
-by increasing, the reconstruction error has less weight.
-The term \mjeqn{log \, p_{ \theta_{w}}(z | u) -
-log \, q_{\theta_{g}}(z | x, u)}{ascii} tries to make the
-distributions \mjeqn{p_{\theta_{w}}(z | u)}{ascii} and
-\mjeqn{q_{\theta_{g}}(z | x, u)}{ascii} as similar as possible.
-This term controls the disentangling and allows the method
-to find the true latent components.
-The parameter \code{source_dist} defines the distributions
-\mjeqn{p_{ \theta_{w}}(z | u)}{ascii} and
-\mjeqn{q_{\theta_{g}}(z | x, u)}{ascii}.
-The distributions \code{gaussian} and \code{laplace} are currently
-supported.
-The parameters for \mjeqn{p_{ \theta_{w}}(z | u)}{ascii} are given by the
-auxiliary function and the parameters for
-\mjeqn{q_{\theta_{g}}(z | x, u)}{ascii} are given by the encoder.
+The estimated components are the encoder means for the observed data,
+standardised to zero mean and unit variance.
 
-The method is identifiable, meaning that it finds the true latent
-representation in the limit of infinite data, if some conditions are
-satisfied. Loosely speaking, in case of gaussian and laplace distributions,
-the conditions are that the mixing
-function is differentiable and that the variance (or scale)
-of the latent sources are varying based on the auxiliary variable.
-The exact identifiability results are given in
-\insertCite{Khemakhem2020}{NonlinearBSS}.
+\strong{Data formats.} \code{x} can be a numeric matrix or data frame, a time series
+(\code{ts}, \code{xts}, \code{zoo}, \code{tsibble}) or a spatial or spatio-temporal object
+(\code{sf}, \code{sftime}, \code{STFDF}). Coordinates and time points are taken from the
+object; for matrices and data frames they can be given with \code{coords} and
+\code{time}. The results can be extracted in the input format with \link[=components.nlbss]{components()}.
+
+\strong{Auxiliary data.} \code{aux} is a matrix of auxiliary variables or a
+specification created by \code{\link[=aux_segments]{aux_segments()}}, \code{\link[=aux_rbf]{aux_rbf()}}, \code{\link[=aux_coords]{aux_coords()}} or
+\code{\link[=aux_covariates]{aux_covariates()}}, or a list combining several of these. If \code{aux} is
+not given and the data have coordinates or time points, radial basis
+functions \code{\link[=aux_rbf]{aux_rbf()}} are used. With \code{batch_aux = TRUE} all auxiliary
+variables (radial basis functions, segment indicators, coordinates and
+covariates) are computed batch-wise inside the network from the raw
+coordinates, time points and covariates, instead of storing the full
+auxiliary matrix. This gives the same auxiliary variables but saves memory
+for large data.
+
+\strong{Validation and early stopping.} The training can be monitored on a
+validation set given by \code{validation_data}, for example a later time
+period. For \code{\link[=iVAEar]{iVAEar()}} the first validation time points use the end of the
+training data as previous values. Keras callbacks, such as
+\code{keras3::callback_early_stopping()}, are passed with \code{callbacks}.
+
+\strong{Missing values} in \code{x} are allowed. The reconstruction loss ignores
+them and, if \code{mask_encoder = TRUE}, the missingness indicators are given to
+the encoder as extra inputs. Together with covariates as auxiliary
+variables (\code{\link[=aux_covariates]{aux_covariates()}}), for example satellite-derived predictors,
+this allows modelling incomplete monitoring data
+\insertCite{sipila2026missing}{NonlinearBSS}.
 }
 \examples{
-p <- 3
-n_segments <- 10
-n_per_segment <- 100
-n <- n_segments * n_per_segment
-latent_data <- matrix(NA, ncol = p, nrow = n)
-aux_data <- matrix(0, ncol = n_segments, nrow = n)
-# Create artificial data with variance and mean varying over the segments.
-for (i in 1:p) {
-  for (seg in 1:n_segments) {
-    start_ind <- (seg - 1) * n_per_segment + 1
-    end_ind <- seg * n_per_segment
-    aux_data[start_ind:end_ind, seg] <- 1
-    latent_data[start_ind:end_ind, i] <- rnorm(
-      n_per_segment,
-      runif(1, -5, 5), runif(1, 0.1, 5)
-    )
-  }
-}
-mixed_data <- mix_data(latent_data, 2, "elu")
+\dontshow{if (tf_available()) withAutoprint(\{ # examplesIf}
+# Latent components with variance changing over segments
+set.seed(1)
+src <- simulate_sources(3, time = 1:1000, n_segments_time = 10)
+x <- mix_data(src$sources, n_layers = 2)
 
-# For better performance, increase the number of epochs
-res <- iVAE(mixed_data, aux_data, 3, epochs = 10, batch_size = 64)
-cormat <- cor(res$IC, latent_data)
-cormat
-absolute_mean_correlation(cormat)
+# Auxiliary data: segment indicators of the time series
+fit <- iVAE(x, aux = aux_segments(100), time = 1:1000, epochs = 10,
+            verbose = 0, seed = 1)
+fit
+absolute_mean_correlation(fit$S, src$sources)
+
+# Spatial data with radial basis functions as auxiliary data
+coords <- matrix(runif(2000), ncol = 2)
+src <- simulate_sources(3, coords = coords, n_segments_space = 10)
+x <- mix_data(src$sources, n_layers = 2)
+fit <- iVAE(x, aux_rbf(spatial_basis = c(2, 9)), coords = coords,
+            epochs = 10, verbose = 0, seed = 1)
+absolute_mean_correlation(fit$S, src$sources)
+\dontshow{\}) # examplesIf}
 }
 \references{
 \insertAllCited{}
 }
-\author{
-Mika Sipilä
+\seealso{
+\code{\link[=iVAEar]{iVAEar()}}, \code{\link[=VAE]{VAE()}}, \code{\link[=TCL]{TCL()}}, \code{\link[=aux_rbf]{aux_rbf()}}, \code{\link[=aux_segments]{aux_segments()}},
+\code{\link[=predict.nlbss]{predict.nlbss()}}, \code{\link[=save_nlbss]{save_nlbss()}}
 }

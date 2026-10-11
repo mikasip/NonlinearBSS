@@ -1,2 +1,10 @@
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^README\.Rmd$
+^cran-comments\.md$
+^\.github$
+^LICENSE\.md$
+^doc$
+^Meta$
+^vignettes/.*\.orig$
+^vignettes/precompile\.R$
