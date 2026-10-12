@@ -37,6 +37,17 @@ test_that("iVAE fits with matrix, segment and rbf auxiliary data", {
   expect_equal(unname(p2), unname(fit2$S[1:3, ]), tolerance = 1e-4)
 })
 
+test_that("iVAEar works without lagged mask inputs", {
+  skip_if_no_tf()
+  set.seed(2)
+  d <- sim_st(ar = TRUE)
+  fit <- iVAEar(d$x, aux_rbf(c(2, 3), c(3, 5)), ar_order = 2,
+                coords = d$coords, time = d$time, epochs = 1,
+                mask_encoder = FALSE, verbose = 0, seed = 1)
+  expect_s3_class(fit, c("iVAEar", "iVAE", "nlbss"))
+  expect_equal(dim(fit$S), dim(d$x))
+})
+
 test_that("predictions reproduce the training components", {
   skip_if_no_tf()
   set.seed(2)

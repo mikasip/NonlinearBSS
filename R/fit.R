@@ -55,7 +55,7 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
   keras3::compile(net$train, optimizer = optimizer, loss = elbo_loss,
                   metrics = elbo_metrics())
 
-  inputs <- network_inputs(sc$X, sc$mask, A, lags)
+  inputs <- network_inputs(sc$X, sc$mask, A, lags, use_mask = spec$use_mask)
   validation <- NULL
   if (!is.null(vdat)) {
     if (ncol(vdat$X) != p) {
@@ -247,15 +247,20 @@ restore_rng <- function(old) {
 # Inputs of the training network for the rows `rows` of the data matrices.
 # Lagged inputs of observations without previous values are replaced by the
 # observation itself and marked as invalid.
-network_inputs <- function(X, mask, A, lags, rows = seq_len(nrow(X))) {
+network_inputs <- function(X, mask, A, lags, rows = seq_len(nrow(X)), use_mask = TRUE) {
   inputs <- c(list(X[rows, , drop = FALSE], mask[rows, , drop = FALSE]),
               if (!is.null(A)) list(A[rows, , drop = FALSE]))
   for (r in seq_len(if (is.null(lags)) 0 else ncol(lags))) {
     j <- lags[rows, r]
     valid <- !is.na(j)
     j[!valid] <- rows[!valid]
-    inputs <- c(inputs, list(X[j, , drop = FALSE], mask[j, , drop = FALSE],
-                             A[j, , drop = FALSE], matrix(as.numeric(valid))))
+    lag_inputs <- list(X[j, , drop = FALSE], A[j, , drop = FALSE],
+                       matrix(as.numeric(valid)))
+    if (use_mask) {
+      lag_inputs <- list(X[j, , drop = FALSE], mask[j, , drop = FALSE],
+                         A[j, , drop = FALSE], matrix(as.numeric(valid)))
+    }
+    inputs <- c(inputs, lag_inputs)
   }
   inputs
 }

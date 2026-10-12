@@ -82,19 +82,23 @@ build_network <- function(spec, step) {
     prior_mean <- pr$mean
     for (r in seq_len(R)) {
       x_lag <- keras3::layer_input(shape = p, name = paste0("x_lag", r))
-      mask_lag <- keras3::layer_input(shape = p, name = paste0("mask_lag", r))
       aux_lag <- keras3::layer_input(shape = as.integer(spec$n_aux),
                                      name = paste0("aux_lag", r))
       valid_lag <- keras3::layer_input(shape = 1L, name = paste0("valid_lag", r))
+      lag_inputs <- list(x_lag, aux_lag, valid_lag)
+      if (spec$use_mask) {
+        mask_lag <- keras3::layer_input(shape = p, name = paste0("mask_lag", r))
+        lag_inputs <- list(x_lag, mask_lag, aux_lag, valid_lag)
+      }
       f_lag <- features(aux_lag)
-      z_lag <- encode(x_lag, f_lag, mask_lag)$mean
+      z_lag <- encode(x_lag, f_lag, if (spec$use_mask) mask_lag else NULL)$mean
       mean_lag <- prior(f_lag)$mean
       ar_term <- keras3::op_multiply(
         keras3::op_multiply(valid_lag, pr$ar[[r]]),
         keras3::op_subtract(z_lag, mean_lag)
       )
       prior_mean <- keras3::op_add(prior_mean, ar_term)
-      inputs <- c(inputs, list(x_lag, mask_lag, aux_lag, valid_lag))
+      inputs <- c(inputs, lag_inputs)
     }
     prior_log_var <- pr$log_var
   } else {
