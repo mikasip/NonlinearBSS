@@ -15,6 +15,51 @@ sim_st <- function(n_s = 20, n_t = 30, p = 3, ar = FALSE) {
        sources = src$sources)
 }
 
+test_that("manual sanity check: iVAE and iVAEar recover latent components", {
+  skip_if_no_tf()
+  set.seed(2)
+
+  n_s <- 100
+  n_t <- 200
+  p <- 5
+  coords <- matrix(runif(2 * n_s), ncol = 2)[rep(seq_len(n_s), n_t), ]
+  time <- rep(seq_len(n_t), each = n_s)
+  src <- simulate_sources(p, coords = coords, time = time,
+                          n_segments_space = 10, n_segments_time = 20,
+                          ar_range = c(-0.8, 0.8))
+  x <- mix_data(src$sources, n_layers = 3, nonlinearity = "elu",
+                output_dim = p)
+
+  aux <- aux_rbf(spatial_basis = c(2, 9), temporal_basis = c(9, 17))
+  fit_iVAE <- iVAE(x, aux = aux, coords = coords, time = time,
+                   latent_dim = p, epochs = 50, verbose = 0, seed = 1,
+                   batch_aux = FALSE, activation = "elu")
+  fit_iVAE_batch <- iVAE(x, aux = aux, coords = coords, time = time,
+                         latent_dim = p, epochs = 50, verbose = 0, seed = 1,
+                         batch_aux = TRUE, activation = "elu")
+  fit_iVAEar <- iVAEar(x, aux = aux, coords = coords, time = time,
+                       latent_dim = p, ar_order = 1, epochs = 50,
+                       verbose = 0, seed = 1, batch_aux = FALSE,
+                       activation = "elu")
+  fit_iVAEar_batch <- iVAEar(x, aux = aux, coords = coords, time = time,
+                             latent_dim = p, ar_order = 1, epochs = 50,
+                             verbose = 0, seed = 1, batch_aux = TRUE,
+                             activation = "elu")
+
+  mcc_iVAE <- absolute_mean_correlation(fit_iVAE$S, src$sources)
+  mcc_iVAE_batch <- absolute_mean_correlation(fit_iVAE_batch$S, src$sources)
+  mcc_iVAEar <- absolute_mean_correlation(fit_iVAEar$S, src$sources)
+  mcc_iVAEar_batch <- absolute_mean_correlation(fit_iVAEar_batch$S, src$sources)
+
+  expect_gt(mcc_iVAE, 0.9)
+  expect_gt(mcc_iVAE_batch, 0.9)
+  expect_gt(mcc_iVAEar, 0.9)
+  expect_gt(mcc_iVAEar_batch, 0.9)
+
+  expect_equal(mcc_iVAE_batch, mcc_iVAE)
+  expect_equal(mcc_iVAEar_batch, mcc_iVAEar)
+})
+
 test_that("iVAE fits with matrix, segment and rbf auxiliary data", {
   skip_if_no_tf()
   set.seed(1)
