@@ -26,7 +26,7 @@ build_network <- function(spec, step) {
   }
 
   x_in <- keras3::layer_input(shape = p, name = "x")
-  mask_in <- keras3::layer_input(shape = p, name = "mask")
+  mask_in <- if (spec$use_mask) keras3::layer_input(shape = p, name = "mask") else NULL
   aux_in <- if (has_aux) keras3::layer_input(shape = as.integer(spec$n_aux), name = "aux")
 
   aux_features <- NULL
@@ -71,12 +71,13 @@ build_network <- function(spec, step) {
 
   # Training graph
   f0 <- if (has_aux) features(aux_in)
-  enc <- encode(x_in, f0, mask_in)
+  enc <- encode(x_in, f0, if (spec$use_mask) mask_in else NULL)
   sampling <- nlbss_layer("sampling")(dist = spec$source_dist, seed = spec$seed)
   z <- sampling(list(enc$mean, enc$log_var))
   x_hat <- decode(z)
 
-  inputs <- c(list(x_in, mask_in), if (has_aux) list(aux_in))
+  inputs <- c(list(x_in), if (has_aux) list(aux_in), if (spec$use_mask) list(mask_in))
+  loss_mask <- if (spec$use_mask) mask_in else keras3::op_ones_like(x_in)
   if (has_aux) {
     pr <- prior(f0)
     prior_mean <- pr$mean
@@ -111,7 +112,7 @@ build_network <- function(spec, step) {
     sigma_start = sigma[1], sigma_end = sigma[length(sigma)],
     steps = spec$steps, step = step
   )
-  out <- elbo(list(x_in, x_hat, mask_in, z, enc$mean, enc$log_var,
+  out <- elbo(list(x_in, x_hat, loss_mask, z, enc$mean, enc$log_var,
                    prior_mean, prior_log_var))
   train <- keras3::keras_model(inputs, out)
 
