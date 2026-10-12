@@ -1,800 +1,105 @@
-#' Identifiable Variational Autoencoder with AR(R) Latent Structure
+#' Identifiable Variational Autoencoder with Autoregressive Latent Components
 #'
-#' @description \loadmathjax This function keras3::fits an Identifiable Variational Autoencoder (iVAE) model where the latent 
-#' variables follow an AR(R) process, R being the autoregressive order.
-#' It also supports handling auxiliary data and accommodates various 
-#' choices for source and error distributions.
+#' Fits an identifiable variational autoencoder whose latent components follow
+#' nonstationary autoregressive processes (iVAEar). The method is meant for
+#' time series, spatio-temporal data and other data with a time component,
+#' such as panel data \insertCite{sipila2025ivaear}{NonlinearBSS}.
 #'
-#' @param data A numeric matrix of observed data (n x p), where n is the number of samples, 
-#' and p is the number of features.
-#' @param aux_data A numeric matrix of auxiliary data (n x m), where m is the number of auxiliary variables.
-#' @param latent_dim An integer specifying the latent dimension.
-#' @param prev_data_list A list of numeric matrices of previously observed data, 
-#' used for constructing the AR(R) latent prior.
-#' @param prev_aux_data_list A list of numeric matrices of auxiliary data for the previous observations.
-#' @param hidden_units A numeric vector specifying the number of units in each hidden layer for the encoder and decoder.
-#' @param aux_hidden_units A numeric vector specifying the number of units in each 
-#' hidden layer in auxiliary function.
-#' @param activation A string specifying the activation function to be used in hidden layers. Default is `"leaky_relu"`.
-#' @param source_dist A character string specifying the distribution for the latent variables. Choices are `"gaussian"` (default) or `"laplace"`.
-#' @param validation_split A numeric value specifying the fraction of training data to use for validation during model keras3::fitting. Default is 0.
-#' @param error_dist A string specifying the distribution for the reconstruction error. Choices are `"gaussian"` (default) or `"laplace"`.
-#' @param error_dist_sigma A numeric value specifying the standard deviation for the error distribution. Default is 0.01.
-#' @param optimizer An optional Keras optimizer object. If NULL (default), an Adam optimizer with polynomial decay is used.
-#' @param lr_start A numeric value for the initial learning rate. Default is 0.001.
-#' @param lr_end A numeric value for the final learning rate. Default is 0.0001.
-#' @param ar_order An autoregressive order used in iVAEar.
-#' @param steps An integer specifying the number of optimization steps for polynomial learning rate decay. Default is 10,000.
-#' @param seed An optional integer for setting the random seed to ensure reproducibility. Default is NULL.
-#' @param get_elbo Logical. If TRUE, the model returns the final ELBO value. Default is FALSE.
-#' @param epochs An integer specifying the number of training epochs.
-#' @param batch_size An integer specifying the batch size for training.
+#' @details
+#' iVAEar extends [iVAE()] by an autoregressive prior. For an observation of
+#' series \eqn{s} (a location or a group) at time \eqn{t}, the auxiliary
+#' function gives the trend \eqn{\mu_i(s, t)}, the variance
+#' \eqn{\sigma^2_i(s, t)} and the autoregressive coefficients
+#' \eqn{\gamma_{i,r}(s, t)}, \eqn{r = 1, \dots, R}, of each latent
+#' component, and the prior is
+#' \deqn{z_i(s, t) = \mu_i(s, t) + \sum_{r=1}^R \gamma_{i,r}(s, t)
+#' (z_i(s, t - r) - \mu_i(s, t - r)) + \epsilon_i(s, t),}{
+#' z_i(s,t) = mu_i(s,t) + sum_r gamma_ir(s,t) (z_i(s,t-r) - mu_i(s,t-r)) + eps_i(s,t),}
+#' where \eqn{\epsilon_i(s, t)} has variance \eqn{\sigma^2_i(s, t)}. The
+#' previous values \eqn{z_i(s, t - r)} are given by the encoder applied to
+#' the previous observations of the same series. The components are
+#' identifiable when either the variances or the autoregressive
+#' coefficients vary sufficiently \insertCite{sipila2025ivaear}{NonlinearBSS}.
+#' Temporal dependence as a source of identifiability in nonlinear ICA goes
+#' back to \insertCite{HyvarinenMorioka2017;textual}{NonlinearBSS}. The
+#' spatio-temporal auxiliary data are the same as for the spatio-temporal
+#' iVAE in the Neural Networks article of
+#' \insertCite{sipila2024modelling;textual}{NonlinearBSS}.
 #'
-#' @details The iVAEar method extends spatio-temporal identifiable variational 
-#' autoencoders (\code{\link{iVAE}}) with an autoregressive (AR) structure. It consists of:
+#' The lag \eqn{r} refers to the \eqn{r}-th previous distinct time point in
+#' the data. The series are identified by `group` if given, otherwise by the
+#' spatial coordinates; without either the data are a single time series.
+#' Observations without the needed previous observations (the first time
+#' points, or after gaps) use the trend only. The rows of `x` can be in any
+#' order.
 #'
-#' Encoder \mjeqn{\mathbf{g}(\mathbf{x}, \mathbf{u})}{ascii}: Maps observations 
-#' \mjeqn{\mathbf{x}}{ascii} and auxiliary variables \mjeqn{\mathbf{u}}{ascii} to 
-#' latent variables \mjeqn{\mathbf{z}}{ascii}.
-#' 
-#' Decoder \mjeqn{\mathbf{h}(\mathbf{x})}{ascii}: Reconstructs \mjeqn{\mathbf{x}}{ascii} 
-#' from the latent representations.
-#' 
-#' Auxiliary Function \mjeqn{\mathbf{w}(\mathbf{u})}{ascii}: Estimates parameters of 
-#' the autoregressive latent prior.
-#' 
-#' In particular, the auxiliary function gives spatio-temporal trend 
-#' (\mjeqn{\mathbf{\mu}(\mathbf{s}, t)}{ascii}), variance (\mjeqn{\mathbf{\sigma}(\mathbf{s}, t)}{ascii}) 
-#' and AR coefficient (\mjeqn{\mathbf{\gamma_r}(\mathbf{s}, t), r=1,\dots, W}{ascii}) functions. 
-#' The parameter \mjeqn{W}{ascii} in the equations correspond to the parameter \code{ar_order} 
-#' set by user, \mjeqn{\mathbf{s}}{ascii} is the spatial location and \mjeqn{t} is the 
-#' temporal location. The latent components \mjeqn{z_1, \dots, z_P}{ascii} are 
-#' assumed to be generated through the following autoregressive process:
-#' 
-#' \mjeqn{\mathbf{z}^t_i = \mu_i(\mathbf{s}, t) + \sum_{r=1}^{W} \gamma_{i,r}(\mathbf{s}, t) (\mathbf{z}_i^{t-r} - \mu_i(\mathbf{s}, t - r)) + \epsilon_i(\mathbf{s}, t)}{ascii}
-#' 
-#' where \mjeqn{\epsilon_i \sim \mathcal{N}(\mathbf{0}, \sigma(\mathbf{s}, t))}{ascii} is Gaussian noise.
-#' 
-#' The model optimizes the **evidence lower bound (ELBO):
-#' 
-#' \mjeqn{\mathcal{L} = \mathbb{E}_{q(\mathbf{z} | \mathbf{x}, \mathbf{u})} \left[ \log p(\mathbf{x} | \mathbf{z}) \right] - D_{\text{KL}}(q(\mathbf{z} | \mathbf{x}, \mathbf{u}) \| p(\mathbf{z} | \mathbf{u}))}{ascii}
-#' 
-#' where:
-#' 
-#' The first term maximizes reconstruction accuracy by ensuring 
-#' \mjeqn{\mathbf{x}}{ascii} can be recovered from \mjeqn{\mathbf{z}}{ascii}.
-#' 
-#' The second term regularizes the latent space, enforcing an 
-#' autoregressive prior structure through \mjeqn{\mathbf{w}(\mathbf{u})}{ascii}.
-#' 
-#' The framework is implemented using deep neural networks, optimizing 
-#' via stochastic gradient descent. This approach ensures latent variables 
-#' retain meaningful spatio-temporal dependencies, improving predictive 
-#' performance in complex datasets.
+#' The fitted trend, variance and autoregressive coefficient functions can
+#' be evaluated at new locations and time points, and the latent components
+#' can be forecast, using [predict()][predict.nlbss].
 #'
-#' @return 
-#' #' A keras3::fitted iVAEar object of class \code{iVAEar}, which inherits from class \code{\link{iVAE}}.
-#' In addition the object has the following field:
-#' \item{prior_ar_model}{A model, which outputs the estimated AR coefficients
-#' by the auxiliary function.}
-#' 
-#' @examples
-#' p <- 3
-#' n_time <- 100
-#' n_spat <- 50
-#' coords_time <- cbind(
-#'     rep(runif(n_spat), n_time), rep(runif(n_spat), n_time),
-#'     rep(1:n_time, each = n_spat)
-#' )
-#' data_obj <- generate_nonstationary_spatio_temporal_data_by_segments(
-#'     n_time,
-#'     n_spat, p, 5, 10, coords_time
-#' )
-#' latent_data <- data_obj$data
-#' # Generate artificial observed data by applying a nonlinear mixture
-#' obs_data <- mix_data(latent_data, 2)
+#' See [iVAE()] for the supported data formats, auxiliary data and missing
+#' values.
 #'
-#' # Increase the number of epochs for better performance.
-#' resiVAE <- iVAEar_radial(
-#'   data = obs_data, 
-#'   spatial_locations = coords_time[, 1:2],
-#'   time_points = coords_time[, 3],
-#'   latent_dim = p, 
-#'   n_s = n_spat,
-#'   epochs = 1,
-#'   batch_size = 64
-#' )
-#' cormat <- cor(resiVAE$IC, latent_data)
-#' cormat
-#' absolute_mean_correlation(cormat)
+#' @inheritParams iVAE
+#' @param ar_order The autoregressive order \eqn{R}.
+#' @return An object of class `c("iVAEar", "iVAE", "nlbss")`, see [iVAE()].
+#'   In addition, the element `lags` gives for each observation the rows of
+#'   its previous observations.
+#' @seealso [iVAE()], [predict.nlbss()], [aux_rbf()], [aux_segments()]
 #' @references \insertAllCited{}
-#' @author Mika Sipilä
-#' 
+#' @examplesIf tf_available()
+#' # Spatio-temporal data: 50 locations observed at 100 time points
+#' set.seed(1)
+#' n_s <- 50
+#' n_t <- 100
+#' coords <- matrix(runif(2 * n_s), ncol = 2)[rep(1:n_s, n_t), ]
+#' time <- rep(1:n_t, each = n_s)
+#' src <- simulate_sources(3, coords = coords, time = time,
+#'                         n_segments_space = 5, n_segments_time = 10,
+#'                         ar_range = c(-0.8, 0.8))
+#' x <- mix_data(src$sources, n_layers = 2)
+#'
+#' fit <- iVAEar(x, aux_rbf(spatial_basis = c(2, 5), temporal_basis = c(5, 10)),
+#'               coords = coords, time = time, epochs = 5, verbose = 0, seed = 1)
+#' summary(fit)
+#' absolute_mean_correlation(fit$S, src$sources)
+#'
+#' # Forecast the components for the next two time points
+#' new_coords <- coords[1:(2 * n_s), ]
+#' fc <- predict(fit, type = "forecast", coords = new_coords,
+#'               time = rep(n_t + 1:2, each = n_s))
+#' dim(fc)
 #' @export
-iVAEar <- function(data, aux_data, latent_dim, prev_data_list, prev_aux_data_list, hidden_units = c(128, 128, 128), aux_hidden_units = c(128, 128, 128),
-                     activation = "leaky_relu", source_dist = "gaussian", validation_split = 0, error_dist = "gaussian",
-                     error_dist_sigma = 0.01, optimizer = NULL, lr_start = 0.001, lr_end = 0.0001, ar_order = 1,
-                     add_mask_to_encoder = TRUE, steps = 10000, seed = NULL, get_elbo = FALSE, epochs, batch_size) {
-  source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
-  source_log_pdf <- switch(source_dist,
-    "gaussian" = norm_log_pdf,
-    "laplace" = laplace_log_pdf,
+iVAEar <- function(x, aux = NULL, latent_dim = NULL, ar_order = 1,
+                   coords = NULL, time = NULL, group = NULL, vars = NULL,
+                   batch_aux = FALSE, hidden_units = c(128, 128, 128),
+                   aux_hidden_units = c(128, 128, 128),
+                   activation = "leaky_relu",
+                   source_dist = c("gaussian", "laplace"),
+                   error_dist = c("gaussian", "laplace", "huber", "poisson",
+                                  "bernoulli"),
+                   error_dist_sigma = 0.01, mask_encoder = TRUE,
+                   optimizer = NULL, lr_start = 0.001, lr_end = 0.0001,
+                   steps = 10000, epochs = 100, batch_size = 64,
+                   validation_split = 0, validation_data = NULL,
+                   callbacks = NULL, seed = NULL, verbose = 1) {
+  check_common_args(epochs, batch_size, validation_split)
+  check_validation(validation_data, validation_split)
+  if (!is.numeric(ar_order) || length(ar_order) != 1 || ar_order < 1) {
+    stop("`ar_order` must be a positive integer.", call. = FALSE)
+  }
+  dat <- nlbss_data(x, coords = coords, time = time, group = group,
+                    vars = vars, aux_cols = aux_columns(aux))
+  fit_vae_family(
+    "iVAEar", dat, aux, batch_aux, latent_dim, ar_order = as.integer(ar_order),
+    hidden_units = hidden_units, aux_hidden_units = aux_hidden_units,
+    activation = activation, source_dist = match.arg(source_dist),
+    error_dist = match.arg(error_dist), error_dist_sigma = error_dist_sigma,
+    mask_encoder = mask_encoder, optimizer = optimizer, lr_start = lr_start,
+    lr_end = lr_end, steps = steps, epochs = epochs, batch_size = batch_size,
+    validation_split = validation_split, seed = seed, verbose = verbose,
+    call = match.call(), data_name = deparse1(substitute(x)),
+    vdat = validation_nlbss(validation_data, dat, coords, time, group,
+                            aux_columns(aux)), callbacks = callbacks
   )
-  error_dist <- match.arg(error_dist, c("gaussian", "laplace", "huber", "poisson", "bernoulli"))
-  error_log_pdf <- switch(error_dist,
-    "gaussian" = norm_log_pdf,
-    "laplace" = laplace_log_pdf,
-    "huber" = huber_loss,
-    "poisson"  = poisson_log_pdf,
-    "bernoulli" = bernoulli_log_pdf
-  )
-  call_params <- list(
-    latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
-    error_dist_sigma = error_dist_sigma, hidden_units = hidden_units,
-    aux_hidden_units = aux_hidden_units, activation = activation,
-    epochs = epochs, batch_size = batch_size, lr_start = lr_start,
-    lr_end = lr_end, seed = seed, optimizer = optimizer
-  )
-
-  mask <- (!is.na(data)) * 1L
-
-  n <- as.integer(dim(data)[1])
-  p <- as.integer(dim(data)[2])
-
-  if (error_dist == "poisson") {
-    data_means  <- rep(0.0, p)
-    data_sds    <- rep(1.0, p)
-    data_scaled <- data * 1.0
-    data_scaled[which(mask == 0)] <- 0
-  } else if (error_dist == "bernoulli") {
-    # Expect binary data in {0,1}. If not, warn and threshold at 0.5.
-    if (!all((data[!is.na(data)] %in% c(0,1)))) {
-      warning("Data for 'bernoulli' error_dist is not binary; casting values > 0.5 to 1, else 0")
-      data_bin <- ifelse(data > 0.5, 1L, 0L)
-    } else {
-      data_bin <- data
-    }
-    data_means <- rep(0.0, p)
-    data_sds <- rep(1.0, p)
-    data_scaled <- data_bin * 1.0
-    data_scaled[which(mask == 0)] <- 0
-  } else {
-    data_means <- colMeans(data, na.rm = TRUE)
-    data_sds <- apply(data, 2, function(col) { sd(col, na.rm = TRUE) })
-    data_cent <- sweep(data, 2, data_means, "-")
-    data_scaled <- sweep(data_cent, 2, data_sds, "/")
-    data_scaled[which(mask == 0)] <- 0
-  }
-  
-  prev_mask_list <- list()
-  for (i in seq_along(prev_data_list)) {
-    prev_mask_list <- append(prev_mask_list, list((!is.na(prev_data_list[[i]])) * 1L))
-    prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_means, "-")
-    prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_sds, "/")
-    prev_data_list[[i]][which(is.na(prev_data_list[[i]]))] <- 0
-  }
-
-  if (!is.null(seed)) {
-    tensorflow::tf$keras$utils$set_random_seed(as.integer(seed))
-  }
-  dim_aux <- as.integer(dim(aux_data)[2])
-  if (n != dim(aux_data)[1]) {
-    stop("Observed data and auxiliary data must have same sample size")
-  }
-
-  mask_input <- keras3::layer_input(p)
-  aux_input <- keras3::layer_input(dim_aux)
-  prior_v <- aux_input
-  prev_aux_inputs <- list()
-  prev_data_inputs <- list()
-  prev_z <- list()
-  prev_prior_means <- list()
-  prev_mask_inputs <- list()
-  for (i in 1:ar_order) {
-    input_aux_i <- keras3::layer_input(dim_aux)
-    input_data_i <- keras3::layer_input(p)
-    mask_input_i <- keras3::layer_input(p)
-    prev_aux_inputs <- append(prev_aux_inputs, input_aux_i)
-    prev_prior_means <- append(prev_prior_means, input_aux_i)
-    prev_data_inputs <- append(prev_data_inputs, input_data_i)
-    prev_mask_inputs <- append(prev_mask_inputs, mask_input_i)
-    if (!all(mask == 1) && add_mask_to_encoder) {
-      prev_z <- append(prev_z, keras3::layer_concatenate(list(input_data_i, input_aux_i, mask_input_i)))
-    } else {
-      prev_z <- append(prev_z, keras3::layer_concatenate(list(input_data_i, input_aux_i)))
-    }
-  }
-  for (n_units in aux_hidden_units) {
-    layer <- keras3::layer_dense(units = n_units, activation = activation)
-    prior_v <- prior_v %>% layer()
-    for (i in 1:ar_order) {
-      prev_prior_means[[i]] <- prev_prior_means[[i]] %>% layer()
-    }
-  }
-  prior_ar_coefs <- prior_v %>% keras3::layer_dense(units = latent_dim * ar_order, activation = "tanh")
-  prior_ar_model <- keras3::keras_model(aux_input, prior_ar_coefs)
-  
-  prior_log_var <- prior_v %>% keras3::layer_dense(units = latent_dim)
-  prior_mean_layer <- keras3::layer_dense(units = latent_dim)
-  prior_mean <- prior_v %>% prior_mean_layer()
-  prior_v <- keras3::layer_concatenate(list(prior_mean, prior_log_var, prior_ar_coefs))
-  prior_log_var_model <- keras3::keras_model(aux_input, prior_log_var)
-  prior_mean_model <- keras3::keras_model(aux_input, prior_mean)
-
-  for (i in 1:ar_order) {
-    prev_prior_means[[i]] <- prev_prior_means[[i]] %>% prior_mean_layer()  
-  }
-
-  input_data <- keras3::layer_input(p)
-  if (!all(mask == 1) && add_mask_to_encoder) {
-    encoder_input_list <- list(input_data, aux_input, mask_input)
-  } else {
-    encoder_input_list <- list(input_data, aux_input)
-  }
-  input <- keras3::layer_concatenate(encoder_input_list)
-  submodel <- input
-  for (n_units in hidden_units) {
-    new_layer <- keras3::layer_dense(units = n_units, activation = activation)
-    submodel <- submodel %>% new_layer()
-    for (i in 1:ar_order) {
-      prev_z[[i]] <- prev_z[[i]] %>% new_layer()
-    }
-  }
-  z_mean_layer <- keras3::layer_dense(units = latent_dim)
-  z_log_var_layer <- keras3::layer_dense(units = latent_dim)
-  z_mean <- submodel %>% z_mean_layer()
-  z_log_var <- submodel %>% z_log_var_layer()
-  z_mean_and_var <- keras3::layer_concatenate(list(z_mean, z_log_var))
-  encoder <- keras3::keras_model(encoder_input_list, z_mean)
-  z_log_var_model <- keras3::keras_model(encoder_input_list, z_log_var)
-
-  for (i in 1:ar_order) {
-    prev_z[[i]] <- prev_z[[i]] %>% z_mean_layer()
-  }
-
-  sampling_layer <- switch(source_dist,
-    "gaussian" = sampling_gaussian(p = latent_dim),
-    "laplace" = sampling_laplace(p = latent_dim)
-  )
-  z <- z_mean_and_var %>% sampling_layer()
-
-  x_decoded_mean <- z
-  input_decoder <- keras3::layer_input(latent_dim)
-  output_decoder <- input_decoder
-  for (n_units in rev(hidden_units)) {
-    dense_layer <- keras3::layer_dense(units = n_units, activation = activation)
-    x_decoded_mean <- x_decoded_mean %>%
-      dense_layer()
-    output_decoder <- output_decoder %>% dense_layer()
-  }
-  if (error_dist == "poisson") {
-    out_layer <- keras3::layer_dense(units = p)
-  } else if (error_dist == "bernoulli") {
-    out_layer <- keras3::layer_dense(units = p, activation = "sigmoid")
-  } else {
-    out_layer <- keras3::layer_dense(units = p)
-  }
-  x_decoded_mean <- x_decoded_mean %>% out_layer()
-  output_decoder <- output_decoder %>% out_layer()
-  decoder <- keras3::keras_model(input_decoder, output_decoder)
-  output <- list(x_decoded_mean, z, z_mean_and_var, prior_v, mask_input)
-  output <- append(output, prev_z)
-  output <- append(output, prev_prior_means)
-  final_output <- keras3::layer_concatenate(output)
-
-  inputs <- list(input_data, aux_input, mask_input)
-  inputs <- append(inputs, prev_data_inputs)
-  inputs <- append(inputs, prev_aux_inputs)
-  if (!all(mask == 1) && add_mask_to_encoder) {
-    inputs <- append(inputs, prev_mask_inputs)
-  }
-  vae <- keras3::keras_model(inputs, final_output)
-  vae_loss <- function(x, res) {
-    x_mean <- res[, 1:p]
-    z_sample <- res[, (1 + p):(p + latent_dim)]
-    z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
-    z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
-    prior_mean <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
-    prior_log_v <- res[, (p + 4 * latent_dim + 1):(p + 5 * latent_dim)]
-    start_i <- p + 5 * latent_dim + 1
-    end_i <- p + 5 * latent_dim + latent_dim * ar_order
-    prior_ar <- res[, start_i:end_i]
-    mask <- res[, (end_i + 1):(end_i + p)]
-    prev_z <- res[, (end_i + p + 1):(end_i + p + ar_order * latent_dim)]
-    prior_prev_mean <- res[, (end_i + p + ar_order * latent_dim + 1):(end_i + p + (2 * ar_order) * latent_dim)]
-    ar_prev_mult <- tensorflow::tf$math$multiply(prior_ar, (prev_z - prior_prev_mean))
-    prior_mean_final <- prior_mean + ar_prev_mult[, 1:latent_dim]
-    if (ar_order > 1) {
-      for (i in 2:ar_order) {
-        prior_mean_final <- prior_mean_final + ar_prev_mult[, ((i - 1) * latent_dim + 1):(i * latent_dim)]
-      }
-    }
-    log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
-      
-    masked_log_px_z <- log_px_z_unreduced * mask
-    log_px_z <- tensorflow::tf$reduce_sum(masked_log_px_z, axis = -1L)
-    
-    log_qz_xu <- source_log_pdf(z_sample, z_mean, tensorflow::tf$math$exp(z_logvar))
-    
-    log_pz_u <- source_log_pdf(z_sample, prior_mean_final, tensorflow::tf$math$exp(prior_log_v))
-    
-    return(-tensorflow::tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L))
-  }
-  if (is.null(optimizer)) {
-    optimizer <- tensorflow::tf$keras$optimizers$Adam(learning_rate = tensorflow::tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2))
-  }
-
-  metric_reconst_accuracy <- keras3::custom_metric("metric_reconst_accuracy", function(x, res) {
-    x_mean <- res[, 1:p]
-    mask <- res[, (p + 5 * latent_dim + latent_dim * ar_order + 1):(2 * p + 5 * latent_dim + latent_dim * ar_order)]
-    log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
-    masked_log_px_z <- log_px_z_unreduced * mask
-    log_px_z <- tensorflow::tf$reduce_sum(masked_log_px_z, axis = -1L)
-    return(tensorflow::tf$reduce_mean(log_px_z, -1L))
-  })
-
-  vae %>% keras3::compile(
-    optimizer = optimizer,
-    loss = vae_loss,
-    metrics = list(metric_reconst_accuracy)
-  )
-  
-  inputs <- list(data_scaled, aux_data, mask)
-  inputs <- append(inputs, prev_data_list)  
-  inputs <- append(inputs, prev_aux_data_list)
-  if (!all(mask == 1) && add_mask_to_encoder) {
-    inputs <- append(inputs, prev_mask_list)
-  }
-
-  hist <- vae %>% keras3::fit(inputs, data_scaled, 
-    validation_split = validation_split, shuffle = TRUE, 
-    batch_size = batch_size, epochs = epochs)
-
-  if (!all(mask == 1) && add_mask_to_encoder) {
-    encoder_input_list <- list(data_scaled, aux_data, mask)
-  } else {
-    encoder_input_list <- list(data_scaled, aux_data)
-  }
-
-  IC_estimates <- predict(encoder, encoder_input_list)
-  IC_log_vars <- predict(z_log_var_model, encoder_input_list)
-  if (get_elbo) {
-    print("Calculating ELBO...")
-    obs_estimates <- predict(decoder, IC_estimates)
-    prior_means <- predict(prior_mean_model, aux_data)
-    prior_mean_ests <- prior_means
-    for (i in 1:ar_order) {
-      if (!all(mask == 1) && add_mask_to_encoder) {
-        prev_input_list <- list(prev_data_list[[i]], prev_aux_data_list[[i]], prev_mask_list[[i]])
-      } else {
-        prev_input_list <- list(prev_data_list[[i]], prev_aux_data_list[[i]])
-      }
-      prior_means_prev <- predict(prior_mean_model, prev_aux_data_list[[1]])
-      IC_estimates_prev <- predict(encoder, prev_input_list)
-      prior_log_vars <- predict(prior_log_var_model, aux_data)
-      prior_ars <- predict(prior_ar_model, aux_data)
-      prior_mean_ests <- prior_mean_ests + prior_ars[, ((i - 1) * latent_dim + 1):(i * latent_dim)] * (IC_estimates_prev - prior_means_prev)
-    }
-    log_px_z <- error_log_pdf(tensorflow::tf$constant(data_scaled, "float32"), 
-        tensorflow::tf$cast(obs_estimates, "float32"), tensorflow::tf$constant(error_dist_sigma, 
-            "float32"))
-    log_qz_xu <- source_log_pdf(tensorflow::tf$cast(IC_estimates, "float32"), 
-        tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$math$exp(tensorflow::tf$cast(IC_log_vars, 
-            "float32")))
-    log_pz_u <- source_log_pdf(tensorflow::tf$cast(IC_estimates, "float32"), 
-        tensorflow::tf$cast(prior_mean_ests, "float32"), tensorflow::tf$math$exp(tensorflow::tf$cast(prior_log_vars, 
-            "float32")))
-    elbo <- tensorflow::tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L)
-  } else elbo <- NULL
-
-  IC_log_vars <- predict(z_log_var_model, encoder_input_list)
-  IC_means <- colMeans(IC_estimates)
-  IC_sds <- apply(IC_estimates, 2, sd)
-  IC_estimates_cent <- sweep(IC_estimates, 2, IC_means, "-")
-  IC_estimates_scaled <- sweep(IC_estimates_cent, 2, IC_sds, "/")
-  IC_vars <- exp(IC_log_vars)
-  IC_vars_scaled <- sweep(IC_vars, 2, IC_sds^2, "/")
-
-  iVAE_object <- list(
-    IC_unscaled = IC_estimates, IC = IC_estimates_scaled, data_dim = p, ar_order = ar_order,
-    sample_size = n, prior_ar_model = prior_ar_model, prior_mean_model = prior_mean_model,
-    prior_log_var_model = prior_log_var_model,
-    aux_dim = dim_aux, encoder = encoder, decoder = decoder, data_means = data_means,
-    mask = mask, add_mask_to_encoder = add_mask_to_encoder,
-    data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds, call_params = call_params, elbo = elbo, 
-    metrics = hist, call = deparse(sys.call()), DNAME = paste(deparse(substitute(data)))
-  )
-
-  class(iVAE_object) <- c("iVAE", "iVAEar")
-  return(iVAE_object)
-}
-
-iVAEar_b <- function(data, spatial_locations, time_points, latent_dim, prev_data_list, prev_spatial_list, prev_time_list,
-                          aux_extra = NULL, prev_aux_extra_list = NULL,
-                          spatial_dim = 2, spatial_basis = c(2,9), temporal_basis = c(9,17,37),
-                          spatial_kernel = "gaussian", week_component = FALSE, seasonal_period = NULL, max_season = NULL,
-                          elevation = NULL, elevation_basis = NULL, min_coords, max_coords, min_time_point, max_time_point,
-                          hidden_units = c(128,128,128), aux_hidden_units = c(128,128,128),
-                          activation = "leaky_relu", source_dist = "gaussian", validation_split = 0,
-                          error_dist = "gaussian", error_dist_sigma = 0.01, optimizer = NULL,
-                          lr_start = 0.001, lr_end = 0.0001, ar_order = 1, steps = 10000,
-                          seed = NULL, get_elbo = TRUE, epochs, batch_size) {
-
-  source_dist <- match.arg(source_dist, c("gaussian", "laplace"))
-  source_log_pdf <- switch(source_dist, "gaussian" = norm_log_pdf, "laplace" = laplace_log_pdf)
-  error_dist <- match.arg(error_dist, c("gaussian", "laplace", "huber", "poisson", "bernoulli"))
-  error_log_pdf <- switch(error_dist, "gaussian" = norm_log_pdf, "laplace" = laplace_log_pdf, "huber" = huber_loss, "poisson" = poisson_log_pdf, "bernoulli" = bernoulli_log_pdf)
-
-  call_params <- list(latent_dim = latent_dim, source_dist = source_dist, error_dist = error_dist,
-                      error_dist_sigma = error_dist_sigma, hidden_units = hidden_units,
-                      aux_hidden_units = aux_hidden_units, activation = activation,
-                      epochs = epochs, batch_size = batch_size, lr_start = lr_start,
-                      lr_end = lr_end, seed = seed, optimizer = optimizer)
-
-  mask <- (!is.na(data)) * 1L
-  n <- as.integer(dim(data)[1])
-  p <- as.integer(dim(data)[2])
-
-  # scale data same as before (special-case poisson/bernoulli)
-  if (error_dist == "poisson") {
-    data_means  <- rep(0.0, p)
-    data_sds    <- rep(1.0, p)
-    data_scaled <- data * 1.0
-    data_scaled[which(mask == 0)] <- 0
-  } else if (error_dist == "bernoulli") {
-    if (!all((data[!is.na(data)] %in% c(0,1)))) {
-      warning("Data for 'bernoulli' error_dist is not binary; casting values > 0.5 to 1, else 0")
-      data_bin <- ifelse(data > 0.5, 1L, 0L)
-    } else {
-      data_bin <- data
-    }
-    data_means <- rep(0.0, p)
-    data_sds <- rep(1.0, p)
-    data_scaled <- data_bin * 1.0
-    data_scaled[which(mask == 0)] <- 0
-  } else {
-    data_means <- colMeans(data, na.rm = TRUE)
-    data_sds <- apply(data, 2, function(col) { sd(col, na.rm = TRUE) })
-    data_cent <- sweep(data, 2, data_means, "-")
-    data_scaled <- sweep(data_cent, 2, data_sds, "/")
-    data_scaled[which(mask == 0)] <- 0
-  }
-
-  prev_mask_list <- list()
-  for (i in seq_along(prev_data_list)) {
-    prev_mask_list <- append(prev_mask_list, list((!is.na(prev_data_list[[i]])) * 1L))
-    prev_data_list[[i]][which(is.na(prev_data_list[[i]]))] <- 0
-    prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_means, "-")
-    prev_data_list[[i]] <- sweep(prev_data_list[[i]], 2, data_sds, "/")
-  }
-
-  if (!is.null(seed)) tensorflow::tf$keras$utils$set_random_seed(as.integer(seed))
-
-  # ---- build inputs ----
-  spatial_dim_in <- as.integer(ncol(spatial_locations))
-  spatial_input <- keras3::layer_input(shape = spatial_dim_in)
-  temporal_input <- keras3::layer_input(shape = 1L)
-  if (!is.null(elevation)) {
-    elevation_input <- keras3::layer_input(shape = 1L)
-    rbf_inputs_for_prior <- list(spatial_input, temporal_input, elevation_input)
-  } else {
-    elevation_input <- NULL
-    rbf_inputs_for_prior <- list(spatial_input, temporal_input)
-  }
-
-  # RBF layer instantiation
-  rbf_layer <- layer_radial_basis(
-    spatial_basis = spatial_basis,
-    temporal_basis = temporal_basis,
-    min_coords = min_coords,
-    max_coords = max_coords,
-    min_time_point = min_time_point,
-    max_time_point = max_time_point,
-    spatial_kernel = spatial_kernel,
-    week_component = week_component,
-    seasonal_period = seasonal_period,
-    max_season = max_season,
-    elevation_basis = elevation_basis,
-    min_elevation = if (!is.null(elevation)) min(elevation) else NULL,
-    max_elevation = if (!is.null(elevation)) max(elevation) else NULL
-  )
-
-  # compute rbf features tensor
-  if (!is.null(elevation_input)) {
-    rbf_features <- rbf_layer(list(spatial_input, temporal_input, elevation_input))
-  } else {
-    rbf_features <- rbf_layer(list(spatial_input, temporal_input))
-  }
-
-  # optional extra aux variables (small number, kept in R)
-  if (!is.null(aux_extra)) {
-    aux_input_extra <- keras3::layer_input(shape = as.integer(ncol(aux_extra)))
-    aux_input <- keras3::layer_concatenate(list(rbf_features, aux_input_extra))
-  } else {
-    aux_input_extra <- NULL
-    aux_input <- rbf_features
-  }
-
-  # --- AR prev inputs: for each lag we need prev data (p), prev spatial, prev time, optionally prev elevation and prev aux extra
-  prev_data_inputs <- list()
-  prev_spatial_inputs <- list()
-  prev_time_inputs <- list()
-  prev_elev_inputs <- list()
-  prev_mask_inputs <- list()
-  prev_aux_extra_inputs <- list()
-  prev_z <- list()
-  prev_prior_means <- list()
-
-  for (i in 1:ar_order) {
-    input_data_i <- keras3::layer_input(shape = p)
-    input_spat_i <- keras3::layer_input(shape = spatial_dim_in)
-    input_time_i <- keras3::layer_input(shape = 1L)
-    prev_data_inputs <- append(prev_data_inputs, input_data_i)
-    prev_spatial_inputs <- append(prev_spatial_inputs, input_spat_i)
-    prev_time_inputs <- append(prev_time_inputs, input_time_i)
-
-    if (!is.null(elevation)) {
-      input_elev_i <- keras3::layer_input(shape = 1L)
-      prev_elev_inputs <- append(prev_elev_inputs, input_elev_i)
-    } else input_elev_i <- NULL
-
-    if (!is.null(aux_extra)) {
-      input_aux_extra_i <- keras3::layer_input(shape = as.integer(ncol(aux_extra)))
-      prev_aux_extra_inputs <- append(prev_aux_extra_inputs, input_aux_extra_i)
-      # form prev_aux_i by concatenating rbf(prev_spat, prev_time, maybe elev) with prev_aux_extra
-      if (!is.null(input_elev_i)) {
-        prev_aux_i <- rbf_layer(list(input_spat_i, input_time_i, input_elev_i))
-      } else {
-        prev_aux_i <- rbf_layer(list(input_spat_i, input_time_i))
-      }
-      prev_aux_i <- keras3::layer_concatenate(list(prev_aux_i, input_aux_extra_i))
-    } else {
-      if (!is.null(input_elev_i)) {
-        prev_aux_i <- rbf_layer(list(input_spat_i, input_time_i, input_elev_i))
-      } else {
-        prev_aux_i <- rbf_layer(list(input_spat_i, input_time_i))
-      }
-    }
-
-    prev_aux_inputs <- prev_aux_i
-    if (!all(mask == 1)) {
-      mask_input_i <- keras3::layer_input(shape = p)
-      prev_mask_inputs <- append(prev_mask_inputs, mask_input_i)
-      prev_z_input <- keras3::layer_concatenate(list(input_data_i, prev_aux_i, mask_input_i))
-    } else {
-      prev_z_input <- keras3::layer_concatenate(list(input_data_i, prev_aux_i))
-    }
-    prev_z <- append(prev_z, prev_z_input)
-    prev_prior_means <- append(prev_prior_means, prev_aux_inputs) # will be projected later to prior means
-  }
-
-  # --- prior network: build layers on top of aux_input (rbf+extras)
-  prior_v <- aux_input
-  for (n_units in aux_hidden_units) {
-    layer <- keras3::layer_dense(units = n_units, activation = activation)
-    prior_v <- prior_v %>% layer()
-    for (i in 1:ar_order) {
-      prev_prior_means[[i]] <- prev_prior_means[[i]] %>% layer()
-    }
-  }
-
-  prior_ar_coefs <- prior_v %>% keras3::layer_dense(units = latent_dim * ar_order, activation = "tanh")
-  rbf_inputs_for_prior <- list(spatial_input, temporal_input)
-  if (!is.null(elevation_input)) {
-    rbf_inputs_for_prior <- append(rbf_inputs_for_prior, elevation_input)
-  }
-  if (!is.null(aux_input_extra)) {
-    rbf_inputs_for_prior <- append(rbf_inputs_for_prior, aux_input_extra)
-  }
-  prior_ar_model <- keras3::keras_model(rbf_inputs_for_prior, prior_ar_coefs)
-  
-  prior_log_var <- prior_v %>% keras3::layer_dense(units = latent_dim)
-  prior_mean_layer <- keras3::layer_dense(units = latent_dim)
-  prior_mean <- prior_v %>% prior_mean_layer()
-
-  prior_log_var_model <- keras3::keras_model(rbf_inputs_for_prior, prior_log_var)
-  prior_mean_model <- keras3::keras_model(rbf_inputs_for_prior, prior_mean)
-  prior_v <- keras3::layer_concatenate(list(prior_mean, prior_log_var, prior_ar_coefs))
-
-  for (i in 1:ar_order) {
-    prev_prior_means[[i]] <- prev_prior_means[[i]] %>% prior_mean_layer()
-  }
-
-  mask_input <- keras3::layer_input(p)
-  input_data <- keras3::layer_input(p)
-  if (all(mask == 1)) {
-    encoder_input_list <- list(input_data, aux_input)
-  } else {
-    encoder_input_list <- list(input_data, aux_input, mask_input)
-  }
-  encoder_input <- keras3::layer_concatenate(encoder_input_list)
-  submodel <- encoder_input
-  for (n_units in hidden_units) {
-    new_layer <- keras3::layer_dense(units = n_units, activation = activation)
-    submodel <- submodel %>% new_layer()
-    for (i in 1:ar_order) {
-      prev_z[[i]] <- prev_z[[i]] %>% new_layer()
-    }
-  }
-
-  z_mean_layer <- keras3::layer_dense(units = latent_dim)
-  z_log_var_layer <- keras3::layer_dense(units = latent_dim)
-  z_mean <- submodel %>% z_mean_layer()
-  z_log_var <- submodel %>% z_log_var_layer()
-  z_mean_and_var <- keras3::layer_concatenate(list(z_mean, z_log_var))
-  encoder_inputs <- list(input_data, spatial_input, temporal_input)
-  if (!is.null(elevation_input)) encoder_inputs <- append(encoder_inputs, elevation_input)
-  if (!is.null(aux_input_extra)) encoder_inputs <- append(encoder_inputs, aux_input_extra)
-  if (!all(mask == 1)) {
-    encoder_inputs <- append(encoder_inputs, mask_input)
-  }
-  encoder <- keras3::keras_model(encoder_inputs, z_mean)
-  z_log_var_model <- keras3::keras_model(encoder_inputs, z_log_var)
-
-  for (i in 1:ar_order) {
-    prev_z[[i]] <- prev_z[[i]] %>% z_mean_layer()
-  }
-
-  sampling_layer <- switch(source_dist,
-    "gaussian" = sampling_gaussian(p = latent_dim),
-    "laplace" = sampling_laplace(p = latent_dim)
-  )
-  z <- z_mean_and_var %>% sampling_layer()
-
-  # decoder (same as before)
-  x_decoded_mean <- z
-  input_decoder <- keras3::layer_input(shape = latent_dim)
-  output_decoder <- input_decoder
-  for (n_units in rev(hidden_units)) {
-    dense_layer <- keras3::layer_dense(units = n_units, activation = activation)
-    x_decoded_mean <- x_decoded_mean %>% dense_layer()
-    output_decoder <- output_decoder %>% dense_layer()
-  }
-  if (error_dist == "poisson") {
-    out_layer <- keras3::layer_dense(units = p)
-  } else if (error_dist == "bernoulli") {
-    out_layer <- keras3::layer_dense(units = p, activation = "sigmoid")
-  } else {
-    out_layer <- keras3::layer_dense(units = p)
-  }
-  x_decoded_mean <- x_decoded_mean %>% out_layer()
-  output_decoder <- output_decoder %>% out_layer()
-  decoder <- keras3::keras_model(input_decoder, output_decoder)
-
-  # final concatenation output (matches original layout)
-  output_list <- list(x_decoded_mean, z, z_mean_and_var, prior_v, mask_input)
-  output_list <- append(output_list, prev_z)
-  output_list <- append(output_list, prev_prior_means)
-  final_output <- keras3::layer_concatenate(output_list)
-
-  # Build vae inputs in exact consistent order:
-  vae_inputs <- list(input_data, spatial_input, temporal_input, mask_input)
-  if (!is.null(elevation_input)) vae_inputs <- append(vae_inputs, elevation_input)
-  if (!is.null(aux_input_extra)) vae_inputs <- append(vae_inputs, aux_input_extra)
-  vae_inputs <- append(vae_inputs, prev_data_inputs)
-  vae_inputs <- append(vae_inputs, prev_spatial_inputs)
-  vae_inputs <- append(vae_inputs, prev_time_inputs)
-  if (!is.null(elevation_input)) vae_inputs <- append(vae_inputs, prev_elev_inputs)
-  if (!is.null(aux_input_extra)) vae_inputs <- append(vae_inputs, prev_aux_extra_inputs)
-  if (!all(mask == 1)) vae_inputs <- append(vae_inputs, prev_mask_inputs)
-
-  vae <- keras3::keras_model(vae_inputs, final_output)
-
-  # Loss (same as your original function, but uses the same slicing indices)
-  vae_loss <- function(x, res) {
-    x_mean <- res[, 1:p]
-    z_sample <- res[, (1 + p):(p + latent_dim)]
-    z_mean <- res[, (p + latent_dim + 1):(p + 2 * latent_dim)]
-    z_logvar <- res[, (p + 2 * latent_dim + 1):(p + 3 * latent_dim)]
-    prior_mean <- res[, (p + 3 * latent_dim + 1):(p + 4 * latent_dim)]
-    prior_log_v <- res[, (p + 4 * latent_dim + 1):(p + 5 * latent_dim)]
-    start_i <- p + 5 * latent_dim + 1
-    end_i <- p + 5 * latent_dim + latent_dim * ar_order
-    prior_ar <- res[, start_i:end_i]
-    mask <- res[, (end_i + 1):(end_i + p)]
-    prev_z <- res[, (end_i + p + 1):(end_i + p + ar_order * latent_dim)]
-    prior_prev_mean <- res[, (end_i + p + ar_order * latent_dim + 1):(end_i + p + (2 * ar_order) * latent_dim)]
-    ar_prev_mult <- tensorflow::tf$math$multiply(prior_ar, (prev_z - prior_prev_mean))
-    prior_mean_final <- prior_mean + ar_prev_mult[, 1:latent_dim]
-    if (ar_order > 1) {
-      for (i in 2:ar_order) {
-        prior_mean_final <- prior_mean_final + ar_prev_mult[, ((i - 1) * latent_dim + 1):(i * latent_dim)]
-      }
-    }
-    log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
-    masked_log_px_z <- log_px_z_unreduced * mask
-    log_px_z <- tensorflow::tf$reduce_sum(masked_log_px_z, axis = -1L)
-
-    log_qz_xu <- source_log_pdf(z_sample, z_mean, tensorflow::tf$math$exp(z_logvar))
-    log_pz_u <- source_log_pdf(z_sample, prior_mean_final, tensorflow::tf$math$exp(prior_log_v))
-    return(-tensorflow::tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L))
-  }
-
-  if (is.null(optimizer)) {
-    optimizer <- tensorflow::tf$keras$optimizers$Adam(
-      learning_rate = tensorflow::tf$keras$optimizers$schedules$PolynomialDecay(lr_start, steps, lr_end, 2)    )
-  }
-
-  metric_reconst_accuracy <- keras3::custom_metric("metric_reconst_accuracy", function(x, res) {
-    x_mean <- res[, 1:p]
-    mask <- res[, (p + 5 * latent_dim + latent_dim * ar_order + 1):(2 * p + 5 * latent_dim + latent_dim * ar_order)]
-    log_px_z_unreduced <- error_log_pdf(x, x_mean, tensorflow::tf$constant(error_dist_sigma, "float32"), reduce = FALSE)
-    masked_log_px_z <- log_px_z_unreduced * mask
-    log_px_z <- tensorflow::tf$reduce_sum(masked_log_px_z, axis = -1L)
-    return(tensorflow::tf$reduce_mean(log_px_z, -1L))
-  })
-
-  vae %>% keras3::compile(optimizer = optimizer, loss = vae_loss, metrics = list(metric_reconst_accuracy))
-
-  # --- Build the R list of inputs to match the model signature ---
-
-  inputs_to_fit <- list(data_scaled, spatial_locations, time_points, mask)
-  if (!is.null(elevation)) inputs_to_fit <- append(inputs_to_fit, list(elevation_input))
-  if (!is.null(aux_extra)) inputs_to_fit <- append(inputs_to_fit, list(aux_input_extra))
-  # append AR prevs in the same sequence as model inputs: prev data, prev spatial, prev time, (prev elev), (prev aux)
-  inputs_to_fit <- append(inputs_to_fit, prev_data_list)
-  inputs_to_fit <- append(inputs_to_fit, prev_spatial_list)
-  inputs_to_fit <- append(inputs_to_fit, prev_time_list)
-  if (!is.null(elevation)) inputs_to_fit <- append(inputs_to_fit, lapply(prev_spatial_list, function(i) NULL)) # placeholder - you must pass prev_elevation_list if you have them
-  if (!is.null(aux_extra)) inputs_to_fit <- append(inputs_to_fit, prev_aux_extra_list)
-  if (!all(mask == 1)) inputs_to_fit <- append(inputs_to_fit, prev_mask_list)
-
-  # Fit
-  hist <- vae %>% keras3::fit(inputs_to_fit, data_scaled, validation_split = validation_split, shuffle = TRUE, batch_size = batch_size, epochs = epochs)
-
-  # Encoder/prior predictions (use the same input format: data, spatial, time, (elev), (aux_extra))
-  encoder_inputs_for_predict <- list(data_scaled, spatial_locations, time_points)
-  if (!all(mask == 1)) encoder_inputs_for_predict <- append(encoder_inputs_for_predict, list(mask))
-  if (!is.null(elevation)) encoder_inputs_for_predict <- append(encoder_inputs_for_predict, list(elevation))
-  if (!is.null(aux_extra)) encoder_inputs_for_predict <- append(encoder_inputs_for_predict, list(aux_extra))
-
-  IC_estimates <- predict(encoder, encoder_inputs_for_predict)
-  IC_log_vars <- predict(z_log_var_model, encoder_inputs_for_predict)
-
-  # ELBO calculation: use prior_mean_model and prior_log_var_model with spatial/time/aux inputs
-  if (get_elbo) {
-    obs_estimates <- predict(decoder, IC_estimates)
-    prior_inputs <- list(spatial_locations, time_points)
-    if (!is.null(elevation)) prior_inputs <- append(prior_inputs, list(elevation))
-    if (!is.null(aux_extra)) prior_inputs <- append(prior_inputs, list(aux_extra))
-    prior_mean_ests <- predict(prior_mean_model, prior_inputs)
-    # add AR corrections from prev lists
-    for (i in 1:ar_order) {
-      prev_prior_inputs <- list(prev_spatial_list[[i]], prev_time_list[[i]])
-      if (!is.null(elevation)) prev_prior_inputs <- append(prev_prior_inputs, list(prev_elev_inputs[[i]]))
-      if (!is.null(aux_extra)) prev_prior_inputs <- append(prev_prior_inputs, list(prev_aux_extra_list[[i]]))
-      prior_means_prev <- predict(prior_mean_model, prev_prior_inputs)
-      prev_enc_inputs <- append(list(prev_data_list[[i]]), prev_prior_inputs)
-      if (!all(mask == 1)) prev_enc_inputs <- append(prev_enc_inputs, list(prev_mask_list[[i]]))
-      IC_estimates_prev <- predict(encoder, prev_enc_inputs)
-      prior_log_vars <- predict(prior_log_var_model, prev_prior_inputs)
-      prior_ars <- predict(prior_ar_model, prev_prior_inputs)
-      prior_mean_ests <- prior_mean_ests + prior_ars[, ((i - 1) * latent_dim + 1):(i * latent_dim)] * (IC_estimates_prev - prior_means_prev)
-    }
-
-    log_px_z <- error_log_pdf(tensorflow::tf$constant(data_scaled, "float32"), tensorflow::tf$cast(obs_estimates, "float32"), tensorflow::tf$constant(error_dist_sigma, "float32"))
-    log_qz_xu <- source_log_pdf(tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$math$exp(tensorflow::tf$cast(IC_log_vars, "float32")))
-    log_pz_u <- source_log_pdf(tensorflow::tf$cast(IC_estimates, "float32"), tensorflow::tf$cast(prior_mean_ests, "float32"), tensorflow::tf$math$exp(tensorflow::tf$cast(prior_log_vars, "float32")))
-    elbo <- tensorflow::tf$reduce_mean(log_px_z + log_pz_u - log_qz_xu, -1L)
-  } else elbo <- NULL
-
-  # scale ICs etc. (same as original)
-  IC_means <- colMeans(IC_estimates)
-  IC_sds <- apply(IC_estimates, 2, sd)
-  IC_estimates_cent <- sweep(IC_estimates, 2, IC_means, "-")
-  IC_estimates_scaled <- sweep(IC_estimates_cent, 2, IC_sds, "/")
-  IC_vars <- exp(IC_log_vars)
-  IC_vars_scaled <- sweep(IC_vars, 2, IC_sds^2, "/")
-
-  iVAE_object <- list(
-    IC_unscaled = IC_estimates, IC = IC_estimates_scaled, data_dim = p, ar_order = ar_order,
-    sample_size = n, prior_ar_model = prior_ar_model, prior_mean_model = prior_mean_model,
-    prior_log_var_model = prior_log_var_model,
-    aux_dim = NULL, encoder = encoder, decoder = decoder, data_means = data_means,
-    data_sds = data_sds, IC_means = IC_means, IC_sds = IC_sds, call_params = call_params, elbo = elbo,
-    metrics = hist, call = deparse(sys.call()), DNAME = paste(deparse(substitute(data)))
-  )
-
-  class(iVAE_object) <- c("iVAE", "iVAEar")
-  return(iVAE_object)
 }

@@ -2,167 +2,194 @@
 % Please edit documentation in R/iVAEar.R
 \name{iVAEar}
 \alias{iVAEar}
-\title{Identifiable Variational Autoencoder with AR(R) Latent Structure}
+\title{Identifiable Variational Autoencoder with Autoregressive Latent Components}
 \usage{
 iVAEar(
-  data,
-  aux_data,
-  latent_dim,
-  prev_data_list,
-  prev_aux_data_list,
+  x,
+  aux = NULL,
+  latent_dim = NULL,
+  ar_order = 1,
+  coords = NULL,
+  time = NULL,
+  group = NULL,
+  vars = NULL,
+  batch_aux = FALSE,
   hidden_units = c(128, 128, 128),
   aux_hidden_units = c(128, 128, 128),
   activation = "leaky_relu",
-  source_dist = "gaussian",
-  validation_split = 0,
-  error_dist = "gaussian",
+  source_dist = c("gaussian", "laplace"),
+  error_dist = c("gaussian", "laplace", "huber", "poisson", "bernoulli"),
   error_dist_sigma = 0.01,
+  mask_encoder = TRUE,
   optimizer = NULL,
   lr_start = 0.001,
   lr_end = 1e-04,
-  ar_order = 1,
-  add_mask_to_encoder = TRUE,
   steps = 10000,
+  epochs = 100,
+  batch_size = 64,
+  validation_split = 0,
+  validation_data = NULL,
+  callbacks = NULL,
   seed = NULL,
-  get_elbo = FALSE,
-  epochs,
-  batch_size
+  verbose = 1
 )
 }
 \arguments{
-\item{data}{A numeric matrix of observed data (n x p), where n is the number of samples, 
-and p is the number of features.}
+\item{x}{The observed data. See Details for the supported formats.}
 
-\item{aux_data}{A numeric matrix of auxiliary data (n x m), where m is the number of auxiliary variables.}
+\item{aux}{Auxiliary data: a numeric matrix with one row per observation,
+a specification such as \code{\link[=aux_rbf]{aux_rbf()}} or \code{\link[=aux_segments]{aux_segments()}}, or a list of
+these. See Details.}
 
-\item{latent_dim}{An integer specifying the latent dimension.}
+\item{latent_dim}{The number of latent components. Defaults to the number
+of observed variables.}
 
-\item{prev_data_list}{A list of numeric matrices of previously observed data, 
-used for constructing the AR(R) latent prior.}
+\item{ar_order}{The autoregressive order \eqn{R}.}
 
-\item{prev_aux_data_list}{A list of numeric matrices of auxiliary data for the previous observations.}
+\item{coords}{Spatial coordinates, a matrix with one row per observation
+or names of columns in \code{x}. Taken from the object for spatial formats.}
 
-\item{hidden_units}{A numeric vector specifying the number of units in each hidden layer for the encoder and decoder.}
+\item{time}{Time points (numeric, \code{Date} or \code{POSIXct}) or the name of a
+column in \code{x}. Taken from the object for time series formats.}
 
-\item{aux_hidden_units}{A numeric vector specifying the number of units in each 
-hidden layer in auxiliary function.}
+\item{group}{Identifier of the series an observation belongs to (for
+example a station), or names of columns in \code{x}. Only needed for
+\code{\link[=iVAEar]{iVAEar()}} when the series are not identified by the coordinates.}
 
-\item{activation}{A string specifying the activation function to be used in hidden layers. Default is `"leaky_relu"`.}
+\item{vars}{Names or indices of the observed variables. Defaults to all
+numeric columns not used for \code{coords}, \code{time}, \code{group} or \code{aux}.}
 
-\item{source_dist}{A character string specifying the distribution for the latent variables. Choices are `"gaussian"` (default) or `"laplace"`.}
+\item{batch_aux}{Logical. Compute the auxiliary variables batch-wise
+inside the network?}
 
-\item{validation_split}{A numeric value specifying the fraction of training data to use for validation during model keras3::fitting. Default is 0.}
+\item{hidden_units}{Numbers of units in the hidden layers of the encoder
+(the decoder uses the reverse order).}
 
-\item{error_dist}{A string specifying the distribution for the reconstruction error. Choices are `"gaussian"` (default) or `"laplace"`.}
+\item{aux_hidden_units}{Numbers of units in the hidden layers of the
+auxiliary function.}
 
-\item{error_dist_sigma}{A numeric value specifying the standard deviation for the error distribution. Default is 0.01.}
+\item{activation}{Activation function of the hidden layers.}
 
-\item{optimizer}{An optional Keras optimizer object. If NULL (default), an Adam optimizer with polynomial decay is used.}
+\item{source_dist}{Distribution of the latent components given the
+auxiliary variables, \code{"gaussian"} or \code{"laplace"}.}
 
-\item{lr_start}{A numeric value for the initial learning rate. Default is 0.001.}
+\item{error_dist}{Distribution of the reconstruction error: \code{"gaussian"},
+\code{"laplace"}, \code{"huber"}, \code{"poisson"} (count data, the decoder gives log
+rates) or \code{"bernoulli"} (binary data).}
 
-\item{lr_end}{A numeric value for the final learning rate. Default is 0.0001.}
+\item{error_dist_sigma}{Scale of the reconstruction error (the variance for
+\code{"gaussian"}). A vector of length two defines a linear schedule from the
+first to the second value over \code{steps} training steps.}
 
-\item{ar_order}{An autoregressive order used in iVAEar.}
+\item{mask_encoder}{Logical. Give the missing value indicators to the
+encoder when \code{x} contains missing values?}
 
-\item{steps}{An integer specifying the number of optimization steps for polynomial learning rate decay. Default is 10,000.}
+\item{optimizer}{A Keras optimizer. Defaults to Adam with a polynomial
+learning rate decay from \code{lr_start} to \code{lr_end} over \code{steps} steps.}
 
-\item{seed}{An optional integer for setting the random seed to ensure reproducibility. Default is NULL.}
+\item{lr_start, lr_end}{Initial and final learning rate of the default
+optimizer.}
 
-\item{get_elbo}{Logical. If TRUE, the model returns the final ELBO value. Default is FALSE.}
+\item{steps}{Number of training steps (batches) for the learning rate
+decay and the \code{error_dist_sigma} schedule.}
 
-\item{epochs}{An integer specifying the number of training epochs.}
+\item{epochs}{Number of training epochs.}
 
-\item{batch_size}{An integer specifying the batch size for training.}
+\item{batch_size}{Batch size.}
+
+\item{validation_split}{Proportion of the observations used for
+validation. Keras takes the last observations, not a random subset.}
+
+\item{validation_data}{Optional validation data, used instead of
+\code{validation_split}: either data in the same format as \code{x} (column names
+given in \code{coords}, \code{time} and \code{group} are used for it as well), or a list
+with elements \code{x} and, as needed, \code{coords}, \code{time}, \code{group} and \code{aux}
+(values of auxiliary variables given as matrices, see \code{\link[=predict.nlbss]{predict.nlbss()}}).}
+
+\item{callbacks}{A list of Keras callbacks, for example
+\code{list(keras3::callback_early_stopping(patience = 5))}.}
+
+\item{seed}{Optional random seed for reproducible training. Use this
+instead of \code{\link[=set.seed]{set.seed()}}; the random number state of the R session is
+restored after fitting.}
+
+\item{verbose}{Verbosity of the training: 0 (silent), 1 (progress bar) or
+2 (one line per epoch).}
 }
 \value{
-#' A keras3::fitted iVAEar object of class \code{iVAEar}, which inherits from class \code{\link{iVAE}}.
-In addition the object has the following field:
-\item{prior_ar_model}{A model, which outputs the estimated AR coefficients
-by the auxiliary function.}
+An object of class \code{c("iVAEar", "iVAE", "nlbss")}, see \code{\link[=iVAE]{iVAE()}}.
+In addition, the element \code{lags} gives for each observation the rows of
+its previous observations.
 }
 \description{
-\loadmathjax This function keras3::fits an Identifiable Variational Autoencoder (iVAE) model where the latent 
-variables follow an AR(R) process, R being the autoregressive order.
-It also supports handling auxiliary data and accommodates various 
-choices for source and error distributions.
+Fits an identifiable variational autoencoder whose latent components follow
+nonstationary autoregressive processes (iVAEar). The method is meant for
+time series, spatio-temporal data and other data with a time component,
+such as panel data \insertCite{sipila2025ivaear}{NonlinearBSS}.
 }
 \details{
-The iVAEar method extends spatio-temporal identifiable variational 
-autoencoders (\code{\link{iVAE}}) with an autoregressive (AR) structure. It consists of:
+iVAEar extends \code{\link[=iVAE]{iVAE()}} by an autoregressive prior. For an observation of
+series \eqn{s} (a location or a group) at time \eqn{t}, the auxiliary
+function gives the trend \eqn{\mu_i(s, t)}, the variance
+\eqn{\sigma^2_i(s, t)} and the autoregressive coefficients
+\eqn{\gamma_{i,r}(s, t)}, \eqn{r = 1, \dots, R}, of each latent
+component, and the prior is
+\deqn{z_i(s, t) = \mu_i(s, t) + \sum_{r=1}^R \gamma_{i,r}(s, t)
+(z_i(s, t - r) - \mu_i(s, t - r)) + \epsilon_i(s, t),}{
+z_i(s,t) = mu_i(s,t) + sum_r gamma_ir(s,t) (z_i(s,t-r) - mu_i(s,t-r)) + eps_i(s,t),}
+where \eqn{\epsilon_i(s, t)} has variance \eqn{\sigma^2_i(s, t)}. The
+previous values \eqn{z_i(s, t - r)} are given by the encoder applied to
+the previous observations of the same series. The components are
+identifiable when either the variances or the autoregressive
+coefficients vary sufficiently \insertCite{sipila2025ivaear}{NonlinearBSS}.
+Temporal dependence as a source of identifiability in nonlinear ICA goes
+back to \insertCite{HyvarinenMorioka2017;textual}{NonlinearBSS}. The
+spatio-temporal auxiliary data are the same as for the spatio-temporal
+iVAE in the Neural Networks article of
+\insertCite{sipila2024modelling;textual}{NonlinearBSS}.
 
-Encoder \mjeqn{\mathbf{g}(\mathbf{x}, \mathbf{u})}{ascii}: Maps observations 
-\mjeqn{\mathbf{x}}{ascii} and auxiliary variables \mjeqn{\mathbf{u}}{ascii} to 
-latent variables \mjeqn{\mathbf{z}}{ascii}.
+The lag \eqn{r} refers to the \eqn{r}-th previous distinct time point in
+the data. The series are identified by \code{group} if given, otherwise by the
+spatial coordinates; without either the data are a single time series.
+Observations without the needed previous observations (the first time
+points, or after gaps) use the trend only. The rows of \code{x} can be in any
+order.
 
-Decoder \mjeqn{\mathbf{h}(\mathbf{x})}{ascii}: Reconstructs \mjeqn{\mathbf{x}}{ascii} 
-from the latent representations.
+The fitted trend, variance and autoregressive coefficient functions can
+be evaluated at new locations and time points, and the latent components
+can be forecast, using \link[=predict.nlbss]{predict()}.
 
-Auxiliary Function \mjeqn{\mathbf{w}(\mathbf{u})}{ascii}: Estimates parameters of 
-the autoregressive latent prior.
-
-In particular, the auxiliary function gives spatio-temporal trend 
-(\mjeqn{\mathbf{\mu}(\mathbf{s}, t)}{ascii}), variance (\mjeqn{\mathbf{\sigma}(\mathbf{s}, t)}{ascii}) 
-and AR coefficient (\mjeqn{\mathbf{\gamma_r}(\mathbf{s}, t), r=1,\dots, W}{ascii}) functions. 
-The parameter \mjeqn{W}{ascii} in the equations correspond to the parameter \code{ar_order} 
-set by user, \mjeqn{\mathbf{s}}{ascii} is the spatial location and \mjeqn{t} is the 
-temporal location. The latent components \mjeqn{z_1, \dots, z_P}{ascii} are 
-assumed to be generated through the following autoregressive process:
-
-\mjeqn{\mathbf{z}^t_i = \mu_i(\mathbf{s}, t) + \sum_{r=1}^{W} \gamma_{i,r}(\mathbf{s}, t) (\mathbf{z}_i^{t-r} - \mu_i(\mathbf{s}, t - r)) + \epsilon_i(\mathbf{s}, t)}{ascii}
-
-where \mjeqn{\epsilon_i \sim \mathcal{N}(\mathbf{0}, \sigma(\mathbf{s}, t))}{ascii} is Gaussian noise.
-
-The model optimizes the **evidence lower bound (ELBO):
-
-\mjeqn{\mathcal{L} = \mathbb{E}_{q(\mathbf{z} | \mathbf{x}, \mathbf{u})} \left[ \log p(\mathbf{x} | \mathbf{z}) \right] - D_{\text{KL}}(q(\mathbf{z} | \mathbf{x}, \mathbf{u}) \| p(\mathbf{z} | \mathbf{u}))}{ascii}
-
-where:
-
-The first term maximizes reconstruction accuracy by ensuring 
-\mjeqn{\mathbf{x}}{ascii} can be recovered from \mjeqn{\mathbf{z}}{ascii}.
-
-The second term regularizes the latent space, enforcing an 
-autoregressive prior structure through \mjeqn{\mathbf{w}(\mathbf{u})}{ascii}.
-
-The framework is implemented using deep neural networks, optimizing 
-via stochastic gradient descent. This approach ensures latent variables 
-retain meaningful spatio-temporal dependencies, improving predictive 
-performance in complex datasets.
+See \code{\link[=iVAE]{iVAE()}} for the supported data formats, auxiliary data and missing
+values.
 }
 \examples{
-p <- 3
-n_time <- 100
-n_spat <- 50
-coords_time <- cbind(
-    rep(runif(n_spat), n_time), rep(runif(n_spat), n_time),
-    rep(1:n_time, each = n_spat)
-)
-data_obj <- generate_nonstationary_spatio_temporal_data_by_segments(
-    n_time,
-    n_spat, p, 5, 10, coords_time
-)
-latent_data <- data_obj$data
-# Generate artificial observed data by applying a nonlinear mixture
-obs_data <- mix_data(latent_data, 2)
+\dontshow{if (tf_available()) withAutoprint(\{ # examplesIf}
+# Spatio-temporal data: 50 locations observed at 100 time points
+set.seed(1)
+n_s <- 50
+n_t <- 100
+coords <- matrix(runif(2 * n_s), ncol = 2)[rep(1:n_s, n_t), ]
+time <- rep(1:n_t, each = n_s)
+src <- simulate_sources(3, coords = coords, time = time,
+                        n_segments_space = 5, n_segments_time = 10,
+                        ar_range = c(-0.8, 0.8))
+x <- mix_data(src$sources, n_layers = 2)
 
-# Increase the number of epochs for better performance.
-resiVAE <- iVAEar_radial(
-  data = obs_data, 
-  spatial_locations = coords_time[, 1:2],
-  time_points = coords_time[, 3],
-  latent_dim = p, 
-  n_s = n_spat,
-  epochs = 1,
-  batch_size = 64
-)
-cormat <- cor(resiVAE$IC, latent_data)
-cormat
-absolute_mean_correlation(cormat)
+fit <- iVAEar(x, aux_rbf(spatial_basis = c(2, 5), temporal_basis = c(5, 10)),
+              coords = coords, time = time, epochs = 5, verbose = 0, seed = 1)
+summary(fit)
+absolute_mean_correlation(fit$S, src$sources)
+
+# Forecast the components for the next two time points
+new_coords <- coords[1:(2 * n_s), ]
+fc <- predict(fit, type = "forecast", coords = new_coords,
+              time = rep(n_t + 1:2, each = n_s))
+dim(fc)
+\dontshow{\}) # examplesIf}
 }
 \references{
 \insertAllCited{}
 }
-\author{
-Mika Sipilä
+\seealso{
+\code{\link[=iVAE]{iVAE()}}, \code{\link[=predict.nlbss]{predict.nlbss()}}, \code{\link[=aux_rbf]{aux_rbf()}}, \code{\link[=aux_segments]{aux_segments()}}
 }

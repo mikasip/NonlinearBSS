@@ -1,20 +1,71 @@
 Package: NonlinearBSS
 Type: Package
 Title: Nonlinear Blind Source Separation
-Version: 0.1.0
-Date: 2025-03-27
-Authors@R: c(person(given = "Mika", family = "Sipilä", role = c("aut", "cre"), email = "mika.e.sipila@jyu.fi", comment=c(ORCID = "0000-0002-5912-840X")),
-    person(given = "Klaus", family = "Nordhausen", role = c("aut"),
-    comment = c(ORCID = "0000-0002-3758-8501")),
-    person(given = "Sara", family = "Taskinen", role = "aut",
-    comment = c(ORCID = "0000-0001-9470-7258")))
-Imports: stats, graphics, tensorflow, keras3, mathjaxr, Rdpack, RcppHungarian, rdist, dplyr, sp, magrittr, Matrix
-Suggests: spacetime
-Description: The package contains variational autoencoder (VAE) based methods for nonlinear blind source separation. The methods include regular VAE and multiple methods based on identifiable variational autoencoder (iVAE). For details about iVAE, see Khemakhem et al. (2020) <https://doi.org/10.48550/arXiv.1907.04809>.  
-License: GPL-3
+Version: 0.2.0
+Authors@R: c(
+    person("Mika", "Sipilä", email = "mika.e.sipila@jyu.fi",
+           role = c("aut", "cre"), comment = c(ORCID = "0000-0002-5912-840X")),
+    person("Klaus", "Nordhausen", role = "aut",
+           comment = c(ORCID = "0000-0002-3758-8501")),
+    person("Sara", "Taskinen", role = "aut",
+           comment = c(ORCID = "0000-0001-9470-7258")))
+Description: Methods for nonlinear blind source separation (nonlinear
+    independent component analysis) based on deep neural networks:
+    time contrastive learning (Hyvärinen and Morioka, 2016,
+    <doi:10.48550/arXiv.1605.06336>), variational autoencoders (Kingma and
+    Welling, 2014, <doi:10.48550/arXiv.1312.6114>), identifiable
+    variational autoencoders (Khemakhem et al., 2020,
+    <doi:10.48550/arXiv.1907.04809>) and their spatial (Sipilä,
+    Nordhausen and Taskinen, 2024, <doi:10.1016/j.ins.2024.120365>),
+    spatio-temporal (Sipilä et al., 2025,
+    <doi:10.1016/j.neunet.2024.106774>) and autoregressive (Sipilä,
+    Nordhausen and Taskinen, 2025, <doi:10.1007/978-3-032-06109-6_21>)
+    extensions, including missing values and covariates (Sipilä et al.,
+    2026, <doi:10.1002/env.70121>), and tools for choosing the number of
+    latent components and interpreting them with Shapley values (Sipilä et
+    al., 2026, <doi:10.1016/j.spasta.2026.101054>). Data can be given as
+    matrices,
+    data frames, multivariate time series ('ts', 'xts', 'zoo', 'tsibble')
+    or spatial and spatio-temporal objects ('sf', 'sftime', 'STFDF').
+    Auxiliary variables such as spatial and temporal segmentations or
+    radial basis functions are constructed automatically, optionally
+    batch-wise inside the network to save memory. Models are fitted with
+    'keras3' and 'TensorFlow'.
+License: GPL (>= 3)
+URL: https://github.com/mikasip/NonlinearBSS
+BugReports: https://github.com/mikasip/NonlinearBSS/issues
+Depends:
+    R (>= 4.1.0)
+Imports:
+    generics,
+    graphics,
+    grDevices,
+    keras3 (>= 1.2.0),
+    kernelshap,
+    RcppHungarian,
+    Rdpack,
+    reticulate,
+    stats,
+    utils
+Suggests:
+    ICS,
+    knitr,
+    rmarkdown,
+    sf,
+    sftime,
+    sp,
+    spacetime,
+    testthat (>= 3.0.0),
+    tsibble,
+    xts,
+    zoo
+RdMacros: Rdpack
+VignetteBuilder: knitr
+Config/testthat/edition: 3
 Encoding: UTF-8
+Language: en-GB
 LazyData: true
-RdMacros: Rdpack, mathjaxr
-RoxygenNote: 7.3.3
-Depends: 
-    R (>= 2.10)
+Roxygen: list(markdown = TRUE)
+SystemRequirements: TensorFlow (https://www.tensorflow.org/), installed
+    for example with keras3::install_keras()
+Config/roxygen2/version: 8.0.0

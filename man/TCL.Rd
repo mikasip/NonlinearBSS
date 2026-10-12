@@ -5,83 +5,122 @@
 \title{Time Contrastive Learning}
 \usage{
 TCL(
-  data,
-  labels,
-  n_hidden_layers = 1,
-  n_hidden_units = 32,
+  x,
+  labels = NULL,
+  latent_dim = NULL,
+  n_segments = 10,
+  coords = NULL,
+  time = NULL,
+  group = NULL,
+  vars = NULL,
+  hidden_units = 32,
+  activation = "leaky_relu",
   lr_start = 0.01,
   lr_end = 0.001,
+  steps = 10000,
+  epochs = 100,
+  batch_size = 64,
+  validation_split = 0,
+  validation_data = NULL,
+  callbacks = NULL,
   seed = NULL,
-  ...
+  verbose = 1
 )
 }
 \arguments{
-\item{data}{A matrix with P columns and N rows containing the observed data.}
+\item{x}{The observed data. See Details for the supported formats.}
 
-\item{labels}{A vector of length N containing the labels
-for the observations.}
+\item{labels}{Segment labels, a vector with one value per observation, or
+an \code{\link[=aux_segments]{aux_segments()}} specification.}
 
-\item{n_hidden_layers}{A number of hidden layers in TCL model.}
+\item{latent_dim}{The number of latent components. Defaults to the number
+of observed variables.}
 
-\item{n_hidden_units}{A number of hidden units in each hidden layer.}
+\item{n_segments}{Number of segments of equal length used if \code{labels} is
+not given.}
 
-\item{lr_start}{A starting learning rate.}
+\item{coords}{Spatial coordinates, a matrix with one row per observation
+or names of columns in \code{x}. Taken from the object for spatial formats.}
 
-\item{lr_end}{A learning rate after polynomial decay.}
+\item{time}{Time points (numeric, \code{Date} or \code{POSIXct}) or the name of a
+column in \code{x}. Taken from the object for time series formats.}
 
-\item{seed}{Seed for the tensorflow model.}
+\item{group}{Identifier of the series an observation belongs to (for
+example a station), or names of columns in \code{x}. Only needed for
+\code{\link[=iVAEar]{iVAEar()}} when the series are not identified by the coordinates.}
 
-\item{...}{Further parameters for keras::keras3::fit function.}
+\item{vars}{Names or indices of the observed variables. Defaults to all
+numeric columns not used for \code{coords}, \code{time}, \code{group} or \code{aux}.}
+
+\item{hidden_units}{Numbers of units in the hidden layers.}
+
+\item{activation}{Activation function of the hidden layers.}
+
+\item{lr_start, lr_end}{Initial and final learning rate.}
+
+\item{steps}{Number of training steps (batches) for the learning rate
+decay and the \code{error_dist_sigma} schedule.}
+
+\item{epochs}{Number of training epochs.}
+
+\item{batch_size}{Batch size.}
+
+\item{validation_split}{Proportion of the observations used for
+validation. Keras takes the last observations, not a random subset.}
+
+\item{validation_data}{Optional validation data, used instead of
+\code{validation_split}: a list with elements \code{x} (data in any supported
+format) and \code{labels} (its segment labels, using the training labels).}
+
+\item{callbacks}{A list of Keras callbacks, for example
+\code{list(keras3::callback_early_stopping(patience = 5))}.}
+
+\item{seed}{Optional random seed for reproducible training. Use this
+instead of \code{\link[=set.seed]{set.seed()}}; the random number state of the R session is
+restored after fitting.}
+
+\item{verbose}{Verbosity of the training: 0 (silent), 1 (progress bar) or
+2 (one line per epoch).}
 }
 \value{
-An object of class TCL.
+An object of class \code{c("TCL", "nlbss")} with elements \code{S},
+\code{S_unscaled}, \code{S_center}, \code{S_scale}, \code{labels}, \code{accuracy} (final
+training classification accuracy), \code{history} and others as in \code{\link[=iVAE]{iVAE()}}.
 }
 \description{
-Constructs and keras3::fits a model for time contrastive learning.
+Estimates latent components of nonstationary time series with time
+contrastive learning (TCL) \insertCite{HyvarinenMorioka2016}{NonlinearBSS}.
 }
 \details{
-The method constructs and keras3::fits a model for time contrastive learning
-based on the given parameters. TCL assigns half of the labels incorrectly to
-observations, and trains a deep neural network model to predict if the label
-is correct or incorrect. The model has a bottleneck layer at the end, which
-has P hidden units. The idea is, that in order to classify the data
-correctly, it has to learn the true independent components. For more
-details about TCL, see \insertCite{HyvarinenMorioka2016}{NonlinearBSS}.
+The time series is divided into segments, and a neural network is trained
+to classify each observation into the segment it belongs to. The network
+consists of hidden layers, a linear feature layer with \code{latent_dim} units,
+an absolute value nonlinearity and a multinomial logistic regression
+layer. If the latent components have variances that change between the
+segments, the feature layer learns the latent components up to
+componentwise transformations
+\insertCite{HyvarinenMorioka2016}{NonlinearBSS}.
+
+The segments are given by \code{labels}, which can be a vector of segment
+labels or an \code{\link[=aux_segments]{aux_segments()}} specification. If \code{labels} is not given,
+the time range is divided into \code{n_segments} segments of equal length. TCL
+can also be applied to spatial or spatio-temporal data by giving a
+suitable segmentation.
 }
 \examples{
-p <- 10
-n_segments <- 100
-n_per_segment <- 50
-n <- n_segments * n_per_segment
-latent_data <- matrix(NA, ncol = p, nrow = n)
-labels <- numeric(n)
-# Create artificial data with variance and mean varying over the segments.
-for (seg in 1:n_segments) {
-    start_ind <- (seg - 1) * n_per_segment + 1
-    end_ind <- seg * n_per_segment
-    labels[start_ind:end_ind] <- seg
-    for (i in 1:p) {
-        latent_data[start_ind:end_ind, i] <- rnorm(
-            n_per_segment,
-            0, runif(1, 0.1, 5)
-        )
-    }
-}
-mixed_data <- mix_data(latent_data, 2, "elu")
-
-# For better performance, increase the number of epochs.
-res <- TCL(mixed_data, labels - 1,
-    n_hidden_layers = 1,
-    n_hidden_units = 32, batch_size = 64, epochs = 10
-)
-cormat <- cor(res$IC, latent_data)
-cormat
-absolute_mean_correlation(cormat)
-
+\dontshow{if (tf_available()) withAutoprint(\{ # examplesIf}
+set.seed(1)
+src <- simulate_sources(3, time = 1:2000, n_segments_time = 20,
+                        mean_range = c(0, 0))
+x <- ts(mix_data(src$sources, n_layers = 2))
+fit <- TCL(x, n_segments = 20, epochs = 10, verbose = 0, seed = 1)
+fit
+absolute_mean_correlation(fit$S, src$sources)
+\dontshow{\}) # examplesIf}
 }
 \references{
 \insertAllCited{}
 }
-\author{
-Mika Sipilä
+\seealso{
+\code{\link[=iVAE]{iVAE()}}, \code{\link[=iVAEar]{iVAEar()}}
 }

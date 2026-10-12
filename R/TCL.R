@@ -1,121 +1,143 @@
 #' Time Contrastive Learning
-#' @description Constructs and keras3::fits a model for time contrastive learning.
-#' @importFrom magrittr %>%
-#' @importFrom Rdpack reprompt
-#' @param data A matrix with P columns and N rows containing the observed data.
-#' @param labels A vector of length N containing the labels
-#' for the observations.
-#' @param n_hidden_layers A number of hidden layers in TCL model.
-#' @param n_hidden_units A number of hidden units in each hidden layer.
-#' @param lr_start A starting learning rate.
-#' @param lr_end A learning rate after polynomial decay.
-#' @param seed Seed for the tensorflow model.
-#' @param ... Further parameters for keras::keras3::fit function.
-#' @return An object of class TCL.
-#' @details The method constructs and keras3::fits a model for time contrastive learning
-#' based on the given parameters. TCL assigns half of the labels incorrectly to
-#' observations, and trains a deep neural network model to predict if the label
-#' is correct or incorrect. The model has a bottleneck layer at the end, which
-#' has P hidden units. The idea is, that in order to classify the data
-#' correctly, it has to learn the true independent components. For more
-#' details about TCL, see \insertCite{HyvarinenMorioka2016}{NonlinearBSS}.
+#'
+#' Estimates latent components of nonstationary time series with time
+#' contrastive learning (TCL) \insertCite{HyvarinenMorioka2016}{NonlinearBSS}.
+#'
+#' @details
+#' The time series is divided into segments, and a neural network is trained
+#' to classify each observation into the segment it belongs to. The network
+#' consists of hidden layers, a linear feature layer with `latent_dim` units,
+#' an absolute value nonlinearity and a multinomial logistic regression
+#' layer. If the latent components have variances that change between the
+#' segments, the feature layer learns the latent components up to
+#' componentwise transformations
+#' \insertCite{HyvarinenMorioka2016}{NonlinearBSS}.
+#'
+#' The segments are given by `labels`, which can be a vector of segment
+#' labels or an [aux_segments()] specification. If `labels` is not given,
+#' the time range is divided into `n_segments` segments of equal length. TCL
+#' can also be applied to spatial or spatio-temporal data by giving a
+#' suitable segmentation.
+#'
+#' @inheritParams iVAE
+#' @param labels Segment labels, a vector with one value per observation, or
+#'   an [aux_segments()] specification.
+#' @param n_segments Number of segments of equal length used if `labels` is
+#'   not given.
+#' @param hidden_units Numbers of units in the hidden layers.
+#' @param lr_start,lr_end Initial and final learning rate.
+#' @param validation_data Optional validation data, used instead of
+#'   `validation_split`: a list with elements `x` (data in any supported
+#'   format) and `labels` (its segment labels, using the training labels).
+#' @return An object of class `c("TCL", "nlbss")` with elements `S`,
+#'   `S_unscaled`, `S_center`, `S_scale`, `labels`, `accuracy` (final
+#'   training classification accuracy), `history` and others as in [iVAE()].
+#' @seealso [iVAE()], [iVAEar()]
 #' @references \insertAllCited{}
-#' @author Mika Sipilä
-#' @examples
-#' p <- 10
-#' n_segments <- 100
-#' n_per_segment <- 50
-#' n <- n_segments * n_per_segment
-#' latent_data <- matrix(NA, ncol = p, nrow = n)
-#' labels <- numeric(n)
-#' # Create artificial data with variance and mean varying over the segments.
-#' for (seg in 1:n_segments) {
-#'     start_ind <- (seg - 1) * n_per_segment + 1
-#'     end_ind <- seg * n_per_segment
-#'     labels[start_ind:end_ind] <- seg
-#'     for (i in 1:p) {
-#'         latent_data[start_ind:end_ind, i] <- rnorm(
-#'             n_per_segment,
-#'             0, runif(1, 0.1, 5)
-#'         )
-#'     }
-#' }
-#' mixed_data <- mix_data(latent_data, 2, "elu")
-#'
-#' # For better performance, increase the number of epochs.
-#' res <- TCL(mixed_data, labels - 1,
-#'     n_hidden_layers = 1,
-#'     n_hidden_units = 32, batch_size = 64, epochs = 10
-#' )
-#' cormat <- cor(res$IC, latent_data)
-#' cormat
-#' absolute_mean_correlation(cormat)
-#'
+#' @examplesIf tf_available()
+#' set.seed(1)
+#' src <- simulate_sources(3, time = 1:2000, n_segments_time = 20,
+#'                         mean_range = c(0, 0))
+#' x <- ts(mix_data(src$sources, n_layers = 2))
+#' fit <- TCL(x, n_segments = 20, epochs = 10, verbose = 0, seed = 1)
+#' fit
+#' absolute_mean_correlation(fit$S, src$sources)
 #' @export
-TCL <- function(
-    data, labels, n_hidden_layers = 1,
-    n_hidden_units = 32, lr_start = 0.01, lr_end = 0.001, seed = NULL, ...) {
-    if (!is.null(seed)) {
-        tensorflow::tf$keras$utils$set_random_seed(as.integer(seed))
+TCL <- function(x, labels = NULL, latent_dim = NULL, n_segments = 10,
+                coords = NULL, time = NULL, group = NULL, vars = NULL,
+                hidden_units = 32, activation = "leaky_relu",
+                lr_start = 0.01, lr_end = 0.001, steps = 10000, epochs = 100,
+                batch_size = 64, validation_split = 0, validation_data = NULL,
+                callbacks = NULL, seed = NULL, verbose = 1) {
+  check_common_args(epochs, batch_size, validation_split)
+  check_validation(validation_data, validation_split)
+  dat <- nlbss_data(x, coords = coords, time = time, group = group, vars = vars)
+  check_tf()
+  if (!is.null(seed)) {
+    old_rng <- set_seed(seed)
+    on.exit(restore_rng(old_rng), add = TRUE)
+  }
+  if (anyNA(dat$X)) stop("TCL does not allow missing values.", call. = FALSE)
+  n <- nrow(dat$X)
+  p <- ncol(dat$X)
+  latent_dim <- if (is.null(latent_dim)) p else as.integer(latent_dim)
+
+  if (inherits(labels, "aux_segments")) {
+    labels <- segment_labels(fit_aux(labels, dat), dat)
+  } else if (is.null(labels)) {
+    t <- if (is.null(dat$time)) seq_len(n) else dat$time
+    rank <- match(t, sort(unique(t)))
+    labels <- cut(rank, breaks = n_segments, labels = FALSE)
+  }
+  if (length(labels) != n) stop("`labels` must have one value per observation.", call. = FALSE)
+  classes <- sort(unique(labels))
+  y <- match(labels, classes) - 1L
+
+  center <- colMeans(dat$X)
+  scale <- safe_range(apply(dat$X, 2, sd))
+  Xs <- standardize(dat$X, center, scale)
+
+  spec <- list(method = "TCL", p = p, latent_dim = latent_dim,
+               n_classes = length(classes), hidden_units = as.integer(hidden_units),
+               activation = activation)
+  net <- build_tcl_network(spec)
+  keras3::compile(net$train,
+                  optimizer = default_optimizer(lr_start, lr_end, steps),
+                  loss = "sparse_categorical_crossentropy",
+                  metrics = "accuracy")
+  validation <- NULL
+  if (!is.null(validation_data)) {
+    if (!is.list(validation_data) || is.null(validation_data$x) ||
+        is.null(validation_data$labels)) {
+      stop("`validation_data` must be a list with elements `x` and `labels`.",
+           call. = FALSE)
     }
-
-    n <- dim(data)[1]
-    p <- dim(data)[2]
-    data_means <- colMeans(data)
-    data_sds <- apply(data, 2, sd)
-    data_cent <- sweep(data, 2, data_means, "-")
-    data_scaled <- sweep(data_cent, 2, data_sds, "/")
-    x <- data_scaled
-
-    y <- labels
-
-    n_segments <- length(unique(labels))
-    suffle_indexes <- sample(1:n)
-    x_suffled <- x[suffle_indexes, ]
-    y_suffled <- y[suffle_indexes]
-    x_train <- x_suffled
-    y_train <- y_suffled
-
-    input <- keras3::layer_input(p)
-    ICA_layer <- keras3::layer_dense(
-        units = p, name = "ICA_Layer",
-        activation = "linear"
-    )
-
-    submodel <- input
-    for (i in 1:n_hidden_layers) {
-        submodel <- submodel %>%
-            keras3::layer_dense(
-                units = n_hidden_units, activation = "leaky_relu"
-            )
+    vX <- nlbss_data(validation_data$x, vars = vars)$X
+    yv <- match(validation_data$labels, classes) - 1L
+    if (ncol(vX) != p || length(yv) != nrow(vX) || anyNA(yv) || anyNA(vX)) {
+      stop("`validation_data` must have ", p, " variables, no missing ",
+           "values and one training label per observation.", call. = FALSE)
     }
-    submodel_ICA <- submodel %>% ICA_layer()
-    absolute_activation <- absolute_activation()
-    submodel_final <- submodel_ICA %>% absolute_activation()
+    validation <- list(standardize(vX, center, scale), matrix(yv))
+  }
+  history <- keras3::fit(net$train, Xs, matrix(y), epochs = as.integer(epochs),
+                         batch_size = as.integer(batch_size),
+                         validation_split = validation_split,
+                         validation_data = validation, callbacks = callbacks,
+                         shuffle = TRUE, verbose = verbose)
+  history <- history_df(history)
 
-    output <- submodel_final %>% keras3::layer_dense(n_segments,
-        activation = "softmax"
-    )
+  Z <- predict_np(net$feature, Xs)
+  S_center <- colMeans(Z)
+  S_scale <- safe_range(apply(Z, 2, sd))
+  S <- standardize(Z, S_center, S_scale)
+  colnames(Z) <- colnames(S) <- paste0("IC", seq_len(latent_dim))
+  acc <- history$value[history$metric == "accuracy" & history$data == "training"]
 
-    model <- keras3::keras_model(inputs = input, outputs = output)
-    ICA_model <- keras3::keras_model(inputs = input, outputs = ICA_layer$output)
+  models <- new.env(parent = emptyenv())
+  models$net <- net
+  structure(list(
+    S = S, S_unscaled = Z, S_center = S_center, S_scale = S_scale,
+    method = "TCL", latent_dim = latent_dim, ar_order = 0L, n = n, p = p,
+    var_names = colnames(dat$X), data_center = center, data_scale = scale,
+    has_missing = FALSE, data = strip_data(dat), labels = labels,
+    accuracy = acc[length(acc)], history = history, spec = spec,
+    weights = get_trainable_weights(net$train), models = models,
+    call = match.call(), data_name = deparse1(substitute(x))
+  ), class = c("TCL", "nlbss"))
+}
 
-    loss_fn <- loss_sparse_categorical_crossentropy()
-
-    model %>% keras3::compile(
-        optimizer = tensorflow::tf$keras$optimizers$Adam(
-            learning_rate = tensorflow::tf$keras$optimizers$schedules$PolynomialDecay(
-                lr_start, 10000, lr_end, 2
-            )
-        ),
-        loss = loss_fn,
-        metrics = "accuracy"
-    )
-
-    model %>% keras3::fit(x_train, y_train, shuffle = TRUE, ...)
-
-    ICA_estimates <- predict(ICA_model, x)
-    TCL_object <- list(IC = ICA_estimates, data_means = data_means, data_sds = data_sds, ICA_model = ICA_model)
-    class(TCL_object) <- "TCL"
-    return(TCL_object)
+build_tcl_network <- function(spec) {
+  x_in <- keras3::layer_input(shape = as.integer(spec$p))
+  h <- x_in
+  for (units in spec$hidden_units) {
+    h <- keras3::layer_dense(h, units = units, activation = spec$activation)
+  }
+  features <- keras3::layer_dense(h, units = as.integer(spec$latent_dim),
+                                  name = "features")
+  out <- keras3::layer_lambda(features, f = keras3::op_abs)
+  out <- keras3::layer_dense(out, units = as.integer(spec$n_classes),
+                             activation = "softmax")
+  list(train = keras3::keras_model(x_in, out),
+       feature = keras3::keras_model(x_in, features))
 }
