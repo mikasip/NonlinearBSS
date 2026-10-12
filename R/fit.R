@@ -75,7 +75,7 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
     }
     validation <- list(
       network_inputs(rbind(sc$X, Xv), rbind(sc$mask, Mv), rbind(A, Av),
-                     vlags, rows),
+                     vlags, rows, use_mask = spec$use_mask),
       matrix(0, length(rows), 1)
     )
   }
@@ -247,19 +247,27 @@ restore_rng <- function(old) {
 # Inputs of the training network for the rows `rows` of the data matrices.
 # Lagged inputs of observations without previous values are replaced by the
 # observation itself and marked as invalid.
-network_inputs <- function(X, mask, A, lags, rows = seq_len(nrow(X)), use_mask = TRUE) {
-  inputs <- c(list(X[rows, , drop = FALSE], mask[rows, , drop = FALSE]),
-              if (!is.null(A)) list(A[rows, , drop = FALSE]))
+network_inputs <- function(X, mask, A, lags, rows = seq_len(nrow(X)),
+                          use_mask = TRUE) {
+  inputs <- list(X[rows, , drop = FALSE])
+  if (use_mask) {
+    inputs <- c(inputs, list(mask[rows, , drop = FALSE]))
+  }
+  if (!is.null(A)) {
+    inputs <- c(inputs, list(A[rows, , drop = FALSE]))
+  }
   for (r in seq_len(if (is.null(lags)) 0 else ncol(lags))) {
     j <- lags[rows, r]
     valid <- !is.na(j)
     j[!valid] <- rows[!valid]
-    lag_inputs <- list(X[j, , drop = FALSE], A[j, , drop = FALSE],
-                       matrix(as.numeric(valid)))
+    lag_inputs <- list(X[j, , drop = FALSE])
     if (use_mask) {
-      lag_inputs <- list(X[j, , drop = FALSE], mask[j, , drop = FALSE],
-                         A[j, , drop = FALSE], matrix(as.numeric(valid)))
+      lag_inputs <- c(lag_inputs, list(mask[j, , drop = FALSE]))
     }
+    if (!is.null(A)) {
+      lag_inputs <- c(lag_inputs, list(A[j, , drop = FALSE]))
+    }
+    lag_inputs <- c(lag_inputs, list(matrix(as.numeric(valid))))
     inputs <- c(inputs, lag_inputs)
   }
   inputs
