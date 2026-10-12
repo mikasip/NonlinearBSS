@@ -31,7 +31,6 @@ method_title <- function(method) {
 #' fit <- VAE(x, epochs = 2, verbose = 0)
 #' class(components(fit))
 #' @exportS3Method generics::components
-#' @exportS3Method ICS::components
 components.nlbss <- function(object, format = c("input", "matrix"),
                              unscaled = FALSE, ...) {
   M <- if (unscaled) object$S_unscaled else object$S

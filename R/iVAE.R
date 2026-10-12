@@ -89,9 +89,8 @@
 #' @param activation Activation function of the hidden layers.
 #' @param source_dist Distribution of the latent components given the
 #'   auxiliary variables, `"gaussian"` or `"laplace"`.
-#' @param error_dist Distribution of the reconstruction error: `"gaussian"`,
-#'   `"laplace"`, `"huber"`, `"poisson"` (count data, the decoder gives log
-#'   rates) or `"bernoulli"` (binary data).
+#' @param error_dist Distribution of the reconstruction error: `"gaussian"` or
+#'   `"laplace"`.
 #' @param error_dist_sigma Scale of the reconstruction error (the variance for
 #'   `"gaussian"`). A vector of length two defines a linear schedule from the
 #'   first to the second value over `steps` training steps.
@@ -169,8 +168,7 @@ iVAE <- function(x, aux = NULL, latent_dim = NULL, coords = NULL, time = NULL,
                  aux_hidden_units = c(128, 128, 128),
                  activation = "leaky_relu",
                  source_dist = c("gaussian", "laplace"),
-                 error_dist = c("gaussian", "laplace", "huber", "poisson",
-                                "bernoulli"),
+                 error_dist = c("gaussian", "laplace"),
                  error_dist_sigma = 0.02, mask_encoder = TRUE,
                  optimizer = NULL, lr_start = 0.001, lr_end = 0.0001,
                  steps = 10000, epochs = 100, batch_size = 64,

@@ -18,7 +18,7 @@ iVAEar(
   aux_hidden_units = c(128, 128, 128),
   activation = "leaky_relu",
   source_dist = c("gaussian", "laplace"),
-  error_dist = c("gaussian", "laplace", "huber", "poisson", "bernoulli"),
+  error_dist = c("gaussian", "laplace"),
   error_dist_sigma = 0.01,
   mask_encoder = TRUE,
   optimizer = NULL,
@@ -73,9 +73,8 @@ auxiliary function.}
 \item{source_dist}{Distribution of the latent components given the
 auxiliary variables, \code{"gaussian"} or \code{"laplace"}.}
 
-\item{error_dist}{Distribution of the reconstruction error: \code{"gaussian"},
-\code{"laplace"}, \code{"huber"}, \code{"poisson"} (count data, the decoder gives log
-rates) or \code{"bernoulli"} (binary data).}
+\item{error_dist}{Distribution of the reconstruction error: \code{"gaussian"} or
+\code{"laplace"}.}
 
 \item{error_dist_sigma}{Scale of the reconstruction error (the variance for
 \code{"gaussian"}). A vector of length two defines a linear schedule from the

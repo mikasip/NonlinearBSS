@@ -105,17 +105,7 @@ tf_log_density <- function(dist, x, loc, scale) {
   switch(dist,
     gaussian = -0.5 * (keras3::op_square(x - loc) / scale + log(2 * pi) +
                          keras3::op_log(scale)),
-    laplace = -(keras3::op_log(2 * scale) + keras3::op_abs(x - loc) / scale),
-    huber = {
-      d <- keras3::op_abs(x - loc)
-      keras3::op_where(d < 0.2, -0.5 * keras3::op_square(x - loc),
-                       -0.2 * (d - 0.1)) / scale
-    },
-    poisson = x * loc - keras3::op_exp(loc),
-    bernoulli = {
-      theta <- loc * 0.99 + 0.005
-      x * keras3::op_log(theta) + (1 - x) * keras3::op_log(1 - theta)
-    }
+    laplace = -(keras3::op_log(2 * scale) + keras3::op_abs(x - loc) / scale)
   )
 }
 
@@ -177,16 +167,7 @@ elbo_metrics <- function() {
 r_log_density <- function(dist, x, loc, scale) {
   switch(dist,
     gaussian = -0.5 * ((x - loc)^2 / scale + log(2 * pi) + log(scale)),
-    laplace = -(log(2 * scale) + abs(x - loc) / scale),
-    huber = {
-      d <- abs(x - loc)
-      ifelse(d < 0.2, -0.5 * (x - loc)^2, -0.2 * (d - 0.1)) / scale
-    },
-    poisson = x * loc - exp(loc),
-    bernoulli = {
-      theta <- loc * 0.99 + 0.005
-      x * log(theta) + (1 - x) * log(1 - theta)
-    }
+    laplace = -(log(2 * scale) + abs(x - loc) / scale)
   )
 }
 

@@ -63,7 +63,7 @@ build_network <- function(spec, step) {
 
   # Decoder h(z)
   dec_hidden <- lapply(rev(spec$hidden_units), dense, activation = act)
-  dec_out <- dense(p, if (spec$error_dist == "bernoulli") "sigmoid")
+  dec_out <- dense(p)
   decode <- function(z) {
     for (layer in dec_hidden) z <- layer(z)
     dec_out(z)

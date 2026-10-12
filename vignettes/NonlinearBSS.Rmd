@@ -70,7 +70,7 @@ dim(A)
 
 
 ``` r
-fit <- iVAE(x, aux_segments(100), time = 1:3000, epochs = 50,
+fit <- iVAE(x, aux_rbf(c(9, 17, 37)), time = 1:3000, epochs = 50,
             verbose = 0, seed = 1)
 fit
 #> Identifiable variational autoencoder (iVAE)

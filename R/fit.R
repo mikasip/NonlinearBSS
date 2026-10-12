@@ -146,22 +146,10 @@ check_sigma <- function(sigma) {
   }
 }
 
-scale_data <- function(X, error_dist) {
+scale_data <- function(X) {
   mask <- (!is.na(X)) * 1
-  p <- ncol(X)
-  if (error_dist %in% c("poisson", "bernoulli")) {
-    if (error_dist == "bernoulli" && !all(X[!is.na(X)] %in% c(0, 1))) {
-      stop("`error_dist = \"bernoulli\"` needs binary (0/1) data.", call. = FALSE)
-    }
-    if (error_dist == "poisson" && any(X < 0, na.rm = TRUE)) {
-      stop("`error_dist = \"poisson\"` needs non-negative count data.", call. = FALSE)
-    }
-    center <- rep(0, p)
-    scale <- rep(1, p)
-  } else {
-    center <- colMeans(X, na.rm = TRUE)
-    scale <- safe_range(apply(X, 2, sd, na.rm = TRUE))
-  }
+  center <- colMeans(X, na.rm = TRUE)
+  scale <- safe_range(apply(X, 2, sd, na.rm = TRUE))
   Xs <- standardize(X, center, scale)
   Xs[mask == 0] <- 0
   list(X = Xs, mask = mask, center = center, scale = scale)
