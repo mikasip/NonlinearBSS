@@ -239,30 +239,18 @@ plot_map <- function(x, IC, time, ...) {
   nc <- ceiling(sqrt(k))
   op <- par(mfrow = c(ceiling(k / nc), nc), mar = c(2, 2, 2, 1))
   on.exit(par(op))
-  cols <- hcl.colors(128, "viridis")
+  cols <- hcl.colors(64, "viridis")
   for (j in seq_len(k)) {
     v <- IC[rows, j]
     r <- range(v)
     if (diff(r) == 0) r <- r + c(-0.5, 0.5)
-    col_index <- function(u) {
-      idx <- 1 + pmax(0, pmin(127, floor((u - r[1]) / diff(r) * 127)))
-      pmin(length(cols), pmax(1, idx))
-    }
+    col_index <- function(u) pmin(64, pmax(1, floor((u - r[1]) / diff(r) * 63) + 1))
     plot(xy[, 1], xy[, 2], col = cols[col_index(v)], pch = 19, asp = 1,
          xlab = "", ylab = "", main = colnames(IC)[j], ...)
-
-    legend_x <- par("usr")[1] + 0.75 * diff(par("usr")[1:2])
-    legend_y <- par("usr")[3] + 0.06 * diff(par("usr")[3:4])
-    legend_w <- 0.18 * diff(par("usr")[1:2])
-    legend_h <- 0.26 * diff(par("usr")[3:4])
-    z <- matrix(seq(r[1], r[2], length.out = 128), nrow = 2, ncol = 128)
-    image(x = c(legend_x, legend_x + legend_w),
-          y = seq(legend_y, legend_y + legend_h, length.out = 128),
-          z = z, col = cols, add = TRUE, axes = FALSE)
-    axis(4, at = seq(legend_y, legend_y + legend_h, length.out = 5),
-         labels = format(seq(r[1], r[2], length.out = 5)), cex.axis = 0.7,
-         line = -0.4)
-    box()
+    br <- pretty(r, 4)
+    br <- br[br >= r[1] & br <= r[2]]
+    legend("topright", legend = format(br), pch = 19, col = cols[col_index(br)],
+           bg = "white", cex = 0.8)
   }
 }
 
