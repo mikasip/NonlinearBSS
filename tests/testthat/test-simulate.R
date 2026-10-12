@@ -46,6 +46,9 @@ test_that("generate_areal_units and simulate_sources_areal produce real areal da
   expect_equal(dim(areal$W), c(6, 6))
   expect_equal(length(unique(areal$area_id)), 6)
 
+  expect_equal(nrow(areal$areas_sf), 6)
+  expect_true(all(sf::st_is_valid(areal$areas_sf)))
+
   src <- simulate_sources_areal(3, areal = areal, n_time = 10,
                                 n_segments_time = 3, seed = 2)
   expect_equal(dim(src$sources), c(60, 3))

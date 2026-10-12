@@ -217,6 +217,63 @@ mix_data <- function(x, n_layers = 1,
 #'                               seed = 1)
 #' dim(areal$W)
 #' @export
+build_areal_polygons <- function(fine_points, area_id) {
+  if (!requireNamespace("sf", quietly = TRUE)) {
+    stop("The `sf` package is required to build areal polygons.", call. = FALSE)
+  }
+  if (is.null(area_id)) {
+    stop("`area_id` must be supplied to build areal polygons.", call. = FALSE)
+  }
+  fine_points <- as.matrix(fine_points)
+  if (ncol(fine_points) != 2L) {
+    stop("`fine_points` must have exactly two columns.", call. = FALSE)
+  }
+
+  ring_from_points <- function(pts, size = 1e-4) {
+    if (nrow(pts) < 3L) {
+      centre <- colMeans(pts)
+      return(rbind(
+        centre + c(-size, -size),
+        centre + c(size, -size),
+        centre + c(size, size),
+        centre + c(-size, size),
+        centre + c(-size, -size)
+      ))
+    }
+    hull <- chull(pts)
+    if (length(hull) < 3L) {
+      centre <- colMeans(pts)
+      return(rbind(
+        centre + c(-size, -size),
+        centre + c(size, -size),
+        centre + c(size, size),
+        centre + c(-size, size),
+        centre + c(-size, -size)
+      ))
+    }
+    ring <- pts[hull, , drop = FALSE]
+    ring <- ring[!duplicated(ring), , drop = FALSE]
+    if (nrow(ring) < 3L) {
+      centre <- colMeans(pts)
+      return(rbind(
+        centre + c(-size, -size),
+        centre + c(size, -size),
+        centre + c(size, size),
+        centre + c(-size, size),
+        centre + c(-size, -size)
+      ))
+    }
+    rbind(ring, ring[1, , drop = FALSE])
+  }
+
+  area_ids <- sort(unique(as.integer(area_id)))
+  geoms <- lapply(area_ids, function(i) {
+    pts <- fine_points[as.integer(area_id) == i, , drop = FALSE]
+    sf::st_polygon(list(ring_from_points(pts)))
+  })
+  sf::st_sf(area = area_ids, geometry = sf::st_sfc(geoms, crs = NA_real_))
+}
+
 generate_areal_units <- function(n_area, n_fine = NULL,
                                 seed_type = c("uniform", "clustered"),
                                 n_clusters = 3L, cluster_sd = 0.04,
@@ -304,12 +361,14 @@ generate_areal_units <- function(n_area, n_fine = NULL,
   }
 
   if (is.null(colnames(W))) colnames(W) <- rownames(W) <- paste0("A", seq_len(n_area))
+  areas_sf <- build_areal_polygons(fine_points, area_id)
   list(fine_points = fine_points,
        seed_points = seed_points,
        area_id = area_id,
        area_coords = area_centres,
        W = W,
-       area_centres = area_centres)
+       area_centres = area_centres,
+       areas_sf = areas_sf)
 }
 
 #' Simulate Nonstationary Areal Sources Over Time

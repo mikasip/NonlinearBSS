@@ -17,6 +17,7 @@ and fits iVAE and iVAEar using the Moran auxiliary option.
 
 ```{r areal-generation, message = FALSE}
 library(ggplot2)
+library(sf)
 library(NonlinearBSS)
 
 set.seed(1)
@@ -29,35 +30,43 @@ src <- simulate_sources_areal(p = 3, areal = areal, n_time = 20,
                               ar_range = c(0.4, 0.8), seed = 2)
 ```
 
+First, we plot the actual areal units and their borders, without any fill color.
+
+```{r areal-boundaries}
+ggplot(areal$areas_sf) +
+  geom_sf(color = "black", fill = NA, linewidth = 0.3) +
+  coord_sf(datum = NA) +
+  theme_minimal() +
+  theme(axis.text = element_blank(), axis.ticks = element_blank())
+```
+
 ## Example areal sources
 
-The first three latent sources are shown at a single time point over the areal units.
+The first three latent sources are shown at a single time point over the true areal units.
 
 ```{r source-plot}
-idx <- seq_len(nrow(areal$area_coords))
-source_df <- data.frame(
-  x = areal$area_coords[idx, 1],
-  y = areal$area_coords[idx, 2],
-  source1 = src$sources[idx, 1],
-  source2 = src$sources[idx, 2],
-  source3 = src$sources[idx, 3]
-)
-source_long <- data.frame(
-  x = rep(source_df$x, 3),
-  y = rep(source_df$y, 3),
-  component = factor(rep(c("Source 1", "Source 2", "Source 3"),
-                         each = nrow(source_df)),
-                     levels = c("Source 1", "Source 2", "Source 3")),
-  value = c(source_df$source1, source_df$source2, source_df$source3)
-)
+source_sf <- areal$areas_sf
+source_sf$source1 <- src$sources[seq_len(nrow(source_sf)), 1]
+source_sf$source2 <- src$sources[seq_len(nrow(source_sf)), 2]
+source_sf$source3 <- src$sources[seq_len(nrow(source_sf)), 3]
 
-ggplot(source_long, aes(x, y, fill = value)) +
-  geom_tile() +
+source_sf_long <- rbind(
+  data.frame(component = "Source 1", value = source_sf$source1, geometry = source_sf$geometry),
+  data.frame(component = "Source 2", value = source_sf$source2, geometry = source_sf$geometry),
+  data.frame(component = "Source 3", value = source_sf$source3, geometry = source_sf$geometry)
+)
+source_sf_long <- sf::st_as_sf(source_sf_long)
+source_sf_long$component <- factor(source_sf_long$component,
+                                  levels = c("Source 1", "Source 2", "Source 3"))
+
+ggplot(source_sf_long) +
+  geom_sf(aes(fill = value), color = "white", linewidth = 0.2) +
   facet_wrap(~ component, ncol = 3) +
   scale_fill_viridis_c() +
-  coord_fixed() +
+  coord_sf(datum = NA) +
   theme_minimal() +
-  labs(x = "x", y = "y", fill = "value")
+  theme(axis.text = element_blank(), axis.ticks = element_blank()) +
+  labs(fill = "value")
 ```
 
 ## Moran eigenvector maps
@@ -66,21 +75,28 @@ The spatial structure is described by positive Moran eigenvectors of the areal a
 
 ```{r moran-plot}
 mem <- compute_MEM_vectors(areal$W, K = 10, positive_only = TRUE)$mem[, 1:3, drop = FALSE]
-mem_long <- data.frame(
-  x = rep(areal$area_coords[, 1], 3),
-  y = rep(areal$area_coords[, 2], 3),
-  component = factor(rep(c("MEM 1", "MEM 2", "MEM 3"), each = nrow(areal$area_coords)),
-                     levels = c("MEM 1", "MEM 2", "MEM 3")),
-  value = as.vector(mem)
-)
+mem_sf <- areal$areas_sf
+mem_sf$mem1 <- mem[, 1]
+mem_sf$mem2 <- mem[, 2]
+mem_sf$mem3 <- mem[, 3]
 
-ggplot(mem_long, aes(x, y, fill = value)) +
-  geom_tile() +
+mem_sf_long <- rbind(
+  data.frame(component = "MEM 1", value = mem_sf$mem1, geometry = mem_sf$geometry),
+  data.frame(component = "MEM 2", value = mem_sf$mem2, geometry = mem_sf$geometry),
+  data.frame(component = "MEM 3", value = mem_sf$mem3, geometry = mem_sf$geometry)
+)
+mem_sf_long <- sf::st_as_sf(mem_sf_long)
+mem_sf_long$component <- factor(mem_sf_long$component,
+                               levels = c("MEM 1", "MEM 2", "MEM 3"))
+
+ggplot(mem_sf_long) +
+  geom_sf(aes(fill = value), color = "white", linewidth = 0.2) +
   facet_wrap(~ component, ncol = 3) +
   scale_fill_viridis_c() +
-  coord_fixed() +
+  coord_sf(datum = NA) +
   theme_minimal() +
-  labs(x = "x", y = "y", fill = "value")
+  theme(axis.text = element_blank(), axis.ticks = element_blank()) +
+  labs(fill = "value")
 ```
 
 ## Fitting iVAE and iVAEar with Moran auxiliary data
@@ -89,22 +105,24 @@ ggplot(mem_long, aes(x, y, fill = value)) +
 coords <- areal$area_coords[rep(seq_len(nrow(areal$area_coords)),
                                length(unique(src$time))), , drop = FALSE]
 
+time <- src$time
 mix <- mix_data(src$sources, n_layers = 2, nonlinearity = "elu",
                 final_activation = "none")
 
 aux_spec <- aux_moran(neighborhood = areal$W, K = 10)
 
 fit_ivae <- iVAE(mix, aux = aux_spec, latent_dim = 3,
-                epochs = 10, batch_size = 32, verbose = 0, seed = 1)
+                 coords = coords, time = time,
+                 epochs = 10, batch_size = 32, verbose = 0, seed = 1)
 
 fit_ivaear <- iVAEar(mix, aux = aux_spec, latent_dim = 3,
-                    coords = coords, time = src$time,
+                    coords = coords, time = time,
                     epochs = 10, batch_size = 32, verbose = 0, seed = 1)
 ```
 
 ```{r tf-component-plots, eval = tf_available()}
 plot_ivae <- data.frame(
-  time = src$time,
+  time = time,
   component = factor(rep(c("Component 1", "Component 2", "Component 3"),
                          each = nrow(fit_ivae$S)),
                      levels = c("Component 1", "Component 2", "Component 3")),
@@ -118,7 +136,7 @@ ggplot(plot_ivae, aes(time, value)) +
   labs(x = "time", y = "estimated component")
 
 plot_ivaear <- data.frame(
-  time = src$time,
+  time = time,
   component = factor(rep(c("Component 1", "Component 2", "Component 3"),
                          each = nrow(fit_ivaear$S)),
                      levels = c("Component 1", "Component 2", "Component 3")),
