@@ -601,8 +601,10 @@ fit_aux.aux_moran <- function(spec, dat) {
   W <- if (!is.null(spec$neighborhood)) spec$neighborhood else {
     adjacency_matrix(spec$adj_list, n = nrow(dat$X))
   }
-  if (nrow(W) != nrow(dat$X)) {
-    stop("The Moran neighborhood matrix must have one row and column per observation.",
+  n_areal <- nrow(W)
+  n_obs <- nrow(dat$X)
+  if (n_obs != n_areal && (n_obs %% n_areal) != 0L) {
+    stop("The Moran neighborhood matrix must have one row and column per areal unit, or a repeated areal-by-time layout.",
          call. = FALSE)
   }
   mem <- compute_MEM_vectors(W, K = spec$K, positive_only = spec$positive_only)
@@ -620,11 +622,17 @@ transform_aux.aux_moran <- function(spec, dat, values, training) {
   if (is.null(spec$mem)) {
     stop("The Moran auxiliary variables have not been fitted yet.", call. = FALSE)
   }
-  if (nrow(dat$X) != nrow(spec$mem)) {
-    stop("The new data must contain the same areal units as the fitted Moran auxiliary data.",
-         call. = FALSE)
+  n_areal <- nrow(spec$mem)
+  n_obs <- nrow(dat$X)
+  if (n_obs == n_areal) {
+    return(spec$mem)
   }
-  spec$mem
+  if (n_obs %% n_areal == 0L) {
+    reps <- n_obs / n_areal
+    return(spec$mem[rep(seq_len(n_areal), times = reps), , drop = FALSE])
+  }
+  stop("The new data must contain the same areal units as the fitted Moran auxiliary data.",
+       call. = FALSE)
 }
 
 # Radial basis functions ---------------------------------------------------

@@ -102,8 +102,6 @@ ggplot(mem_sf_long) +
 ## Fitting iVAE and iVAEar with Moran auxiliary data
 
 ```{r tf-models, eval = tf_available()}
-coords <- areal$area_coords[rep(seq_len(nrow(areal$area_coords)),
-                               length(unique(src$time))), , drop = FALSE]
 
 time <- src$time
 mix <- mix_data(src$sources, n_layers = 2, nonlinearity = "elu",
@@ -112,11 +110,11 @@ mix <- mix_data(src$sources, n_layers = 2, nonlinearity = "elu",
 aux_spec <- aux_moran(neighborhood = areal$W, K = 10)
 
 fit_ivae <- iVAE(mix, aux = aux_spec, latent_dim = 3,
-                 coords = coords, time = time,
+                 coords = NULL, time = time,
                  epochs = 10, batch_size = 32, verbose = 0, seed = 1)
 
 fit_ivaear <- iVAEar(mix, aux = aux_spec, latent_dim = 3,
-                    coords = coords, time = time,
+                    coords = NULL, time = time,
                     epochs = 10, batch_size = 32, verbose = 0, seed = 1)
 ```
 

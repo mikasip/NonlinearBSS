@@ -67,9 +67,10 @@ test_that("Moran MEM auxiliary variables integrate with iVAE", {
   areal <- generate_areal_units(20, n_fine = 600, seed_type = "uniform",
                                n_clusters = 5, cluster_sd = 0.08,
                                seed = 1)
-  src <- simulate_sources_areal(3, areal = areal, n_time = 1, seed = 1)
+  src <- simulate_sources_areal(3, areal = areal, n_time = 5, seed = 1)
   mem <- aux_moran(neighborhood = areal$W, K = 3)
-  expect_equal(dim(aux_matrix(mem, matrix(0, nrow(areal$W), 0))), c(nrow(areal$W), 3))
+  expect_equal(dim(aux_matrix(mem, matrix(0, nrow(src$sources), 0),
+                             time = src$time)), c(nrow(src$sources), 3))
 
   x <- src$sources
   fit <- iVAE(x, aux = mem, latent_dim = 2, epochs = 1, verbose = 0, seed = 1)
