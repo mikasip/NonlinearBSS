@@ -40,3 +40,15 @@ test_that("lag_index finds previous observations of each series", {
   expect_equal(lags[, 2], c(NA, NA, 1, 2, NA, NA, 6, NA))
   expect_error(NonlinearBSS:::lag_index(c(1, 1), c("a", "a"), 1), "one observation")
 })
+
+test_that("generate_areal_units and simulate_sources_areal produce real areal data", {
+  areal <- generate_areal_units(6, n_fine = 200, seed_type = "uniform", seed = 1)
+  expect_equal(dim(areal$W), c(6, 6))
+  expect_equal(length(unique(areal$area_id)), 6)
+
+  src <- simulate_sources_areal(3, areal = areal, n_time = 10,
+                                n_segments_time = 3, seed = 2)
+  expect_equal(dim(src$sources), c(60, 3))
+  expect_equal(dim(src$W), c(6, 6))
+  expect_false(anyNA(src$sources))
+})

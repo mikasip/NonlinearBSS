@@ -189,6 +189,272 @@ mix_data <- function(x, n_layers = 1,
   x
 }
 
+#' Generate Realistic Areal Units from a Fine Grid and Seeds
+#'
+#' Creates a fine-grained point layer, assigns each point to one of `n_area`
+#' seed locations, then builds an areal adjacency matrix for the resulting
+#' regions. This yields structures that resemble real areal data without needing
+#' a full spatial package stack.
+#'
+#' If the optional `deldir` package is available, the fine layer uses a Delaunay
+#' graph to define neighborhood relations between fine points before aggregating
+#' them into areal units. If not, a simple radius graph is used instead.
+#'
+#' @param n_area Number of areal units.
+#' @param n_fine Number of fine grid points used to define the areal partition.
+#' @param seed_type Type of seed placement: `"uniform"` or `"clustered"`.
+#' @param n_clusters Number of seed clusters for clustered placement.
+#' @param cluster_sd Cluster spread for clustered sampling.
+#' @param xy_coef Additional spread parameter in the x/y direction for clustered
+#'   seeds.
+#' @param radius Optional radius used in the fallback graph construction. If `NULL`,
+#'   it is chosen from the median nearest-neighbor distance.
+#' @param seed Optional random seed.
+#' @return A list with elements `fine_points`, `seed_points`, `area_id`,
+#'   `area_coords`, `W`, and `area_centres`.
+#' @examples
+#' areal <- generate_areal_units(6, n_fine = 200, seed_type = "uniform",
+#'                               seed = 1)
+#' dim(areal$W)
+#' @export
+generate_areal_units <- function(n_area, n_fine = NULL,
+                                seed_type = c("uniform", "clustered"),
+                                n_clusters = 3L, cluster_sd = 0.04,
+                                xy_coef = 1, radius = NULL,
+                                seed = NULL) {
+  seed_type <- match.arg(seed_type)
+  if (!is.null(seed)) set.seed(seed)
+  if (length(n_area) != 1L || n_area < 2L) {
+    stop("`n_area` must be a single integer greater than or equal to 2.",
+         call. = FALSE)
+  }
+  if (is.null(n_fine)) n_fine <- max(200L, 30L * n_area)
+  n_fine <- as.integer(n_fine)
+
+  fine_points <- matrix(runif(2 * n_fine), ncol = 2)
+
+  if (seed_type == "uniform") {
+    seed_points <- matrix(runif(2 * n_area), ncol = 2)
+  } else {
+    centres <- matrix(runif(2 * n_clusters), ncol = 2)
+    cluster_id <- sample.int(n_clusters, n_area, replace = TRUE)
+    seed_points <- centres[cluster_id, , drop = FALSE] +
+      cbind(rnorm(n_area, sd = cluster_sd),
+            rnorm(n_area, sd = xy_coef * cluster_sd))
+    seed_points <- pmax(pmin(seed_points, 1), 0)
+  }
+
+  d2 <- outer(rowSums(fine_points^2), rowSums(seed_points^2), "+") -
+    2 * fine_points %*% t(seed_points)
+  area_id <- max.col(-d2, ties.method = "first")
+
+  unused <- setdiff(seq_len(n_area), unique(area_id))
+  if (length(unused) > 0L) {
+    for (i in unused) {
+      j <- which.min(d2[, i])
+      area_id[j] <- i
+    }
+  }
+
+  area_centres <- vapply(seq_len(n_area), function(i) {
+    colMeans(fine_points[area_id == i, , drop = FALSE])
+  }, numeric(2L))
+  area_centres <- t(area_centres)
+
+  if (is.null(radius)) {
+    if (n_area > 1L) {
+      dnn <- min(as.matrix(dist(area_centres)))
+      radius <- if (is.finite(dnn) && dnn > 0) 1.5 * dnn else 0.2
+    } else {
+      radius <- 0.2
+    }
+  }
+
+  W <- matrix(0, n_area, n_area)
+  if (requireNamespace("deldir", quietly = TRUE) &&
+      requireNamespace("igraph", quietly = TRUE)) {
+    del <- deldir::deldir(fine_points[, 1], fine_points[, 2], rw = c(0, 1, 0, 1))
+    edges <- del$delsgs[, c("ind1", "ind2")]
+    if (!is.null(edges) && nrow(edges) > 0L) {
+      g <- igraph::simplify(igraph::graph_from_edgelist(as.matrix(edges),
+                                                        directed = FALSE))
+      edge_df <- igraph::as_data_frame(g, what = "edges")
+      if (nrow(edge_df) > 0L) {
+        from <- as.integer(edge_df$from)
+        to <- as.integer(edge_df$to)
+        a1 <- area_id[from]
+        a2 <- area_id[to]
+        keep <- a1 != a2
+        if (sum(keep) > 0L) {
+          pairs <- unique(data.frame(a = pmin(a1[keep], a2[keep]),
+                                    b = pmax(a1[keep], a2[keep])))
+          if (nrow(pairs) > 0L) {
+            W[cbind(pairs$a, pairs$b)] <- 1
+            W[cbind(pairs$b, pairs$a)] <- 1
+          }
+        }
+      }
+    }
+  }
+
+  if (sum(W) == 0) {
+    D <- as.matrix(dist(area_centres))
+    W <- ((D > 0) & (D <= radius)) * 1
+    diag(W) <- 0
+  }
+
+  if (is.null(colnames(W))) colnames(W) <- rownames(W) <- paste0("A", seq_len(n_area))
+  list(fine_points = fine_points,
+       seed_points = seed_points,
+       area_id = area_id,
+       area_coords = area_centres,
+       W = W,
+       area_centres = area_centres)
+}
+
+#' Simulate Nonstationary Areal Sources Over Time
+#'
+#' Simulates latent sources for areal units over time, with spatial modulation
+#' driven by Moran eigenvectors of the areal graph. This is the intended areal
+#' analogue of [simulate_sources()] for spatially structured data.
+#'
+#' The spatial variance is built from the leading positive MEM vectors and is
+#' scaled to a nonstationary range across areal units. Temporal dependence is then
+#' generated by a block-wise AR(1) process, optionally with a smooth AR path.
+#' The CAR option is intentionally not included here.
+#'
+#' @param p Number of latent components.
+#' @param areal Optional output from [generate_areal_units()].
+#' @param W Optional adjacency matrix.
+#' @param n_area Number of areal units when `W` and `areal` are not supplied.
+#' @param n_fine Number of fine points used to generate areal units.
+#' @param n_time Number of time points.
+#' @param n_segments_time Number of temporal variance blocks.
+#' @param sd_range Range of the spatial and temporal standard deviations used
+#'   to scale the Moran-based spatial variance and the time-block variance.
+#' @param ar_range Range for the AR(1) coefficients.
+#' @param seed_type Type of seed placement when generating areal units.
+#' @param n_clusters Number of clusters when `seed_type = "clustered"`.
+#' @param cluster_sd Cluster spread used in seed generation.
+#' @param xy_coef Additional anisotropy in the clustered seed layout.
+#' @param radius Radius used in the fallback graph construction.
+#' @param seed Optional random seed.
+#' @return A list with elements `sources`, `labels`, `W`, `coords`, `time`, and
+#'   `areal`.
+#' @examples
+#' areal <- generate_areal_units(8, n_fine = 200, seed = 1)
+#' src <- simulate_sources_areal(3, areal = areal, n_time = 20,
+#'                                n_segments_time = 3)
+#' dim(src$sources)
+#' @export
+simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
+                                  n_fine = NULL, n_time = 50,
+                                  n_segments_time = 5,
+                                  sd_range = c(0.1, 5),
+                                  ar_range = c(0.3, 0.9),
+                                  seed_type = c("uniform", "clustered"),
+                                  n_clusters = 3L, cluster_sd = 0.04,
+                                  xy_coef = 1, radius = NULL,
+                                  seed = NULL) {
+  seed_type <- match.arg(seed_type)
+  if (!is.null(seed)) set.seed(seed)
+
+  if (is.null(areal)) {
+    if (!is.null(W)) {
+      areal <- list(W = as.matrix(W), area_coords = NULL, area_id = seq_len(nrow(W)))
+    } else {
+      if (is.null(n_area)) n_area <- 8L
+      areal <- generate_areal_units(n_area = n_area, n_fine = n_fine,
+                                  seed_type = seed_type,
+                                  n_clusters = n_clusters,
+                                  cluster_sd = cluster_sd,
+                                  xy_coef = xy_coef,
+                                  radius = radius, seed = seed)
+    }
+  }
+
+  W <- as.matrix(areal$W)
+  if (nrow(W) != ncol(W)) {
+    stop("`W` must be square.", call. = FALSE)
+  }
+  n_area <- nrow(W)
+  if (n_time < 1L) stop("`n_time` must be positive.", call. = FALSE)
+  if (n_segments_time < 1L) stop("`n_segments_time` must be positive.", call. = FALSE)
+
+  mem_obj <- compute_MEM_vectors(W, K = min(10L, max(1L, n_area - 1L)),
+                                positive_only = TRUE)
+  K_mem <- ncol(mem_obj$mem)
+  if (K_mem < 1L) {
+    stop("No positive MEM vectors were found for the supplied areal graph.",
+         call. = FALSE)
+  }
+
+  if (length(sd_range) != 2L || any(!is.finite(sd_range)) || any(sd_range <= 0)) {
+    stop("`sd_range` must be a numeric vector of length 2 with positive finite values.",
+         call. = FALSE)
+  }
+  sd_range <- sort(sd_range)
+
+  if (n_time > 1L) {
+    time_centres <- sample(seq_len(n_time), min(n_segments_time, n_time))
+    time_labels <- vapply(seq_len(n_time), function(t) {
+      which.min(abs(time_centres - t))
+    }, integer(1L))
+    time_mult <- runif(n_segments_time, min(sd_range), max(sd_range))
+    time_mult <- time_mult[time_labels]
+  } else {
+    time_mult <- 1
+  }
+
+  z <- matrix(NA_real_, n_area * n_time, p)
+  if (length(ar_range) != 2L || any(!is.finite(ar_range))) {
+    ar_range <- c(0.3, 0.9)
+  }
+
+  for (j in seq_len(p)) {
+    mem_idx <- sample.int(K_mem, 1L)
+    mem_vals <- mem_obj$mem[, mem_idx, drop = FALSE]
+    mem_vals <- as.numeric(mem_vals)
+    mem_vals <- mem_vals - min(mem_vals)
+    if (max(mem_vals) > 0) mem_vals <- mem_vals / max(mem_vals)
+    mem_vals <- mem_vals * diff(sd_range) + sd_range[1]
+    sigma_i <- mem_vals
+
+    ar_coeff <- runif(n_time, min(ar_range), max(ar_range))
+    if (n_segments_time > 1L && n_time > 1L) {
+      ar_coeff <- vapply(seq_len(n_time), function(t) {
+        runif(1L, min(ar_range), max(ar_range))
+      }, numeric(1L))
+    }
+
+    z_t <- matrix(0, n_area, n_time)
+    for (t in seq_len(n_time)) {
+      eps_t <- rnorm(n_area, sd = sigma_i * sqrt(time_mult[t]))
+      if (t == 1L) {
+        z_t[, t] <- eps_t
+      } else {
+        z_t[, t] <- ar_coeff[t] * z_t[, t - 1] + eps_t
+      }
+    }
+    z[, j] <- as.numeric(z_t)
+  }
+
+  area_order <- rep(seq_len(n_area), n_time)
+  time_order <- rep(seq_len(n_time), each = n_area)
+  labels <- rep(seq_len(n_time), each = n_area)
+  colnames(z) <- paste0("Z", seq_len(p))
+  coords <- if (is.null(areal$area_coords)) matrix(runif(2 * n_area), ncol = 2) else areal$area_coords
+
+  list(sources = z,
+       labels = labels,
+       W = W,
+       coords = coords,
+       time = time_order,
+       area = area_order,
+       areal = areal,
+       mem = mem_obj$mem)
+}
+
 #' Absolute Mean Correlation Coefficient
 #'
 #' Computes the mean absolute correlation coefficient (MCC) between estimated

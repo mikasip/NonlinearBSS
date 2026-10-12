@@ -17,7 +17,7 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
   latent_dim <- if (is.null(latent_dim)) p else as.integer(latent_dim)
   if (method != "VAE" && is.null(aux)) aux <- default_aux(dat)
 
-  sc <- scale_data(dat$X, error_dist)
+  sc <- scale_data(dat$X)
   has_missing <- any(sc$mask == 0)
 
   prep <- NULL

@@ -1,0 +1,133 @@
+---
+title: "Areal data with Moran auxiliary variables"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Areal data with Moran auxiliary variables}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(fig.width = 8, fig.height = 4, message = FALSE,
+                      warning = FALSE)
+```
+
+This short example constructs an areal dataset, generates Moran eigenvector maps,
+and fits iVAE and iVAEar using the Moran auxiliary option.
+
+```{r areal-generation, message = FALSE}
+library(ggplot2)
+library(NonlinearBSS)
+
+set.seed(1)
+areal <- generate_areal_units(n_area = 30, n_fine = 600,
+                             seed_type = "uniform", seed = 1)
+
+src <- simulate_sources_areal(p = 3, areal = areal, n_time = 20,
+                              n_segments_time = 5,
+                              sd_range = c(0.3, 1.2),
+                              ar_range = c(0.4, 0.8), seed = 2)
+```
+
+## Example areal sources
+
+The first three latent sources are shown at a single time point over the areal units.
+
+```{r source-plot}
+idx <- seq_len(nrow(areal$area_coords))
+source_df <- data.frame(
+  x = areal$area_coords[idx, 1],
+  y = areal$area_coords[idx, 2],
+  source1 = src$sources[idx, 1],
+  source2 = src$sources[idx, 2],
+  source3 = src$sources[idx, 3]
+)
+source_long <- data.frame(
+  x = rep(source_df$x, 3),
+  y = rep(source_df$y, 3),
+  component = factor(rep(c("Source 1", "Source 2", "Source 3"),
+                         each = nrow(source_df)),
+                     levels = c("Source 1", "Source 2", "Source 3")),
+  value = c(source_df$source1, source_df$source2, source_df$source3)
+)
+
+ggplot(source_long, aes(x, y, fill = value)) +
+  geom_tile() +
+  facet_wrap(~ component, ncol = 3) +
+  scale_fill_viridis_c() +
+  coord_fixed() +
+  theme_minimal() +
+  labs(x = "x", y = "y", fill = "value")
+```
+
+## Moran eigenvector maps
+
+The spatial structure is described by positive Moran eigenvectors of the areal adjacency matrix.
+
+```{r moran-plot}
+mem <- compute_MEM_vectors(areal$W, K = 10, positive_only = TRUE)$mem[, 1:3, drop = FALSE]
+mem_long <- data.frame(
+  x = rep(areal$area_coords[, 1], 3),
+  y = rep(areal$area_coords[, 2], 3),
+  component = factor(rep(c("MEM 1", "MEM 2", "MEM 3"), each = nrow(areal$area_coords)),
+                     levels = c("MEM 1", "MEM 2", "MEM 3")),
+  value = as.vector(mem)
+)
+
+ggplot(mem_long, aes(x, y, fill = value)) +
+  geom_tile() +
+  facet_wrap(~ component, ncol = 3) +
+  scale_fill_viridis_c() +
+  coord_fixed() +
+  theme_minimal() +
+  labs(x = "x", y = "y", fill = "value")
+```
+
+## Fitting iVAE and iVAEar with Moran auxiliary data
+
+```{r tf-models, eval = tf_available()}
+coords <- areal$area_coords[rep(seq_len(nrow(areal$area_coords)),
+                               length(unique(src$time))), , drop = FALSE]
+
+mix <- mix_data(src$sources, n_layers = 2, nonlinearity = "elu",
+                final_activation = "none")
+
+aux_spec <- aux_moran(neighborhood = areal$W, K = 10)
+
+fit_ivae <- iVAE(mix, aux = aux_spec, latent_dim = 3,
+                epochs = 10, batch_size = 32, verbose = 0, seed = 1)
+
+fit_ivaear <- iVAEar(mix, aux = aux_spec, latent_dim = 3,
+                    coords = coords, time = src$time,
+                    epochs = 10, batch_size = 32, verbose = 0, seed = 1)
+```
+
+```{r tf-component-plots, eval = tf_available()}
+plot_ivae <- data.frame(
+  time = src$time,
+  component = factor(rep(c("Component 1", "Component 2", "Component 3"),
+                         each = nrow(fit_ivae$S)),
+                     levels = c("Component 1", "Component 2", "Component 3")),
+  value = c(fit_ivae$S[, 1], fit_ivae$S[, 2], fit_ivae$S[, 3])
+)
+
+ggplot(plot_ivae, aes(time, value)) +
+  geom_line() +
+  facet_wrap(~ component, ncol = 3) +
+  theme_minimal() +
+  labs(x = "time", y = "estimated component")
+
+plot_ivaear <- data.frame(
+  time = src$time,
+  component = factor(rep(c("Component 1", "Component 2", "Component 3"),
+                         each = nrow(fit_ivaear$S)),
+                     levels = c("Component 1", "Component 2", "Component 3")),
+  value = c(fit_ivaear$S[, 1], fit_ivaear$S[, 2], fit_ivaear$S[, 3])
+)
+
+ggplot(plot_ivaear, aes(time, value)) +
+  geom_line() +
+  facet_wrap(~ component, ncol = 3) +
+  theme_minimal() +
+  labs(x = "time", y = "estimated component")
+```
