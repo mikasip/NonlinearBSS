@@ -217,61 +217,118 @@ mix_data <- function(x, n_layers = 1,
 #'                               seed = 1)
 #' dim(areal$W)
 #' @export
-build_areal_polygons <- function(fine_points, area_id) {
+generate_fine_layer <- function(n_fine, domain = c(0, 1, 0, 1)) {
+  if (length(domain) == 2L) {
+    x_range <- y_range <- domain
+  } else if (length(domain) == 4L) {
+    x_range <- domain[1:2]
+    y_range <- domain[3:4]
+  } else {
+    stop("`domain` must have length 2 or 4.", call. = FALSE)
+  }
+
+  pts <- cbind(runif(n_fine, x_range[1], x_range[2]),
+               runif(n_fine, y_range[1], y_range[2]))
+  del <- deldir::deldir(pts[, 1], pts[, 2], rw = c(x_range[1], x_range[2],
+                                                   y_range[1], y_range[2]))
+  edges <- as.matrix(del$delsgs[, c("ind1", "ind2")])
+  g <- igraph::simplify(igraph::graph_from_edgelist(edges, directed = FALSE))
+  list(pts = pts, del = del, graph = g)
+}
+
+place_seeds_fixed <- function(fine_pts, n_s,
+                              seed_type = c("uniform", "clustered"),
+                              n_clusters = 10, cluster_sd = 0.04,
+                              xy_coef = 1) {
+  seed_type <- match.arg(seed_type)
+  n_fine <- nrow(fine_pts)
+  k <- min(20L, n_fine)
+
+  if (seed_type == "uniform") {
+    seed_coords <- matrix(runif(2 * n_s), ncol = 2)
+  } else {
+    centres <- matrix(runif(2 * n_clusters), ncol = 2)
+    cluster_id <- sample.int(n_clusters, n_s, replace = TRUE)
+    seed_coords <- centres[cluster_id, , drop = FALSE] +
+      cbind(rnorm(n_s, sd = cluster_sd),
+            rnorm(n_s, sd = xy_coef * cluster_sd))
+    seed_coords <- pmax(pmin(seed_coords, 1), 0)
+  }
+
+  nn <- t(vapply(seq_len(n_s), function(i) {
+    d2 <- rowSums((sweep(fine_pts, 2L, seed_coords[i, ], "-"))^2)
+    order(d2)[seq_len(min(k, n_fine))]
+  }, integer(min(k, n_fine))))
+
+  assigned <- integer(n_s)
+  used <- logical(n_fine)
+  for (i in seq_len(n_s)) {
+    cands <- nn[i, ][!used[nn[i, ]]]
+    k_i <- k
+    while (length(cands) == 0L) {
+      k_i <- k_i * 2L
+      if (k_i > n_fine) {
+        stop("Fine layer too small relative to `n_s`; increase `n_fine`.",
+             call. = FALSE)
+      }
+      d2 <- rowSums((sweep(fine_pts, 2L, seed_coords[i, ], "-"))^2)
+      nn_i <- order(d2)[seq_len(k_i)]
+      cands <- nn_i[!used[nn_i]]
+    }
+    assigned[i] <- cands[1L]
+    used[cands[1L]] <- TRUE
+  }
+  assigned
+}
+
+assign_graph_voronoi <- function(g, seed_idx) {
+  dist_mat <- igraph::distances(g, v = seed_idx, to = igraph::V(g), weights = NA)
+  apply(dist_mat, 2L, which.min)
+}
+
+build_areal_adjacency <- function(g, cluster_id) {
+  edge_df <- igraph::as_data_frame(g, what = "edges")
+  if (is.null(edge_df) || nrow(edge_df) == 0L) {
+    return(matrix(0, length(unique(cluster_id)), length(unique(cluster_id))))
+  }
+  c1 <- as.integer(cluster_id[as.integer(edge_df$from)])
+  c2 <- as.integer(cluster_id[as.integer(edge_df$to)])
+  cross <- c1 != c2
+  pairs <- unique(data.frame(a = pmin(c1[cross], c2[cross]),
+                            b = pmax(c1[cross], c2[cross])))
+  n_areas <- length(unique(cluster_id))
+  W <- matrix(0, n_areas, n_areas)
+  if (nrow(pairs) > 0L) {
+    W[cbind(pairs$a, pairs$b)] <- 1
+    W[cbind(pairs$b, pairs$a)] <- 1
+  }
+  W
+}
+
+build_areal_polygons <- function(fine, cluster_id) {
   if (!requireNamespace("sf", quietly = TRUE)) {
     stop("The `sf` package is required to build areal polygons.", call. = FALSE)
   }
-  if (is.null(area_id)) {
-    stop("`area_id` must be supplied to build areal polygons.", call. = FALSE)
-  }
-  fine_points <- as.matrix(fine_points)
-  if (ncol(fine_points) != 2L) {
-    stop("`fine_points` must have exactly two columns.", call. = FALSE)
+  if (!requireNamespace("deldir", quietly = TRUE)) {
+    stop("The `deldir` package is required to build areal polygons.", call. = FALSE)
   }
 
-  ring_from_points <- function(pts, size = 1e-4) {
-    if (nrow(pts) < 3L) {
-      centre <- colMeans(pts)
-      return(rbind(
-        centre + c(-size, -size),
-        centre + c(size, -size),
-        centre + c(size, size),
-        centre + c(-size, size),
-        centre + c(-size, -size)
-      ))
-    }
-    hull <- chull(pts)
-    if (length(hull) < 3L) {
-      centre <- colMeans(pts)
-      return(rbind(
-        centre + c(-size, -size),
-        centre + c(size, -size),
-        centre + c(size, size),
-        centre + c(-size, size),
-        centre + c(-size, -size)
-      ))
-    }
-    ring <- pts[hull, , drop = FALSE]
-    ring <- ring[!duplicated(ring), , drop = FALSE]
-    if (nrow(ring) < 3L) {
-      centre <- colMeans(pts)
-      return(rbind(
-        centre + c(-size, -size),
-        centre + c(size, -size),
-        centre + c(size, size),
-        centre + c(-size, size),
-        centre + c(-size, -size)
-      ))
-    }
-    rbind(ring, ring[1, , drop = FALSE])
-  }
-
-  area_ids <- sort(unique(as.integer(area_id)))
-  geoms <- lapply(area_ids, function(i) {
-    pts <- fine_points[as.integer(area_id) == i, , drop = FALSE]
-    sf::st_polygon(list(ring_from_points(pts)))
+  tiles <- deldir::tile.list(fine$del)
+  poly_list <- lapply(seq_along(tiles), function(i) {
+    tl <- tiles[[i]]
+    coords <- cbind(tl$x, tl$y)
+    coords <- rbind(coords, coords[1L, , drop = FALSE])
+    sf::st_polygon(list(coords))
   })
-  sf::st_sf(area = area_ids, geometry = sf::st_sfc(geoms, crs = NA_real_))
+
+  voronoi_sf <- sf::st_sf(cluster = cluster_id,
+                          geometry = sf::st_sfc(poly_list))
+  areas_list <- lapply(split(voronoi_sf, voronoi_sf$cluster), function(g) {
+    sf::st_sf(cluster = unique(g$cluster),
+              geometry = sf::st_sfc(sf::st_union(sf::st_geometry(g))))
+  })
+  areas_sf <- do.call(rbind, areas_list)
+  sf::st_make_valid(areas_sf)
 }
 
 generate_areal_units <- function(n_area, n_fine = NULL,
@@ -288,38 +345,35 @@ generate_areal_units <- function(n_area, n_fine = NULL,
   if (is.null(n_fine)) n_fine <- max(200L, 30L * n_area)
   n_fine <- as.integer(n_fine)
 
-  fine_points <- matrix(runif(2 * n_fine), ncol = 2)
-
-  if (seed_type == "uniform") {
-    seed_points <- matrix(runif(2 * n_area), ncol = 2)
+  if (requireNamespace("deldir", quietly = TRUE) &&
+      requireNamespace("igraph", quietly = TRUE)) {
+    fine <- generate_fine_layer(n_fine)
   } else {
-    centres <- matrix(runif(2 * n_clusters), ncol = 2)
-    cluster_id <- sample.int(n_clusters, n_area, replace = TRUE)
-    seed_points <- centres[cluster_id, , drop = FALSE] +
-      cbind(rnorm(n_area, sd = cluster_sd),
-            rnorm(n_area, sd = xy_coef * cluster_sd))
-    seed_points <- pmax(pmin(seed_points, 1), 0)
+    fine <- list(pts = matrix(runif(2 * n_fine), ncol = 2))
   }
 
-  d2 <- outer(rowSums(fine_points^2), rowSums(seed_points^2), "+") -
-    2 * fine_points %*% t(seed_points)
-  area_id <- max.col(-d2, ties.method = "first")
+  seed_idx <- place_seeds_fixed(fine$pts, n_area, seed_type = seed_type,
+                               n_clusters = n_clusters, cluster_sd = cluster_sd,
+                               xy_coef = xy_coef)
 
-  unused <- setdiff(seq_len(n_area), unique(area_id))
-  if (length(unused) > 0L) {
-    for (i in unused) {
-      j <- which.min(d2[, i])
-      area_id[j] <- i
-    }
+  cluster_id <- assign_graph_voronoi(fine$graph, seed_idx)
+  cluster_id <- as.integer(factor(cluster_id))
+  n_area_actual <- length(unique(cluster_id))
+  if (n_area_actual < 2L) {
+    stop("The generated areal graph does not contain enough valid regions.",
+         call. = FALSE)
   }
 
-  area_centres <- vapply(seq_len(n_area), function(i) {
-    colMeans(fine_points[area_id == i, , drop = FALSE])
-  }, numeric(2L))
-  area_centres <- t(area_centres)
+  W <- build_areal_adjacency(fine$graph, cluster_id)
+  area_centres <- t(vapply(seq_len(n_area_actual), function(i) {
+    colMeans(fine$pts[cluster_id == i, , drop = FALSE])
+  }, numeric(2L)))
 
+  if (nrow(W) == 0L) {
+    W <- matrix(0, n_area_actual, n_area_actual)
+  }
   if (is.null(radius)) {
-    if (n_area > 1L) {
+    if (n_area_actual > 1L) {
       dnn <- min(as.matrix(dist(area_centres)))
       radius <- if (is.finite(dnn) && dnn > 0) 1.5 * dnn else 0.2
     } else {
@@ -327,48 +381,24 @@ generate_areal_units <- function(n_area, n_fine = NULL,
     }
   }
 
-  W <- matrix(0, n_area, n_area)
-  if (requireNamespace("deldir", quietly = TRUE) &&
-      requireNamespace("igraph", quietly = TRUE)) {
-    del <- deldir::deldir(fine_points[, 1], fine_points[, 2], rw = c(0, 1, 0, 1))
-    edges <- del$delsgs[, c("ind1", "ind2")]
-    if (!is.null(edges) && nrow(edges) > 0L) {
-      g <- igraph::simplify(igraph::graph_from_edgelist(as.matrix(edges),
-                                                        directed = FALSE))
-      edge_df <- igraph::as_data_frame(g, what = "edges")
-      if (nrow(edge_df) > 0L) {
-        from <- as.integer(edge_df$from)
-        to <- as.integer(edge_df$to)
-        a1 <- area_id[from]
-        a2 <- area_id[to]
-        keep <- a1 != a2
-        if (sum(keep) > 0L) {
-          pairs <- unique(data.frame(a = pmin(a1[keep], a2[keep]),
-                                    b = pmax(a1[keep], a2[keep])))
-          if (nrow(pairs) > 0L) {
-            W[cbind(pairs$a, pairs$b)] <- 1
-            W[cbind(pairs$b, pairs$a)] <- 1
-          }
-        }
-      }
-    }
-  }
-
-  if (sum(W) == 0) {
+  if (sum(W) == 0L) {
     D <- as.matrix(dist(area_centres))
     W <- ((D > 0) & (D <= radius)) * 1
     diag(W) <- 0
   }
 
-  if (is.null(colnames(W))) colnames(W) <- rownames(W) <- paste0("A", seq_len(n_area))
-  areas_sf <- build_areal_polygons(fine_points, area_id)
-  list(fine_points = fine_points,
-       seed_points = seed_points,
-       area_id = area_id,
+  if (is.null(colnames(W))) colnames(W) <- rownames(W) <- paste0("A", seq_len(n_area_actual))
+  areas_sf <- build_areal_polygons(fine, cluster_id)
+
+  list(fine_points = fine$pts,
+       seed_points = fine$pts[seed_idx, , drop = FALSE],
+       area_id = cluster_id,
        area_coords = area_centres,
        W = W,
        area_centres = area_centres,
-       areas_sf = areas_sf)
+       areas_sf = areas_sf,
+       cluster_id = cluster_id,
+       fine = fine)
 }
 
 #' Simulate Nonstationary Areal Sources Over Time
