@@ -533,6 +533,7 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
   labels <- rep(seq_len(n_time), each = n_area)
   colnames(z) <- paste0("Z", seq_len(p))
   coords <- if (is.null(areal$area_coords)) matrix(runif(2 * n_area), ncol = 2) else areal$area_coords
+  coords <- coords[area_order, , drop = FALSE]
 
   list(sources = z,
        labels = labels,
@@ -540,6 +541,7 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
        coords = coords,
        time = time_order,
        area = area_order,
+       group = area_order,
        areal = areal,
        mem = mem_obj$mem)
 }
