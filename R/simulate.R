@@ -437,14 +437,15 @@ generate_areal_units <- function(n_area, n_fine = NULL,
 #' dim(src$sources)
 #' @export
 simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
-                                  n_fine = NULL, n_time = 50,
-                                  n_segments_time = 5,
-                                  sd_range = c(0.1, 5),
-                                  ar_range = c(0.3, 0.9),
-                                  seed_type = c("uniform", "clustered"),
-                                  n_clusters = 3L, cluster_sd = 0.04,
-                                  xy_coef = 1, radius = NULL,
-                                  seed = NULL) {
+                                   n_fine = NULL, n_time = 50,
+                                   n_segments_time = 5,
+                                   sd_range = c(0.1, 5),
+                                   ar_range = c(0.3, 0.9),
+                                   beta_s_range = c(0.3, 0.9),
+                                   seed_type = c("uniform", "clustered"),
+                                   n_clusters = 3L, cluster_sd = 0.04,
+                                   xy_coef = 1, radius = NULL,
+                                   seed = NULL) {
   seed_type <- match.arg(seed_type)
   if (!is.null(seed)) set.seed(seed)
 
@@ -454,96 +455,110 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
     } else {
       if (is.null(n_area)) n_area <- 8L
       areal <- generate_areal_units(n_area = n_area, n_fine = n_fine,
-                                  seed_type = seed_type,
-                                  n_clusters = n_clusters,
-                                  cluster_sd = cluster_sd,
-                                  xy_coef = xy_coef,
-                                  radius = radius, seed = seed)
+                                    seed_type = seed_type,
+                                    n_clusters = n_clusters,
+                                    cluster_sd = cluster_sd,
+                                    xy_coef = xy_coef,
+                                    radius = radius, seed = seed)
     }
   }
 
   W <- as.matrix(areal$W)
-  if (nrow(W) != ncol(W)) {
-    stop("`W` must be square.", call. = FALSE)
-  }
+  if (nrow(W) != ncol(W)) stop("`W` must be square.", call. = FALSE)
   n_area <- nrow(W)
   if (n_time < 1L) stop("`n_time` must be positive.", call. = FALSE)
   if (n_segments_time < 1L) stop("`n_segments_time` must be positive.", call. = FALSE)
-
-  mem_obj <- compute_MEM_vectors(W, K = min(10L, max(1L, n_area - 1L)),
-                                positive_only = TRUE)
-  K_mem <- ncol(mem_obj$mem)
-  if (K_mem < 1L) {
-    stop("No positive MEM vectors were found for the supplied areal graph.",
-         call. = FALSE)
-  }
+  n_segments_time <- min(as.integer(n_segments_time), as.integer(n_time))
 
   if (length(sd_range) != 2L || any(!is.finite(sd_range)) || any(sd_range <= 0)) {
     stop("`sd_range` must be a numeric vector of length 2 with positive finite values.",
          call. = FALSE)
   }
   sd_range <- sort(sd_range)
+  if (length(ar_range) != 2L || any(!is.finite(ar_range))) ar_range <- c(0.3, 0.9)
+  if (length(beta_s_range) != 2L || any(!is.finite(beta_s_range))) {
+    stop("`beta_s_range` must be a finite numeric vector of length 2.", call. = FALSE)
+  }
 
-  if (n_time > 1L) {
-    time_centres <- sample(seq_len(n_time), min(n_segments_time, n_time))
-    time_labels <- vapply(seq_len(n_time), function(t) {
-      which.min(abs(time_centres - t))
-    }, integer(1L))
-    time_mult <- runif(n_segments_time, min(sd_range), max(sd_range))
-    time_mult <- time_mult[time_labels]
-  } else {
-    time_mult <- 1
+  # Neighbourhood used for the SAR dependence structure
+  W_dep <- W
+  if (!all(dim(W_dep) == n_area)) {
+    stop("`W_sar` must be n_area x n_area.", call. = FALSE)
+  }
+  # Row-standardised weights (zero rows stay zero)
+  rs <- rowSums(W_dep)
+  W_row <- W_dep / ifelse(rs > 0, rs, 1)
+
+  # MEM basis (used only for the spatial *variance* pattern)
+  mem_obj <- compute_MEM_vectors(W, K = min(10L, max(1L, n_area - 1L)),
+                                 positive_only = TRUE)
+  K_mem <- ncol(mem_obj$mem)
+  if (K_mem < 1L) {
+    stop("No positive MEM vectors were found for the supplied areal graph.",
+         call. = FALSE)
+  }
+
+  # Per-call helper: block-wise temporal variance multiplier (drawn per component)
+  draw_time_mult <- function() {
+    if (n_time == 1L) return(1)
+    centres <- sample(seq_len(n_time), n_segments_time)
+    labels  <- vapply(seq_len(n_time),
+                      function(t) which.min(abs(centres - t)), integer(1L))
+    runif(n_segments_time, sd_range[1], sd_range[2])[labels]
   }
 
   z <- matrix(NA_real_, n_area * n_time, p)
-  if (length(ar_range) != 2L || any(!is.finite(ar_range))) {
-    ar_range <- c(0.3, 0.9)
-  }
+  beta_s_used <- numeric(p)
+  I_n <- diag(n_area)
 
   for (j in seq_len(p)) {
-    mem_idx <- sample.int(K_mem, 1L)
-    mem_vals <- mem_obj$mem[, mem_idx, drop = FALSE]
-    mem_vals <- as.numeric(mem_vals)
+    # ---- spatial variance pattern from one leading MEM -------------------
+    mem_vals <- as.numeric(mem_obj$mem[, sample.int(K_mem, 1L)])
     mem_vals <- mem_vals - min(mem_vals)
     if (max(mem_vals) > 0) mem_vals <- mem_vals / max(mem_vals)
-    mem_vals <- mem_vals * diff(sd_range) + sd_range[1]
-    sigma_i <- mem_vals
+    sigma_i <- mem_vals * diff(sd_range) + sd_range[1]
+
+    # ---- per-component temporal variance profile (point 2) ---------------
+    time_mult <- draw_time_mult()
+
+    # ---- per-component SAR coupling (point 1) ----------------------------
+    beta_s <- runif(1L, beta_s_range[1], beta_s_range[2])
+    beta_s_used[j] <- beta_s
+    A_inv <- solve(I_n - beta_s * W_row)   # (I + B)^{-1}, B = -beta_s * W_row
 
     ar_coeff <- runif(n_time, min(ar_range), max(ar_range))
-    if (n_segments_time > 1L && n_time > 1L) {
-      ar_coeff <- vapply(seq_len(n_time), function(t) {
-        runif(1L, min(ar_range), max(ar_range))
-      }, numeric(1L))
-    }
 
+    # ---- innovations: heteroscedastic noise, then SAR filtering ----------
+    sd_mat  <- outer(sigma_i, sqrt(time_mult))                 # n_area x n_time
+    eps_mat <- matrix(rnorm(n_area * n_time, sd = sd_mat), n_area, n_time)
+    u_mat   <- A_inv %*% eps_mat                               # SAR on innovation only
+
+    # ---- plain AR(1) recursion over time ---------------------------------
     z_t <- matrix(0, n_area, n_time)
-    for (t in seq_len(n_time)) {
-      eps_t <- rnorm(n_area, sd = sigma_i * sqrt(time_mult[t]))
-      if (t == 1L) {
-        z_t[, t] <- eps_t
-      } else {
-        z_t[, t] <- ar_coeff[t] * z_t[, t - 1] + eps_t
-      }
+    z_t[, 1L] <- u_mat[, 1L]
+    if (n_time > 1L) {
+      for (t in 2:n_time) z_t[, t] <- ar_coeff[t] * z_t[, t - 1L] + u_mat[, t]
     }
     z[, j] <- as.numeric(z_t)
   }
 
   area_order <- rep(seq_len(n_area), n_time)
   time_order <- rep(seq_len(n_time), each = n_area)
-  labels <- rep(seq_len(n_time), each = n_area)
   colnames(z) <- paste0("Z", seq_len(p))
-  coords <- if (is.null(areal$area_coords)) matrix(runif(2 * n_area), ncol = 2) else areal$area_coords
+  coords <- if (is.null(areal$area_coords)) matrix(runif(2 * n_area), ncol = 2)
+            else areal$area_coords
   coords <- coords[area_order, , drop = FALSE]
 
   list(sources = z,
-       labels = labels,
+       labels = time_order,
        W = W,
        coords = coords,
        time = time_order,
        area = area_order,
        group = area_order,
        areal = areal,
-       mem = mem_obj$mem)
+       mem = mem_obj$mem,
+       beta_s = beta_s_used)
 }
 
 #' Absolute Mean Correlation Coefficient
