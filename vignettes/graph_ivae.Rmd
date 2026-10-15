@@ -1,0 +1,218 @@
+---
+title: "Graph iVAE: areal data with space and time as graphs"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Graph iVAE: areal data with space and time as graphs}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(fig.width = 8, fig.height = 3.2, message = FALSE,
+                      warning = FALSE)
+```
+
+`GiVAE()` is an identifiable variational autoencoder whose latent components
+depend on their neighbours in one or several graphs. The prior mean of a
+latent component is a weighted average of the neighbours' encoded values,
+
+$$\mu_i = \rho_{\max}\,\rho(u_i)\sum_{g=1}^{G}\beta_g(u_i)\,
+\frac{1}{|\partial_g i|}\sum_{j\in\partial_g i}\hat z_j ,$$
+
+where $\hat z_j$ is the encoder mean of neighbour $j$, $\rho(u_i)$ is the total
+coupling strength and $\beta_g(u_i)$ shares it between the graphs. The prior
+variance $\sigma^2(u_i)$ is nonstationary, which makes the model identifiable.
+All three are neural networks of the auxiliary variables $u_i$, here the
+eigenvectors of the graph Laplacians.
+
+This example has two graphs: the adjacency graph of areal units, and a
+directed graph of the time axis in which each time point has the previous one
+as its only neighbour (like an AR(1) model).
+
+## Data
+
+```{r data}
+library(ggplot2)
+library(sf)
+library(NonlinearBSS)
+
+areal <- generate_areal_units(n_area = 100, n_fine = 600,
+                              seed_type = "uniform", seed = 1)
+n_area <- nrow(areal$W)
+n_time <- 300
+
+src <- simulate_sources_areal(p = 5, areal = areal, n_time = n_time,
+                              n_segments_time = 1, sd_range = c(1, 1),
+                              ar_range = c(0.1, 0.8), beta_s_range = c(0.1, 0.9), seed = 2)
+x <- mix_data(src$sources, n_layers = 1, nonlinearity = "elu")
+```
+
+The rows are ordered with the areal unit varying fastest within each time
+point, so row $r$ is unit `(r - 1) %% n_area + 1` at time
+`(r - 1) %/% n_area + 1`.
+
+## Graphs
+
+A graph has its own nodes, and `each` tells how they are repeated over the
+rows. The spatial graph has `n_area` nodes and is repeated as a whole for every
+time point (`each = 1`). The time graph has `n_time` nodes and every node is
+repeated `n_area` times in a row (`each = n_area`). Neighbours are always
+searched in the same context: the neighbours of unit $s$ at time $t$ in the
+spatial graph are the adjacent units at time $t$, and in the time graph the
+same unit $s$ at time $t - 1$.
+
+```{r graphs}
+g_space <- nlbss_graph(areal$W, name = "space")
+g_time  <- nlbss_time_graph(n_time, each = n_area, lags = 1, directed = TRUE)
+g_space
+g_time
+```
+
+For other layouts `each` is the number of consecutive rows that share a node.
+A graph with one node per observation uses `each = 1` and no repetition, and
+for unsorted or incomplete data the node and the context of each row can be
+given explicitly with `node` and `context` (see the last section).
+
+## Auxiliary variables
+
+By default `GiVAE()` uses the smoothest non-trivial Laplacian eigenvectors of
+each graph, expanded to the rows with the graph's layout. They can also be used
+with the other methods, e.g. in `iVAE()`.
+
+```{r aux}
+aux <- aux_laplacian(list(g_space, g_time), K = c(20, 20))
+A <- aux_matrix(aux, matrix(0, nrow(x), 0))
+dim(A)
+```
+
+The first three spatial eigenvectors are
+
+```{r aux-plot}
+plot_areal <- function(values, labels, fill = "value") {
+  long <- do.call(rbind, lapply(seq_len(ncol(values)), function(k) {
+    d <- areal$areas_sf
+    d$value <- values[, k]
+    d$component <- labels[k]
+    d[, c("value", "component")]
+  }))
+  long$component <- factor(long$component, levels = labels)
+  ggplot(long) +
+    geom_sf(aes(fill = value), color = "white", linewidth = 0.2) +
+    facet_wrap(~ component, ncol = length(labels)) +
+    scale_fill_viridis_c() +
+    coord_sf(datum = NA) +
+    theme_minimal() +
+    theme(axis.text = element_blank(), axis.ticks = element_blank()) +
+    labs(fill = fill)
+}
+plot_areal(A[seq_len(n_area), 1:3], paste("Eigenvector", 1:3))
+```
+
+The first three temporal eigenvectors are the next block of columns after the
+spatial ones. We take one representative row for each time point (the first
+area in each time block), since the graph is repeated over all areas within a
+single time point.
+
+```{r aux-plot-time}
+plot_time <- function(values, labels, fill = "value") {
+  long <- do.call(rbind, lapply(seq_len(ncol(values)), function(k) {
+    d <- data.frame(
+      time = seq_len(nrow(values)),
+      value = values[, k],
+      component = labels[k]
+    )
+    d
+  }))
+  long$component <- factor(long$component, levels = labels)
+  ggplot(long, aes(x = time, y = value)) +
+    geom_line() +
+    facet_wrap(~ component, ncol = length(labels)) +
+    theme_minimal() +
+    labs(x = "time", y = "value", fill = fill)
+}
+space_cols <- 1:3
+# the temporal block starts after the spatial block of eigenvectors
+# (here: K = c(20, 20))
+time_cols <- (aux$K[1] + 15L):(aux$K[1] + 18L)
+time_rows <- (seq_len(n_time) - 1L) * n_area + 1L
+plot_time(A[time_rows, time_cols], paste("Eigenvector", 1:3))
+```
+
+## Fitting GiVAE
+
+For comparison, `iVAE()` gets the same auxiliary variables but no graph prior,
+so it treats the rows as independent given $u$.
+
+```{r fit, eval = tf_available()}
+fit_ivae <- iVAEar(x, aux = aux, time = rep(1:n_time, each = n_area), group = rep(1:n_area, times = n_time), latent_dim = 5, epochs = 100, batch_size = 64,
+                 verbose = 0, seed = 1, lr_end = 0.001)
+fit_givae <- GiVAE(x, graphs = list(g_space, g_time), aux = aux, K = c(20L, 20L),
+                   latent_dim = 5, epochs = 100, batch_size = 64,
+                   verbose = 0, seed = 1, error_dist_sigma = 0.01, lr_end = 0.001)
+absolute_mean_correlation(fastICA::fastICA(x, 5)$S, src$sources)
+```
+
+The recovery of the sources is measured with the mean absolute correlation
+coefficient (MCC):
+
+```{r mcc, eval = tf_available()}
+knitr::kable(data.frame(
+  method = c("iVAE", "GiVAE"),
+  MCC = c(absolute_mean_correlation(fit_ivae$S, src$sources),
+          absolute_mean_correlation(fit_givae$S, src$sources))
+), digits = 3)
+```
+
+The estimated components are identified up to order and sign. After matching
+each source with the estimated component it correlates with most, the true and
+estimated sources of the first time point are
+
+```{r compare, eval = tf_available(), fig.height = 5.5}
+cors <- cor(fit_givae$S, src$sources)
+ord <- apply(abs(cors), 2, which.max)
+sgn <- sign(cors[cbind(ord, 1:3)])
+first <- seq_len(n_area)
+est <- sweep(fit_givae$S[first, ord, drop = FALSE], 2, sgn, "*")
+
+plot_areal(src$sources[first, ], paste("Source", 1:3), "true")
+plot_areal(est, paste("Estimate", 1:3), "estimated")
+```
+
+The nonstationary prior variances that identify the model are available from
+`predict(fit_givae, type = "variance")`.
+
+## Any graph, any layout
+
+`GiVAE()` accepts one or several graphs, each described by `nlbss_graph()`:
+
+* a graph with one node per observation (a general network), for example
+  `GiVAE(x, graphs = nlbss_graph(W_n))` with an `n x n` matrix or adjacency list;
+* a spatial graph and a time graph as above, or any other combination of
+  graphs whose sizes divide the number of rows, using `each` for the layout;
+* unsorted or incomplete data, where the node and the context of every row are
+  given explicitly. Neighbours are looked up among the rows with the same
+  context; rows that are missing simply have fewer neighbours.
+
+As an example with the air pollution data (not run here), stations and days
+form two graphs. The spatial graph connects every station to its four nearest
+stations, and the rows can be in any order:
+
+```{r pollution, eval = FALSE}
+P <- pollution_northern_italy
+station <- as.integer(factor(paste(P$Longitude, P$Latitude)))
+day <- as.integer(factor(P$time))
+
+st <- unique(data.frame(id = station, lon = P$Longitude, lat = P$Latitude))
+st <- st[order(st$id), ]
+D <- as.matrix(dist(st[, c("lon", "lat")]))
+diag(D) <- Inf
+nearest <- t(apply(D, 1, order))[, 1:4]
+adj <- lapply(seq_len(nrow(nearest)), function(i) nearest[i, ])
+
+g_station <- nlbss_graph(adj, node = station, context = day, name = "stations")
+g_day <- nlbss_time_graph(max(day), node = day, context = station)
+
+fit <- GiVAE(P, graphs = list(g_station, g_day), K = c(10, 10),
+             vars = c("mean_O3", "mean_NO2", "mean_PM10"),
+             latent_dim = 5, epochs = 100, batch_size = 64, seed = 1)
+```

@@ -21,13 +21,13 @@ library(sf)
 library(NonlinearBSS)
 
 set.seed(1)
-areal <- generate_areal_units(n_area = 30, n_fine = 600,
+areal <- generate_areal_units(n_area = 40, n_fine = 600,
                              seed_type = "uniform", seed = 1)
 
-src <- simulate_sources_areal(p = 3, areal = areal, n_time = 20,
-                              n_segments_time = 5,
-                              sd_range = c(0.3, 1.2),
-                              ar_range = c(0.4, 0.8), seed = 2)
+src <- simulate_sources_areal(p = 5, areal = areal, n_time = 100,
+                              n_segments_time = 1,
+                              sd_range = c(0.3, 5),
+                              ar_range = c(0.1, 0.8), seed = 2)
 ```
 
 First, we plot the actual areal units and their borders, without any fill color.
@@ -108,18 +108,30 @@ ggplot(mem_sf_long) +
 ```{r tf-models, eval = tf_available()}
 
 time <- src$time
-mix <- mix_data(src$sources, n_layers = 2, nonlinearity = "elu",
+mix <- mix_data(src$sources, n_layers = 1, nonlinearity = "elu",
                 final_activation = "none")
 
 aux_spec <- aux_moran(neighborhood = areal$W, K = 10)
 
-fit_ivae <- iVAE(mix, aux = aux_spec, latent_dim = 3,
+fit_ivae <- iVAE(mix, aux = aux_spec, latent_dim = 5,
                  coords = NULL, time = time,
-                 epochs = 10, batch_size = 32, verbose = 0, seed = 1)
+                 epochs = 100, batch_size = 32, verbose = 0, seed = 1)
 
-fit_ivaear <- iVAEar(mix, aux = aux_spec, latent_dim = 3,
+fit_ivaear <- iVAEar(mix, aux = aux_spec, latent_dim = 5,
                     group = src$group, time = time,
-                    epochs = 10, batch_size = 32, verbose = 0, seed = 1)
+                    epochs = 100, batch_size = 32, verbose = 0, seed = 1)
+
+mcc_ivae <- absolute_mean_correlation(fit_ivae$S, src$sources)
+mcc_ivaear <- absolute_mean_correlation(fit_ivaear$S, src$sources)
+```
+
+The estimated recovery quality is summarized by the mean absolute correlation coefficient (MCC):
+
+```{r mcc-table, eval = tf_available()}
+knitr::kable(data.frame(
+  method = c("iVAE", "iVAEar"),
+  MCC = c(mcc_ivae, mcc_ivaear)
+), digits = 3)
 ```
 
 ```{r tf-component-plots, eval = tf_available()}
