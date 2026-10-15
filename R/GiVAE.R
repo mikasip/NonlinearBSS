@@ -7,16 +7,20 @@
 #'
 #' @details
 #' For observation \eqn{i} the prior of the latent components is
-#' \deqn{z_i | \{\hat z_j\}, u_i \sim N(\mu_i, \sigma^2(u_i) I),\quad
-#' \mu_i = \rho_{max}\,\rho(u_i) \sum_{g=1}^G \beta_g(u_i)
-#' \frac{1}{|\partial_g i|}\sum_{j \in \partial_g i} \hat z_j,}{
-#' z_i ~ N(mu_i, sigma^2(u_i) I), mu_i = rho_max rho(u_i) sum_g beta_g(u_i)
-#' mean_{j in N_g(i)} zhat_j,}
-#' where \eqn{\hat z_j} is the encoder mean of neighbour \eqn{j}, \eqn{\rho(u)}
-#' in \eqn{(0, 1)} (scaled by `rho_max`) is the total coupling strength,
-#' \eqn{\beta_g(u)} (softmax over the graphs) distributes it between the
-#' graphs, and \eqn{\sigma^2(u)} is the nonstationary prior variance that
-#' gives identifiability. The neural networks for \eqn{\rho}, \eqn{\beta} and
+#' \deqn{z_{il} | \{\hat z_j\}, u_i \sim N(\mu_{il}, \sigma_l^2(u_i)),\quad
+#' \mu_{il} = \rho_{max}\,\rho_l(u_i) \sum_{g=1}^G \beta_{gl}(u_i)
+#' \frac{1}{|\partial_g i|}\sum_{j \in \partial_g i} \hat z_{jl},}{
+#' z_il ~ N(mu_il, sigma_l^2(u_i)), mu_il = rho_max rho_l(u_i) sum_g
+#' beta_gl(u_i) mean_{j in N_g(i)} zhat_jl,}
+#' where \eqn{\hat z_j} is the encoder mean of neighbour \eqn{j},
+#' \eqn{\rho_l(u)} in \eqn{(0, 1)} (scaled by `rho_max`) is the total
+#' coupling strength of component \eqn{l}, \eqn{\beta_{gl}(u)} (softmax over
+#' the graphs) distributes it between the graphs, and \eqn{\sigma_l^2(u)} is
+#' the nonstationary prior variance. The coupling and the variance are
+#' component-specific; this is what makes the components identifiable from
+#' nonstationary dependence (with a coupling shared by all components the
+#' prior is invariant to rotations of the latent space when the variances are
+#' equal). The neural networks for \eqn{\rho}, \eqn{\beta} and
 #' \eqn{\sigma^2} take the auxiliary variables \eqn{u} as input.
 #'
 #' The graphs are given as [nlbss_graph()] objects. A graph can have fewer
@@ -32,7 +36,10 @@
 #'
 #' The prior uses the neighbours' encoder means in a conditional (pseudo
 #' likelihood) form; the determinant term of a joint simultaneous
-#' autoregressive model is not included.
+#' autoregressive model is not included. For a directed graph that only points
+#' backwards in time the determinant is 1 and the prior is an exact
+#' autoregressive model; for undirected (e.g. spatial) graphs the omission
+#' favours smooth latent fields and strong coupling.
 #'
 #' @inheritParams iVAE
 #' @param graphs A graph specification [nlbss_graph()], a list of them, a
@@ -52,7 +59,7 @@
 #' @export
 GiVAE <- function(x, graphs, aux = NULL, K = 10L, latent_dim = NULL,
                   coords = NULL, time = NULL, group = NULL, vars = NULL,
-                  rho_max = 0.9, max_neighbors = NULL,
+                  rho_max = 0.99, max_neighbors = NULL,
                   hidden_units = c(128, 128, 128),
                   aux_hidden_units = c(128, 128, 128),
                   activation = "leaky_relu",

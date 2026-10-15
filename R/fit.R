@@ -60,7 +60,8 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
     aux_hidden_units = as.integer(aux_hidden_units), activation = activation,
     source_dist = source_dist, error_dist = error_dist,
     error_dist_sigma = error_dist_sigma, steps = steps,
-    ar_order = as.integer(ar_order), use_mask = has_missing && mask_encoder,
+    ar_order = as.integer(ar_order), has_missing = has_missing,
+    use_mask = has_missing && mask_encoder,
     seed = seed,
     n_graphs = if (is.null(neigh)) 0L else neigh$G,
     max_neighbors = if (is.null(neigh)) 0L else neigh$M,
@@ -72,7 +73,7 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
                   metrics = elbo_metrics())
 
   inputs <- network_inputs(sc$X, sc$mask, A, lags, use_mask = spec$use_mask,
-                           neigh = neigh)
+                           has_missing = has_missing, neigh = neigh)
   validation <- NULL
   if (!is.null(vdat)) {
     if (ncol(vdat$X) != p) {
@@ -92,7 +93,8 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
     }
     validation <- list(
       network_inputs(rbind(sc$X, Xv), rbind(sc$mask, Mv), rbind(A, Av),
-                     vlags, rows, use_mask = spec$use_mask),
+                     vlags, rows, use_mask = spec$use_mask,
+                     has_missing = has_missing),
       matrix(0, length(rows), 1)
     )
   }
@@ -262,10 +264,12 @@ restore_rng <- function(old) {
 # Inputs of the training network for the rows `rows` of the data matrices.
 # Lagged inputs of observations without previous values are replaced by the
 # observation itself and marked as invalid.
+# `has_missing`: the mask is a model input (for the loss); `use_mask`: the
+# encoder also uses it, which needs the mask of the lagged / neighbouring rows.
 network_inputs <- function(X, mask, A, lags, rows = seq_len(nrow(X)),
-                          use_mask = TRUE, neigh = NULL) {
+                          use_mask = TRUE, has_missing = use_mask, neigh = NULL) {
   inputs <- list(X[rows, , drop = FALSE])
-  if (use_mask) {
+  if (has_missing || use_mask) {
     inputs <- c(inputs, list(mask[rows, , drop = FALSE]))
   }
   if (!is.null(A)) {

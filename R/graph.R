@@ -79,12 +79,47 @@ nlbss_graph <- function(neighborhood, each = 1L, node = NULL, context = NULL,
 #' @export
 print.nlbss_graph <- function(x, ...) {
   deg <- lengths(x$adj_list)
-  cat("Graph", if (!is.null(x$name)) paste0("'", x$name, "' "), "with ",
+  cat("Graph ", if (!is.null(x$name)) paste0("'", x$name, "' "), "with ",
       x$n_nodes, " nodes (mean degree ", format(mean(deg), digits = 3),
       ", max ", max(deg), "); ",
       if (is.null(x$node)) paste0("each = ", x$each) else "explicit node layout",
       "\n", sep = "")
   invisible(x)
+}
+
+#' Acyclic (Directed) Version of a Graph
+#'
+#' Keeps, for every node, only the neighbours that come *before* it in a given
+#' order, so that all edges point from earlier to later nodes. A GiVAE prior
+#' built on such graphs is a proper autoregressive (Bayesian network, or
+#' Vecchia-type) model: the matrix of the simultaneous system is triangular
+#' with unit diagonal, so its determinant is 1 and the joint density is
+#' exactly the product of the conditional densities. This holds whatever the
+#' (also negative) coupling coefficients are, and for any number of graphs as
+#' long as all graphs respect the same order of the observations, e.g. time
+#' first, then the order of the areas.
+#'
+#' @param neighborhood A square matrix or an adjacency list, see
+#'   [nlbss_graph()].
+#' @param order Optional numeric vector with one value per node giving the
+#'   order, e.g. a coordinate. Nodes with a smaller value come first. Defaults
+#'   to the node numbering.
+#' @inheritParams nlbss_graph
+#' @return An object of class `nlbss_graph` with directed edges.
+#' @examples
+#' W <- matrix(0, 4, 4); W[cbind(1:3, 2:4)] <- 1; W <- pmax(W, t(W))
+#' nlbss_dag(W, order = c(2, 1, 4, 3))
+#' @export
+nlbss_dag <- function(neighborhood, order = NULL, each = 1L, node = NULL,
+                      context = NULL, name = NULL) {
+  adj <- as_adj_list(neighborhood)
+  n <- length(adj)
+  if (!is.null(order) && length(order) != n) {
+    stop("`order` must have one value per node.", call. = FALSE)
+  }
+  pos <- if (is.null(order)) seq_len(n) else rank(order, ties.method = "first")
+  adj <- lapply(seq_len(n), function(i) adj[[i]][pos[adj[[i]]] < pos[i]])
+  nlbss_graph(adj, each = each, node = node, context = context, name = name)
 }
 
 #' Temporal Graph
@@ -238,11 +273,15 @@ build_neighbor_index <- function(graphs, n, max_neighbors = NULL) {
        degree = vapply(nbs, function(nb) lengths(nb), integer(n)))
 }
 
-# Prior mean of the graph prior, computed from the encoder means Z:
-#   rho_max * rho(u_i) * sum_g beta_g(u_i) * mean_{j in N_g(i)} z_j
+# Prior mean of the graph prior, computed from the encoder means Z, for every
+# latent component l (prior$rho: n x L, prior$beta: n x G x L):
+#   rho_max * rho_l(u_i) * sum_g beta_{g,l}(u_i) * mean_{j in N_g(i)} z_jl
 graph_prior_mean <- function(prior, Z, neigh, rho_max) {
   n <- nrow(Z)
-  agg <- matrix(0, n, ncol(Z))
+  L <- ncol(Z)
+  beta <- array(prior$beta, c(n, neigh$G, L))
+  rho <- matrix(prior$rho, n, L)
+  agg <- matrix(0, n, L)
   for (g in seq_len(neigh$G)) {
     num <- matrix(0, n, ncol(Z))
     cnt <- numeric(n)
@@ -252,7 +291,7 @@ graph_prior_mean <- function(prior, Z, neigh, rho_max) {
       num[ok, ] <- num[ok, , drop = FALSE] + Z[j[ok], , drop = FALSE]
       cnt[ok] <- cnt[ok] + 1
     }
-    agg <- agg + prior$beta[, g] * num / pmax(cnt, 1)
+    agg <- agg + matrix(beta[, g, ], n, L) * num / pmax(cnt, 1)
   }
-  rho_max * drop(prior$rho) * agg
+  rho_max * rho * agg
 }
