@@ -2,7 +2,7 @@
 % Please edit documentation in R/simulate.R
 \name{generate_areal_units}
 \alias{generate_areal_units}
-\title{Generate Realistic Areal Units from a Fine Grid and Seeds}
+\title{Generate a Spatial Areal Partition from a Fine Grid}
 \usage{
 generate_areal_units(
   n_area,
@@ -16,41 +16,57 @@ generate_areal_units(
 )
 }
 \arguments{
-\item{n_area}{Number of areal units.}
+\item{n_area}{Integer, the desired number of areal units.}
 
-\item{n_fine}{Number of fine grid points used to define the areal partition.}
+\item{n_fine}{Integer, the number of fine grid points used to define the
+partition. If \code{NULL}, a default value is chosen as \code{max(200, 30 * n_area)}.}
 
-\item{seed_type}{Type of seed placement: \code{"uniform"} or \code{"clustered"}.}
+\item{seed_type}{Seed placement scheme: \code{"uniform"} or \code{"clustered"}.}
 
-\item{n_clusters}{Number of seed clusters for clustered placement.}
+\item{n_clusters}{Number of clusters for \code{seed_type = "clustered"}.}
 
-\item{cluster_sd}{Cluster spread for clustered sampling.}
+\item{cluster_sd}{Standard deviation used for the within-cluster seed jitter.}
 
-\item{xy_coef}{Additional spread parameter in the x/y direction for clustered
-seeds.}
+\item{xy_coef}{Additional anisotropy parameter for clustered seed placement.}
 
-\item{radius}{Optional radius used in the fallback graph construction. If \code{NULL},
-it is chosen from the median nearest-neighbor distance.}
+\item{radius}{Optional radius used in the fallback adjacency construction.
+If \code{NULL}, it is chosen from the centroid spacing of the generated regions.}
 
-\item{seed}{Optional random seed.}
+\item{seed}{Optional random seed for reproducible output.}
 }
 \value{
-A list with elements \code{fine_points}, \code{seed_points}, \code{area_id},
-\code{area_coords}, \code{W}, and \code{area_centres}.
+A list with the elements:
+\itemize{
+\item \code{fine_points}: coordinates of the fine grid.
+\item \code{seed_points}: coordinates of the seed points.
+\item \code{area_id}: region assignment for each fine point.
+\item \code{area_coords}: centroid coordinates of the areal units.
+\item \code{W}: binary adjacency matrix for the areal regions.
+\item \code{area_centres}: same as \code{area_coords}.
+\item \code{areas_sf}: polygon geometry for each areal region when the \code{sf} and
+\code{deldir} packages are available.
+\item \code{cluster_id}: final region id attached to the fine points.
+\item \code{fine}: the internal fine-layer object used to build the partition.
+}
 }
 \description{
-Creates a fine-grained point layer, assigns each point to one of \code{n_area}
-seed locations, then builds an areal adjacency matrix for the resulting
-regions. This yields structures that resemble real areal data without needing
-a full spatial package stack.
+Constructs a set of areal regions by (i) generating a dense fine-grained point
+layer over the unit square, (ii) placing \code{n_area} seed points, (iii)
+assigning each fine point to the nearest seed using the graph induced by the
+fine layer, and (iv) deriving the adjacency matrix and geometry of the final
+regions. This yields an areal graph that matches the graph-based Voronoi
+construction used for areal source simulation and auxiliary-data calculations.
 }
 \details{
-If the optional \code{deldir} package is available, the fine layer uses a Delaunay
-graph to define neighborhood relations between fine points before aggregating
-them into areal units. If not, a simple radius graph is used instead.
+When both \code{deldir} and \code{igraph} are available, the fine layer is linked by a
+Delaunay graph and the region assignment is obtained from graph distances. If
+those packages are absent, a fallback radius graph is used instead.
 }
 \examples{
 areal <- generate_areal_units(6, n_fine = 200, seed_type = "uniform",
                               seed = 1)
 dim(areal$W)
+}
+\seealso{
+\code{\link[=simulate_sources_areal]{simulate_sources_areal()}}
 }
