@@ -66,7 +66,7 @@ test_that("neighbour index and graph prior mean are consistent", {
 
   ni1 <- NonlinearBSS:::build_neighbor_index(list(g_s), n)
   Z <- matrix(rnorm(2 * n), n)
-  prior <- list(rho = rep(1, n), beta = matrix(1, n, 1))
+  prior <- list(rho = matrix(1, n, 2), beta = array(1, c(n, 1, 2)))
   pm <- NonlinearBSS:::graph_prior_mean(prior, Z, ni1, rho_max = 0.5)
   nb <- NonlinearBSS:::graph_neighbors(g_s, n)
   expect_equal(pm, 0.5 * t(vapply(nb, function(v) colMeans(Z[v, , drop = FALSE]),
@@ -99,4 +99,54 @@ test_that("Laplacian auxiliary data follow the graph layouts", {
   expect_equal(length(unique(A[, 3])), n_t)
   expect_output(print(spec), "Laplacian")
   expect_error(aux_laplacian(list(g_s, g_t), K = c(1, 2, 3)), "per graph")
+})
+
+test_that("sparse Laplacian eigensolver agrees with the analytic path-graph values", {
+  skip_if_not_installed("RSpectra")
+  n_big <- 800
+  K <- 5
+  r <- NonlinearBSS:::compute_laplacian_eigenvectors(path_adj(n_big), K = K,
+                                                    dense_max = 100L)
+  expect_equal(r$lambda, 2 - 2 * cos(pi * seq_len(K) / n_big), tolerance = 1e-6)
+  rd <- NonlinearBSS:::compute_laplacian_eigenvectors(path_adj(n_big), K = K,
+                                                     dense_max = Inf)
+  expect_equal(abs(diag(cor(r$phi, rd$phi))), rep(1, K), tolerance = 1e-4)
+})
+
+test_that("a time graph with more than 500 nodes works with an explicit layout", {
+  n_day <- 882; n_st <- 5; n_big <- n_day * n_st
+  # rows ordered station within day, but given through an explicit layout
+  day <- rep(seq_len(n_day), each = n_st)
+  station <- rep(seq_len(n_st), n_day)
+  g_day <- nlbss_time_graph(n_day, node = day, context = station)
+  A <- aux_matrix(aux_laplacian(g_day, K = 5), matrix(0, n_big, 0))
+  expect_equal(dim(A), c(n_big, 5))
+  expect_equal(A[day == 10, 1], rep(A[day == 10, 1][1], n_st))   # constant within a day
+  expect_equal(length(unique(A[, 1])), n_day)
+
+  nb <- NonlinearBSS:::graph_neighbors(g_day, n_big)
+  expect_equal(lengths(nb), ifelse(day == 1, 0L, 1L))
+  expect_true(all(day[unlist(nb)] == day[day > 1] - 1L))
+  expect_true(all(station[unlist(nb)] == station[day > 1]))
+})
+
+test_that("the temporal graph neighbours equal the iVAEar lag index", {
+  n_s <- 4; n_t <- 6; n <- n_s * n_t
+  time <- rep(seq_len(n_t), each = n_s)
+  group <- rep(seq_len(n_s), n_t)
+  g <- nlbss_time_graph(n_t, each = n_s)
+  nb <- NonlinearBSS:::build_neighbor_index(list(g), n)$index[, 1]
+  lag <- NonlinearBSS:::lag_index(time, as.character(group), 1)[, 1]
+  expect_equal(as.integer(nb), as.integer(lag))
+})
+
+test_that("nlbss_dag keeps only earlier neighbours", {
+  W <- matrix(0, 4, 4); W[cbind(1:3, 2:4)] <- 1; W <- pmax(W, t(W))
+  g <- nlbss_dag(W, order = c(2, 1, 4, 3))      # node order: 2, 1, 4, 3
+  expect_equal(g$adj_list, list(2L, integer(0), c(2L, 4L), integer(0)))
+  pos <- rank(c(2, 1, 4, 3))
+  expect_true(all(unlist(lapply(seq_along(g$adj_list), function(i)
+    pos[g$adj_list[[i]]] < pos[i]))))
+  # default order: neighbours with a smaller index
+  expect_equal(nlbss_dag(W)$adj_list, list(integer(0), 1L, 2L, 3L))
 })

@@ -21,6 +21,11 @@ test_that("GiVAE fits with a spatial and a directed temporal graph", {
   expect_equal(fit$neighbors$G, 2L)
   expect_true(is.finite(fit$elbo))
   expect_output(print(fit), "GiVAE")
+  # coupling is component-specific: rho is n x L, beta is n x G x L
+  expect_equal(dim(fit$prior$rho), c(nrow(x), 3))
+  expect_equal(dim(fit$prior$beta), c(nrow(x), 2, 3))
+  expect_equal(apply(fit$prior$beta, c(1, 3), sum), matrix(1, nrow(x), 3),
+               tolerance = 1e-5)
   expect_true(all(predict(fit, type = "variance") > 0))
   expect_error(predict(fit, type = "forecast"), "not available")
 

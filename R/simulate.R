@@ -189,34 +189,6 @@ mix_data <- function(x, n_layers = 1,
   x
 }
 
-#' Generate Realistic Areal Units from a Fine Grid and Seeds
-#'
-#' Creates a fine-grained point layer, assigns each point to one of `n_area`
-#' seed locations, then builds an areal adjacency matrix for the resulting
-#' regions. This yields structures that resemble real areal data without needing
-#' a full spatial package stack.
-#'
-#' If the optional `deldir` package is available, the fine layer uses a Delaunay
-#' graph to define neighborhood relations between fine points before aggregating
-#' them into areal units. If not, a simple radius graph is used instead.
-#'
-#' @param n_area Number of areal units.
-#' @param n_fine Number of fine grid points used to define the areal partition.
-#' @param seed_type Type of seed placement: `"uniform"` or `"clustered"`.
-#' @param n_clusters Number of seed clusters for clustered placement.
-#' @param cluster_sd Cluster spread for clustered sampling.
-#' @param xy_coef Additional spread parameter in the x/y direction for clustered
-#'   seeds.
-#' @param radius Optional radius used in the fallback graph construction. If `NULL`,
-#'   it is chosen from the median nearest-neighbor distance.
-#' @param seed Optional random seed.
-#' @return A list with elements `fine_points`, `seed_points`, `area_id`,
-#'   `area_coords`, `W`, and `area_centres`.
-#' @examples
-#' areal <- generate_areal_units(6, n_fine = 200, seed_type = "uniform",
-#'                               seed = 1)
-#' dim(areal$W)
-#' @export
 generate_fine_layer <- function(n_fine, domain = c(0, 1, 0, 1)) {
   if (length(domain) == 2L) {
     x_range <- y_range <- domain
@@ -331,6 +303,46 @@ build_areal_polygons <- function(fine, cluster_id) {
   sf::st_make_valid(areas_sf)
 }
 
+#' Generate a Spatial Areal Partition from a Fine Grid
+#'
+#' Constructs a set of areal regions by (i) generating a dense fine-grained point
+#' layer over the unit square, (ii) placing `n_area` seed points, (iii)
+#' assigning each fine point to the nearest seed using the graph induced by the
+#' fine layer, and (iv) deriving the adjacency matrix and geometry of the final
+#' regions. This yields an areal graph that matches the graph-based Voronoi
+#' construction used for areal source simulation and auxiliary-data calculations.
+#'
+#' When both `deldir` and `igraph` are available, the fine layer is linked by a
+#' Delaunay graph and the region assignment is obtained from graph distances. If
+#' those packages are absent, a fallback radius graph is used instead.
+#'
+#' @param n_area Integer, the desired number of areal units.
+#' @param n_fine Integer, the number of fine grid points used to define the
+#'   partition. If `NULL`, a default value is chosen as `max(200, 30 * n_area)`.
+#' @param seed_type Seed placement scheme: `"uniform"` or `"clustered"`.
+#' @param n_clusters Number of clusters for `seed_type = "clustered"`.
+#' @param cluster_sd Standard deviation used for the within-cluster seed jitter.
+#' @param xy_coef Additional anisotropy parameter for clustered seed placement.
+#' @param radius Optional radius used in the fallback adjacency construction.
+#'   If `NULL`, it is chosen from the centroid spacing of the generated regions.
+#' @param seed Optional random seed for reproducible output.
+#' @return A list with the elements:
+#'   * `fine_points`: coordinates of the fine grid.
+#'   * `seed_points`: coordinates of the seed points.
+#'   * `area_id`: region assignment for each fine point.
+#'   * `area_coords`: centroid coordinates of the areal units.
+#'   * `W`: binary adjacency matrix for the areal regions.
+#'   * `area_centres`: same as `area_coords`.
+#'   * `areas_sf`: polygon geometry for each areal region when the `sf` and
+#'     `deldir` packages are available.
+#'   * `cluster_id`: final region id attached to the fine points.
+#'   * `fine`: the internal fine-layer object used to build the partition.
+#' @examples
+#' areal <- generate_areal_units(6, n_fine = 200, seed_type = "uniform",
+#'                               seed = 1)
+#' dim(areal$W)
+#' @seealso [simulate_sources_areal()]
+#' @export
 generate_areal_units <- function(n_area, n_fine = NULL,
                                 seed_type = c("uniform", "clustered"),
                                 n_clusters = 3L, cluster_sd = 0.04,
@@ -403,14 +415,35 @@ generate_areal_units <- function(n_area, n_fine = NULL,
 
 #' Simulate Nonstationary Areal Sources Over Time
 #'
-#' Simulates latent sources for areal units over time, with spatial modulation
-#' driven by Moran eigenvectors of the areal graph. This is the intended areal
-#' analogue of [simulate_sources()] for spatially structured data.
+#' Simulates latent sources for areal units over time from a nonstationary
+#' spatial autoregressive (SAR) model with autoregressive time dependence. This
+#' is the intended areal analogue of [simulate_sources()] for spatially
+#' structured data. Replaces the earlier version of this function.
 #'
-#' The spatial variance is built from the leading positive MEM vectors and is
-#' scaled to a nonstationary range across areal units. Temporal dependence is then
-#' generated by a block-wise AR(1) process, optionally with a smooth AR path.
-#' The CAR option is intentionally not included here.
+#' @details
+#' For each component and time point the innovation is
+#' \deqn{u_t = (I - \mathrm{diag}(\beta) W)^{-1} \epsilon_t,\quad
+#' \epsilon_{it} \sim N(0, \sigma_i^2 m_t),}{
+#' u_t = (I - diag(beta) W)^(-1) eps_t, eps_it ~ N(0, sigma_i^2 m_t),}
+#' where `W` is the row-standardised adjacency matrix, and the component is
+#' \eqn{z_t = \gamma_t z_{t-1} + u_t}{z_t = gamma_t z_(t-1) + u_t}. Three
+#' kinds of nonstationarity can be present:
+#'
+#' * **Spatial variance** \eqn{\sigma_i}: built from one leading eigenvector
+#'   of the areal graph (see `basis`), scaled to `sd_range`.
+#' * **Temporal variance** \eqn{m_t}: block-wise, drawn separately for each
+#'   component, with `n_segments_time` blocks and values in `sd_range`.
+#' * **Spatial dependence** \eqn{\beta_i}: constant over areas by default, with
+#'   one value per component drawn from `beta_s_range`. With
+#'   `nonstat_dependence = TRUE` it varies between areas: another leading
+#'   eigenvector of the graph (different from the one used for the variance
+#'   when several are available) is scaled to a random sub-interval of
+#'   `beta_s_range`, so that the strength of the spatial dependence changes
+#'   smoothly over the map. Because `W` is row-standardised and all
+#'   \eqn{|\beta_i| < 1}, the system is always invertible.
+#'
+#' The AR coefficients \eqn{\gamma_t} are drawn independently for each time
+#' point from `ar_range`.
 #'
 #' @param p Number of latent components.
 #' @param areal Optional output from [generate_areal_units()].
@@ -420,21 +453,39 @@ generate_areal_units <- function(n_area, n_fine = NULL,
 #' @param n_time Number of time points.
 #' @param n_segments_time Number of temporal variance blocks.
 #' @param sd_range Range of the spatial and temporal standard deviations used
-#'   to scale the Moran-based spatial variance and the time-block variance.
+#'   to scale the eigenvector-based spatial variance and the time-block
+#'   variance.
 #' @param ar_range Range for the AR(1) coefficients.
+#' @param beta_s_range Range (inside (-1, 1)) of the spatial dependence
+#'   parameter. For stationary dependence one value per component is drawn from
+#'   it; for `nonstat_dependence = TRUE` it bounds the range over which
+#'   \eqn{\beta_i} varies.
 #' @param seed_type Type of seed placement when generating areal units.
 #' @param n_clusters Number of clusters when `seed_type = "clustered"`.
 #' @param cluster_sd Cluster spread used in seed generation.
 #' @param xy_coef Additional anisotropy in the clustered seed layout.
 #' @param radius Radius used in the fallback graph construction.
 #' @param seed Optional random seed.
-#' @return A list with elements `sources`, `labels`, `W`, `coords`, `time`, and
-#'   `areal`.
+#' @param nonstat_dependence Logical. Let the spatial dependence parameter vary
+#'   between areas, driven by a graph eigenvector?
+#' @param basis Eigenvectors used for the spatial patterns of the variance and
+#'   the dependence: `"moran"` (positive Moran eigenvector maps) or
+#'   `"laplacian"` (smoothest non-trivial graph Laplacian eigenvectors).
+#' @return A list with elements `sources`, `labels`, `W`, `coords`, `time`,
+#'   `area`, `group`, `areal`, `mem` (the eigenvectors of the chosen basis),
+#'   `basis`, and `beta_s`, an `n_area x p` matrix with the dependence
+#'   parameter of every area and component (constant over the areas unless
+#'   `nonstat_dependence = TRUE`).
 #' @examples
 #' areal <- generate_areal_units(8, n_fine = 200, seed = 1)
 #' src <- simulate_sources_areal(3, areal = areal, n_time = 20,
 #'                                n_segments_time = 3)
 #' dim(src$sources)
+#'
+#' # dependence strength varying over space
+#' src2 <- simulate_sources_areal(3, areal = areal, n_time = 20,
+#'                                nonstat_dependence = TRUE, basis = "laplacian")
+#' round(src2$beta_s, 2)
 #' @export
 simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
                                    n_fine = NULL, n_time = 50,
@@ -445,8 +496,11 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
                                    seed_type = c("uniform", "clustered"),
                                    n_clusters = 3L, cluster_sd = 0.04,
                                    xy_coef = 1, radius = NULL,
-                                   seed = NULL) {
+                                   seed = NULL,
+                                   nonstat_dependence = FALSE,
+                                   basis = c("moran", "laplacian")) {
   seed_type <- match.arg(seed_type)
+  basis <- match.arg(basis)
   if (!is.null(seed)) set.seed(seed)
 
   if (is.null(areal)) {
@@ -476,57 +530,69 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
   }
   sd_range <- sort(sd_range)
   if (length(ar_range) != 2L || any(!is.finite(ar_range))) ar_range <- c(0.3, 0.9)
-  if (length(beta_s_range) != 2L || any(!is.finite(beta_s_range))) {
-    stop("`beta_s_range` must be a finite numeric vector of length 2.", call. = FALSE)
-  }
-
-  # Neighbourhood used for the SAR dependence structure
-  W_dep <- W
-  if (!all(dim(W_dep) == n_area)) {
-    stop("`W_sar` must be n_area x n_area.", call. = FALSE)
-  }
-  # Row-standardised weights (zero rows stay zero)
-  rs <- rowSums(W_dep)
-  W_row <- W_dep / ifelse(rs > 0, rs, 1)
-
-  # MEM basis (used only for the spatial *variance* pattern)
-  mem_obj <- compute_MEM_vectors(W, K = min(10L, max(1L, n_area - 1L)),
-                                 positive_only = TRUE)
-  K_mem <- ncol(mem_obj$mem)
-  if (K_mem < 1L) {
-    stop("No positive MEM vectors were found for the supplied areal graph.",
+  if (length(beta_s_range) != 2L || any(!is.finite(beta_s_range)) ||
+      any(abs(beta_s_range) >= 1)) {
+    stop("`beta_s_range` must be a numeric vector of length 2 inside (-1, 1).",
          call. = FALSE)
   }
+  beta_s_range <- sort(beta_s_range)
 
-  # Per-call helper: block-wise temporal variance multiplier (drawn per component)
-  draw_time_mult <- function() {
-    if (n_time == 1L) return(1)
+  # Row-standardised weights (zero rows stay zero)
+  rs <- rowSums(W)
+  W_row <- W / ifelse(rs > 0, rs, 1)
+
+  # Eigenvector basis for the spatial variance and dependence patterns
+  basis_mat <- if (basis == "moran") {
+    compute_MEM_vectors(W, K = min(10L, max(1L, n_area - 1L)),
+                        positive_only = TRUE)$mem
+  } else {
+    compute_laplacian_eigenvectors(as_adj_list(W),
+                                   K = min(10L, max(1L, n_area - 1L)))$phi
+  }
+  K_basis <- ncol(basis_mat)
+  if (K_basis < 1L) {
+    stop("No eigenvectors were found for the supplied areal graph.", call. = FALSE)
+  }
+  scale01 <- function(v) {
+    v <- v - min(v)
+    if (max(v) > 0) v / max(v) else v
+  }
+
+  # Temporal block assignment shared by the variance and AR profiles.
+  draw_time_labels <- function() {
+    if (n_time == 1L) return(rep(1L, n_time))
     centres <- sample(seq_len(n_time), n_segments_time)
-    labels  <- vapply(seq_len(n_time),
-                      function(t) which.min(abs(centres - t)), integer(1L))
-    runif(n_segments_time, sd_range[1], sd_range[2])[labels]
+    vapply(seq_len(n_time),
+           function(t) which.min(abs(centres - t)), integer(1L))
   }
 
   z <- matrix(NA_real_, n_area * n_time, p)
-  beta_s_used <- numeric(p)
+  beta_s_used <- matrix(NA_real_, n_area, p)
   I_n <- diag(n_area)
 
   for (j in seq_len(p)) {
-    # ---- spatial variance pattern from one leading MEM -------------------
-    mem_vals <- as.numeric(mem_obj$mem[, sample.int(K_mem, 1L)])
-    mem_vals <- mem_vals - min(mem_vals)
-    if (max(mem_vals) > 0) mem_vals <- mem_vals / max(mem_vals)
-    sigma_i <- mem_vals * diff(sd_range) + sd_range[1]
+    # ---- spatial variance pattern from one leading eigenvector -----------
+    idx_var <- sample.int(K_basis, 1L)
+    sigma_i <- scale01(as.numeric(basis_mat[, idx_var])) * diff(sd_range) + sd_range[1]
 
-    # ---- per-component temporal variance profile (point 2) ---------------
-    time_mult <- draw_time_mult()
+    # ---- temporal variance and AR profiles share the same segment labels -
+    time_labels <- draw_time_labels()
+    time_mult <- runif(n_segments_time, sd_range[1], sd_range[2])[time_labels]
 
-    # ---- per-component SAR coupling (point 1) ----------------------------
-    beta_s <- runif(1L, beta_s_range[1], beta_s_range[2])
-    beta_s_used[j] <- beta_s
-    A_inv <- solve(I_n - beta_s * W_row)   # (I + B)^{-1}, B = -beta_s * W_row
+    # ---- spatial dependence: constant, or driven by another eigenvector --
+    if (nonstat_dependence) {
+      b <- sort(runif(2L, beta_s_range[1], beta_s_range[2]))
+      others <- setdiff(seq_len(K_basis), idx_var)
+      idx_dep <- if (length(others) > 0L) others[sample.int(length(others), 1L)] else idx_var
+      beta_i <- b[1] + (b[2] - b[1]) * scale01(as.numeric(basis_mat[, idx_dep]))
+    } else {
+      beta_i <- rep(runif(1L, beta_s_range[1], beta_s_range[2]), n_area)
+    }
+    beta_s_used[, j] <- beta_i
+    # (I - diag(beta) W_row)^{-1}; beta_i * W_row scales row i by beta_i
+    A_inv <- solve(I_n - beta_i * W_row)
 
-    ar_coeff <- runif(n_time, min(ar_range), max(ar_range))
+    ar_coeff <- runif(n_segments_time, min(ar_range), max(ar_range))[time_labels]
 
     # ---- innovations: heteroscedastic noise, then SAR filtering ----------
     sd_mat  <- outer(sigma_i, sqrt(time_mult))                 # n_area x n_time
@@ -545,6 +611,7 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
   area_order <- rep(seq_len(n_area), n_time)
   time_order <- rep(seq_len(n_time), each = n_area)
   colnames(z) <- paste0("Z", seq_len(p))
+  colnames(beta_s_used) <- colnames(z)
   coords <- if (is.null(areal$area_coords)) matrix(runif(2 * n_area), ncol = 2)
             else areal$area_coords
   coords <- coords[area_order, , drop = FALSE]
@@ -557,7 +624,8 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
        area = area_order,
        group = area_order,
        areal = areal,
-       mem = mem_obj$mem,
+       mem = basis_mat,
+       basis = basis,
        beta_s = beta_s_used)
 }
 
