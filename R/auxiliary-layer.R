@@ -28,7 +28,8 @@ aux_raw_block <- function(spec, dat, values, training) {
     },
     coords = seg_locations(dat),
     covariates = covariate_values(spec, dat, values, training),
-    moran = stop("Batch-wise auxiliary computation is not supported for Moran eigenvector maps; use `batch_aux = FALSE` or pass a precomputed auxiliary matrix.", call. = FALSE)
+    moran = stop("Batch-wise auxiliary computation is not supported for Moran eigenvector maps; use `batch_aux = FALSE` or pass a precomputed auxiliary matrix.", call. = FALSE),
+    laplacian = stop("Batch-wise auxiliary computation is not supported for Laplacian eigenvectors; use `batch_aux = FALSE`.", call. = FALSE)
   )
 }
 
@@ -60,7 +61,8 @@ aux_tf_block <- function(spec) {
     segments = segments_tf_block(spec),
     coords = function(x) (x - tf_row(spec$mins)) / tf_row(spec$ranges),
     covariates = function(x) (x - tf_row(spec$center)) / tf_row(spec$scale_by),
-    moran = stop("Batch-wise auxiliary computation is not supported for Moran eigenvector maps; use `batch_aux = FALSE` or pass a precomputed auxiliary matrix.", call. = FALSE)
+    moran = stop("Batch-wise auxiliary computation is not supported for Moran eigenvector maps; use `batch_aux = FALSE` or pass a precomputed auxiliary matrix.", call. = FALSE),
+    laplacian = stop("Batch-wise auxiliary computation is not supported for Laplacian eigenvectors; use `batch_aux = FALSE`.", call. = FALSE)
   )
 }
 

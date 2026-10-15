@@ -20,6 +20,9 @@ build_network <- function(spec, step) {
   p <- as.integer(spec$p)
   R <- as.integer(spec$ar_order)
   has_aux <- spec$method != "VAE"
+  is_graph <- spec$method == "GiVAE"
+  G <- as.integer(spec$n_graphs)
+  M <- as.integer(spec$max_neighbors)
   act <- spec$activation
   dense <- function(units, activation = NULL) {
     keras3::layer_dense(units = as.integer(units), activation = activation)
@@ -50,12 +53,23 @@ build_network <- function(spec, step) {
   # Auxiliary function w(u) giving the prior parameters
   if (has_aux) {
     prior_hidden <- lapply(spec$aux_hidden_units, dense, activation = act)
-    prior_mean_layer <- dense(L)
+    prior_mean_layer <- if (!is_graph) dense(L)
     prior_log_var_layer <- dense(L)
     prior_ar_layers <- lapply(seq_len(R), function(r) dense(L, "tanh"))
+    if (is_graph) {
+      # total coupling rho(u) in (0, 1) and its split between the graphs
+      prior_rho_layer <- dense(1L, "sigmoid")
+      prior_beta_layer <- dense(G)
+      prior_beta_softmax <- keras3::layer_activation_softmax()
+    }
     prior <- function(f) {
       h <- f
       for (layer in prior_hidden) h <- layer(h)
+      if (is_graph) {
+        return(list(mean = NULL, log_var = prior_log_var_layer(h),
+                    rho = prior_rho_layer(h),
+                    beta = prior_beta_softmax(prior_beta_layer(h)), ar = list()))
+      }
       list(mean = prior_mean_layer(h), log_var = prior_log_var_layer(h),
            ar = lapply(prior_ar_layers, function(layer) layer(h)))
     }
@@ -76,7 +90,8 @@ build_network <- function(spec, step) {
   z <- sampling(list(enc$mean, enc$log_var))
   x_hat <- decode(z)
 
-  inputs <- c(list(x_in), if (has_aux) list(aux_in), if (spec$use_mask) list(mask_in))
+  # same order as network_inputs(): x, mask, aux
+  inputs <- c(list(x_in), if (spec$use_mask) list(mask_in), if (has_aux) list(aux_in))
   loss_mask <- if (spec$use_mask) mask_in else keras3::op_ones_like(x_in)
   if (has_aux) {
     pr <- prior(f0)
@@ -102,6 +117,21 @@ build_network <- function(spec, step) {
       inputs <- c(inputs, lag_inputs)
     }
     prior_log_var <- pr$log_var
+    if (is_graph) {
+      # neighbours of every graph, encoded with the shared encoder: the slots
+      # (G * M of them) are a second input dimension and the dense layers act
+      # on the last axis.
+      S <- G * M
+      nb_x <- keras3::layer_input(shape = c(S, p), name = "nb_x")
+      nb_mask <- if (spec$use_mask) keras3::layer_input(shape = c(S, p), name = "nb_mask")
+      nb_aux <- keras3::layer_input(shape = c(S, as.integer(spec$n_aux)), name = "nb_aux")
+      nb_valid <- keras3::layer_input(shape = S, name = "nb_valid")
+      z_nb <- encode(nb_x, features(nb_aux), nb_mask)$mean   # batch x S x L
+      prior_mean <- graph_aggregate(z_nb, nb_valid, pr$rho, pr$beta, G, M, L,
+                                    spec$rho_max)
+      inputs <- c(inputs, list(nb_x), if (spec$use_mask) list(nb_mask),
+                  list(nb_aux, nb_valid))
+    }
   } else {
     prior_mean <- keras3::op_zeros_like(enc$mean)
     prior_log_var <- keras3::op_zeros_like(enc$mean)
@@ -122,10 +152,28 @@ build_network <- function(spec, step) {
   encoder <- keras3::keras_model(enc_inputs, list(enc$mean, enc$log_var))
   z_in <- keras3::layer_input(shape = L)
   decoder <- keras3::keras_model(z_in, decode(z_in))
-  prior_model <- if (has_aux) {
+  prior_model <- if (has_aux && is_graph) {
+    keras3::keras_model(aux_in, list(pr$log_var, pr$rho, pr$beta))
+  } else if (has_aux) {
     keras3::keras_model(aux_in, c(list(pr$mean, pr$log_var), pr$ar))
   }
-  list(train = train, encoder = encoder, decoder = decoder, prior = prior_model)
+  list(train = train, encoder = encoder, decoder = decoder, prior = prior_model,
+       method = spec$method)
+}
+
+# Graph prior mean from the encoder means of the neighbours:
+#   rho_max * rho * sum_g beta_g * (mean of the valid neighbours in graph g).
+# z_nb: batch x (G * M) x L, valid: batch x (G * M), rho: batch x 1,
+# beta: batch x G. Slots of graph g are the columns (g - 1) * M + 1, ..., g * M.
+graph_aggregate <- function(z_nb, valid, rho, beta, G, M, L, rho_max) {
+  z4 <- keras3::op_reshape(z_nb, c(-1L, G, M, L))
+  v4 <- keras3::op_reshape(valid, c(-1L, G, M, 1L))
+  num <- keras3::op_sum(keras3::op_multiply(z4, v4), axis = -2L)        # batch x G x L
+  cnt <- keras3::op_maximum(keras3::op_sum(v4, axis = -2L), 1)         # batch x G x 1
+  mean_g <- keras3::op_divide(num, cnt)
+  w <- keras3::op_expand_dims(beta, -1L)                                # batch x G x 1
+  agg <- keras3::op_sum(keras3::op_multiply(w, mean_g), axis = -2L)    # batch x L
+  keras3::op_multiply(rho_max, keras3::op_multiply(rho, agg))
 }
 
 # Inputs of the encoder model in the order used by build_network().
@@ -143,6 +191,9 @@ run_encoder <- function(net, spec, X, A, mask) {
 run_prior <- function(net, A) {
   out <- predict_np(net$prior, A)
   if (!is.list(out)) out <- list(out)
+  if (identical(net$method, "GiVAE")) {
+    return(list(mean = NULL, log_var = out[[1]], rho = out[[2]], beta = out[[3]]))
+  }
   list(mean = out[[1]], log_var = out[[2]], ar = out[-(1:2)])
 }
 

@@ -3,7 +3,8 @@ method_title <- function(method) {
     TCL = "Time contrastive learning (TCL)",
     VAE = "Variational autoencoder (VAE)",
     iVAE = "Identifiable variational autoencoder (iVAE)",
-    iVAEar = "Identifiable variational autoencoder with autoregressive components (iVAEar)"
+    iVAEar = "Identifiable variational autoencoder with autoregressive components (iVAEar)",
+    GiVAE = "Graph identifiable variational autoencoder (GiVAE)"
   )
 }
 
@@ -65,7 +66,11 @@ print.nlbss <- function(x, ...) {
       " variables, format ", x$data$format, ")\n", sep = "")
   cat("Latent components: ", x$latent_dim, if (x$ar_order > 0)
     paste0(", autoregressive order ", x$ar_order), "\n", sep = "")
-  if (x$method %in% c("iVAE", "iVAEar")) {
+  if (x$method == "GiVAE") {
+    for (g in x$graphs) cat("  ", format_graph(g), "\n", sep = "")
+    cat("  Neighbour slots per graph: ", x$neighbors$M, ", rho_max: ", x$rho_max, "\n", sep = "")
+  }
+  if (x$method %in% c("iVAE", "iVAEar", "GiVAE")) {
     for (s in x$aux$specs) cat(format(s), "\n", sep = "")
     if (isTRUE(x$aux$batch)) cat("Auxiliary variables computed batch-wise\n")
   }
@@ -265,4 +270,11 @@ plot_history <- function(x, ...) {
     legend("topright", c("training", "validation"), lty = 1:2, bty = "n")
   }
   x
+}
+
+format_graph <- function(g) {
+  deg <- lengths(g$adj_list)
+  paste0("Graph", if (!is.null(g$name)) paste0(" '", g$name, "'"), ": ", g$n_nodes,
+         " nodes, mean degree ", format(mean(deg), digits = 3),
+         if (is.null(g$node)) paste0(", each = ", g$each) else ", explicit layout")
 }

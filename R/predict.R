@@ -179,7 +179,8 @@ check_type <- function(object, type) {
     TCL = "components",
     VAE = c("components", "reconstruction"),
     iVAE = c("components", "reconstruction", "trend", "variance"),
-    iVAEar = c("components", "reconstruction", "trend", "variance", "ar_coef", "forecast")
+    iVAEar = c("components", "reconstruction", "trend", "variance", "ar_coef", "forecast"),
+    GiVAE = c("components", "reconstruction", "variance")
   )
   if (!type %in% allowed) {
     stop("`type = \"", type, "\"` is not available for ", object$method,

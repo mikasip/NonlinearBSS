@@ -5,7 +5,8 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
                            source_dist, error_dist, error_dist_sigma,
                            mask_encoder, optimizer, lr_start, lr_end, steps,
                            epochs, batch_size, validation_split, seed, verbose,
-                           call, data_name, vdat = NULL, callbacks = NULL) {
+                           call, data_name, vdat = NULL, callbacks = NULL,
+                           graphs = NULL, rho_max = 0.9, max_neighbors = NULL) {
   check_tf()
   if (!is.null(seed)) {
     old_rng <- set_seed(seed)
@@ -39,6 +40,18 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
     lags <- lag_index(dat$time, series_key(dat), ar_order)
   }
 
+  neigh <- NULL
+  if (method == "GiVAE") {
+    if (batch_aux) {
+      stop("Batch-wise auxiliary computation is not supported by GiVAE.", call. = FALSE)
+    }
+    if (is.null(graphs)) stop("GiVAE needs `graphs`.", call. = FALSE)
+    neigh <- build_neighbor_index(graphs, n, max_neighbors)
+    if (all(is.na(neigh$index))) {
+      stop("None of the observations has neighbours in the given graphs.", call. = FALSE)
+    }
+  }
+
   spec <- list(
     method = method, p = p, latent_dim = latent_dim,
     n_aux = if (is.null(A)) 0L else ncol(A),
@@ -48,14 +61,18 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
     source_dist = source_dist, error_dist = error_dist,
     error_dist_sigma = error_dist_sigma, steps = steps,
     ar_order = as.integer(ar_order), use_mask = has_missing && mask_encoder,
-    seed = seed
+    seed = seed,
+    n_graphs = if (is.null(neigh)) 0L else neigh$G,
+    max_neighbors = if (is.null(neigh)) 0L else neigh$M,
+    rho_max = rho_max
   )
   if (is.null(optimizer)) optimizer <- default_optimizer(lr_start, lr_end, steps)
   net <- build_network(spec, optimizer$iterations)
   keras3::compile(net$train, optimizer = optimizer, loss = elbo_loss,
                   metrics = elbo_metrics())
 
-  inputs <- network_inputs(sc$X, sc$mask, A, lags, use_mask = spec$use_mask)
+  inputs <- network_inputs(sc$X, sc$mask, A, lags, use_mask = spec$use_mask,
+                           neigh = neigh)
   validation <- NULL
   if (!is.null(vdat)) {
     if (ncol(vdat$X) != p) {
@@ -91,7 +108,13 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
   prior <- NULL
   if (method != "VAE") {
     prior <- run_prior(net, A)
-    prior_mean <- if (ar_order > 0) ar_prior_mean(prior$mean, prior$ar, Z, lags) else prior$mean
+    prior_mean <- if (method == "GiVAE") {
+      graph_prior_mean(prior, Z, neigh, rho_max)
+    } else if (ar_order > 0) {
+      ar_prior_mean(prior$mean, prior$ar, Z, lags)
+    } else {
+      prior$mean
+    }
     prior_log_var <- prior$log_var
   } else {
     prior_mean <- matrix(0, n, latent_dim)
@@ -127,6 +150,9 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
     data = strip_data(dat),
     aux = prep,
     lags = lags,
+    graphs = graphs,
+    neighbors = neigh,
+    rho_max = rho_max,
     prior = prior,
     elbo = mean(log_px + log_pz - log_qz),
     history = history_df(history),
@@ -136,6 +162,7 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
     call = call,
     data_name = data_name
   ), class = c(if (method == "iVAEar") "iVAEar",
+               if (method == "GiVAE") "GiVAE",
                if (method != "VAE") "iVAE" else "VAE", "nlbss"))
 }
 
@@ -236,7 +263,7 @@ restore_rng <- function(old) {
 # Lagged inputs of observations without previous values are replaced by the
 # observation itself and marked as invalid.
 network_inputs <- function(X, mask, A, lags, rows = seq_len(nrow(X)),
-                          use_mask = TRUE) {
+                          use_mask = TRUE, neigh = NULL) {
   inputs <- list(X[rows, , drop = FALSE])
   if (use_mask) {
     inputs <- c(inputs, list(mask[rows, , drop = FALSE]))
@@ -258,7 +285,29 @@ network_inputs <- function(X, mask, A, lags, rows = seq_len(nrow(X)),
     lag_inputs <- c(lag_inputs, list(matrix(as.numeric(valid))))
     inputs <- c(inputs, lag_inputs)
   }
+  if (!is.null(neigh)) inputs <- c(inputs, neighbor_inputs(X, mask, A, neigh, rows, use_mask))
   inputs
+}
+
+# Neighbour inputs of the graph prior: arrays with one slice per neighbour
+# slot (graph g, neighbour k = column (g - 1) * M + k of the index matrix):
+# observations (rows x slots x p), masks, auxiliary variables (rows x slots x
+# n_aux) and the validity indicators of the slots (rows x slots). Slots
+# without a neighbour point to the row itself and are marked invalid.
+neighbor_inputs <- function(X, mask, A, neigh, rows, use_mask) {
+  idx <- neigh$index[rows, , drop = FALSE]
+  S <- ncol(idx)
+  valid <- !is.na(idx)
+  idx[!valid] <- rows[row(idx)[!valid]]
+  slot_array <- function(M) {
+    out <- array(0, c(length(rows), S, ncol(M)))
+    for (s in seq_len(S)) out[, s, ] <- M[idx[, s], , drop = FALSE]
+    out
+  }
+  c(list(slot_array(X)),
+    if (use_mask) list(slot_array(mask)),
+    list(slot_array(A)),
+    list(matrix(as.numeric(valid), nrow = length(rows))))
 }
 
 # Validation data: an object in the same format as the training data (column

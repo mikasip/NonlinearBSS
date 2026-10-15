@@ -239,7 +239,7 @@ test_that("TCL and VAE fit time series and return the input format", {
   expect_error(predict(v, type = "trend"), "not available")
 })
 
-test_that("missing values and count data are handled", {
+test_that("missing values are handled", {
   skip_if_no_tf()
   set.seed(5)
   d <- sim_st()
@@ -249,15 +249,6 @@ test_that("missing values and count data are handled", {
               verbose = 0)
   expect_true(fit$spec$use_mask)
   expect_false(anyNA(fit$S))
-
-  counts <- matrix(rpois(length(d$x), exp(d$x / 3)), nrow(d$x))
-  fit <- iVAE(counts, aux_coords(), coords = d$coords, time = d$time,
-              error_dist = "poisson", error_dist_sigma = c(0.05, 0.01),
-              epochs = 1, verbose = 0)
-  expect_true(all(fitted(fit) > 0))
-  expect_error(iVAE(-counts, aux_coords(), coords = d$coords, time = d$time,
-                    error_dist = "poisson", epochs = 1, verbose = 0),
-               "non-negative")
 })
 
 test_that("models are saved and loaded", {

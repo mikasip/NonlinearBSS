@@ -1,0 +1,86 @@
+#' Graph Identifiable Variational Autoencoder
+#'
+#' Fits an identifiable variational autoencoder whose latent components depend
+#' on their neighbours in one or several graphs (GiVAE). It is meant for areal
+#' and network data, spatio-temporal data on areal units, and any data where
+#' the dependence between observations is described by graphs.
+#'
+#' @details
+#' For observation \eqn{i} the prior of the latent components is
+#' \deqn{z_i | \{\hat z_j\}, u_i \sim N(\mu_i, \sigma^2(u_i) I),\quad
+#' \mu_i = \rho_{max}\,\rho(u_i) \sum_{g=1}^G \beta_g(u_i)
+#' \frac{1}{|\partial_g i|}\sum_{j \in \partial_g i} \hat z_j,}{
+#' z_i ~ N(mu_i, sigma^2(u_i) I), mu_i = rho_max rho(u_i) sum_g beta_g(u_i)
+#' mean_{j in N_g(i)} zhat_j,}
+#' where \eqn{\hat z_j} is the encoder mean of neighbour \eqn{j}, \eqn{\rho(u)}
+#' in \eqn{(0, 1)} (scaled by `rho_max`) is the total coupling strength,
+#' \eqn{\beta_g(u)} (softmax over the graphs) distributes it between the
+#' graphs, and \eqn{\sigma^2(u)} is the nonstationary prior variance that
+#' gives identifiability. The neural networks for \eqn{\rho}, \eqn{\beta} and
+#' \eqn{\sigma^2} take the auxiliary variables \eqn{u} as input.
+#'
+#' The graphs are given as [nlbss_graph()] objects. A graph can have fewer
+#' nodes than the data have rows, for example a spatial graph of `n_s` areas
+#' for `n_s * n_t` rows; the layout of each graph tells how its nodes are
+#' repeated over the rows. Neighbours of a row are always searched in the
+#' same position of the other dimensions (for a spatial graph: the same time
+#' point).
+#'
+#' By default the auxiliary variables are Laplacian eigenvectors of each graph
+#' ([aux_laplacian()]). They are computed from the whole graph and not
+#' batch-wise.
+#'
+#' The prior uses the neighbours' encoder means in a conditional (pseudo
+#' likelihood) form; the determinant term of a joint simultaneous
+#' autoregressive model is not included.
+#'
+#' @inheritParams iVAE
+#' @param graphs A graph specification [nlbss_graph()], a list of them, a
+#'   matrix, or an adjacency list. See Details.
+#' @param aux Auxiliary data. Defaults to [aux_laplacian()] of `graphs` with
+#'   `K` eigenvectors per graph. May also be a matrix, a list of
+#'   specifications, or combined with them.
+#' @param K Number of Laplacian eigenvectors per graph if `aux` is not given.
+#' @param rho_max Upper bound of the total coupling strength, in (0, 1].
+#' @param max_neighbors Optional cap on the number of neighbours per graph and
+#'   row (a fixed random subset is used for nodes with more neighbours). Saves
+#'   memory for graphs with hubs.
+#' @return An object of class `c("GiVAE", "iVAE", "nlbss")`, see [iVAE()].
+#'   Additional elements: `graphs`, `neighbors` (the row indices of the
+#'   neighbours) and `rho_max`.
+#' @seealso [nlbss_graph()], [aux_laplacian()], [iVAE()]
+#' @export
+GiVAE <- function(x, graphs, aux = NULL, K = 10L, latent_dim = NULL,
+                  coords = NULL, time = NULL, group = NULL, vars = NULL,
+                  rho_max = 0.9, max_neighbors = NULL,
+                  hidden_units = c(128, 128, 128),
+                  aux_hidden_units = c(128, 128, 128),
+                  activation = "leaky_relu",
+                  source_dist = c("gaussian", "laplace"),
+                  error_dist = c("gaussian", "laplace"),
+                  error_dist_sigma = 0.02, mask_encoder = TRUE,
+                  optimizer = NULL, lr_start = 0.001, lr_end = 0.0001,
+                  steps = 10000, epochs = 100, batch_size = 64,
+                  validation_split = 0, callbacks = NULL, seed = NULL,
+                  verbose = 1) {
+  check_common_args(epochs, batch_size, validation_split)
+  if (!is.numeric(rho_max) || length(rho_max) != 1 || rho_max <= 0 || rho_max > 1) {
+    stop("`rho_max` must be in (0, 1].", call. = FALSE)
+  }
+  graphs <- as_graph_list(graphs)
+  if (is.null(aux)) aux <- aux_laplacian(graphs, K = K)
+  dat <- nlbss_data(x, coords = coords, time = time, group = group,
+                    vars = vars, aux_cols = aux_columns(aux))
+  fit_vae_family(
+    "GiVAE", dat, aux, batch_aux = FALSE, latent_dim = latent_dim, ar_order = 0,
+    hidden_units = hidden_units, aux_hidden_units = aux_hidden_units,
+    activation = activation, source_dist = match.arg(source_dist),
+    error_dist = match.arg(error_dist), error_dist_sigma = error_dist_sigma,
+    mask_encoder = mask_encoder, optimizer = optimizer, lr_start = lr_start,
+    lr_end = lr_end, steps = steps, epochs = epochs, batch_size = batch_size,
+    validation_split = validation_split, seed = seed, verbose = verbose,
+    call = match.call(), data_name = deparse1(substitute(x)),
+    vdat = NULL, callbacks = callbacks,
+    graphs = graphs, rho_max = rho_max, max_neighbors = max_neighbors
+  )
+}
