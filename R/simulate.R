@@ -460,6 +460,8 @@ generate_areal_units <- function(n_area, n_fine = NULL,
 #'   parameter. For stationary dependence one value per component is drawn from
 #'   it; for `nonstat_dependence = TRUE` it bounds the range over which
 #'   \eqn{\beta_i} varies.
+#' @param K Positive integer giving the number of basis functions to 
+#' create nonstationarity.
 #' @param seed_type Type of seed placement when generating areal units.
 #' @param n_clusters Number of clusters when `seed_type = "clustered"`.
 #' @param cluster_sd Cluster spread used in seed generation.
@@ -504,6 +506,7 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
                                    sd_range = c(0.1, 5),
                                    ar_range = c(0.3, 0.9),
                                    beta_s_range = c(0.3, 0.9),
+                                   K = 10L,
                                    seed_type = c("uniform", "clustered"),
                                    n_clusters = 3L, cluster_sd = 0.04,
                                    xy_coef = 1, radius = NULL,
@@ -555,11 +558,11 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
 
   # Eigenvector basis for the spatial variance and dependence patterns
   basis_mat <- if (basis == "moran") {
-    compute_MEM_vectors(W, K = min(10L, max(1L, n_area - 1L)),
+    compute_MEM_vectors(W, K = min(K, max(1L, n_area - 1L)),
                         positive_only = TRUE)$mem
   } else {
     compute_laplacian_eigenvectors(as_adj_list(W),
-                                   K = min(10L, max(1L, n_area - 1L)))$phi
+                                   K = min(K, max(1L, n_area - 1L)))$phi
   }
   K_basis <- ncol(basis_mat)
   if (K_basis < 1L) {
