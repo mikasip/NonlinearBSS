@@ -15,6 +15,7 @@ GiVAE(
   group = NULL,
   vars = NULL,
   rho_max = 0.99,
+  trend = TRUE,
   max_neighbors = NULL,
   jacobian = c("none", "exact", "stochastic"),
   jacobian_terms = 30L,
@@ -68,6 +69,10 @@ example a station), or names of columns in \code{x}. Only needed for
 numeric columns not used for \code{coords}, \code{time}, \code{group} or \code{aux}.}
 
 \item{rho_max}{Upper bound of the total coupling strength, in (0, 1].}
+
+\item{trend}{Logical. Add a component-specific trend \eqn{\tau_l(u)} (a
+neural network of the auxiliary variables, as the mean of \code{\link[=iVAE]{iVAE()}}) to
+the prior mean? See Details.}
 
 \item{max_neighbors}{Optional cap on the number of neighbours per graph and
 row (a fixed random subset is used for nodes with more neighbours). Saves
@@ -154,11 +159,14 @@ the dependence between observations is described by graphs.
 \details{
 For observation \eqn{i} the prior of the latent components is
 \deqn{z_{il} | \{\hat z_j\}, u_i \sim N(\mu_{il}, \sigma_l^2(u_i)),\quad
-\mu_{il} = \rho_{max}\,\rho_l(u_i) \sum_{g=1}^G \beta_{gl}(u_i)
+\mu_{il} = \tau_l(u_i) + \rho_{max}\,\rho_l(u_i) \sum_{g=1}^G \beta_{gl}(u_i)
 \frac{1}{|\partial_g i|}\sum_{j \in \partial_g i} \hat z_{jl},}{
-z_il ~ N(mu_il, sigma_l^2(u_i)), mu_il = rho_max rho_l(u_i) sum_g
-beta_gl(u_i) mean_{j in N_g(i)} zhat_jl,}
-where \eqn{\hat z_j} is the encoder mean of neighbour \eqn{j},
+z_il ~ N(mu_il, sigma_l^2(u_i)), mu_il = tau_l(u_i) + rho_max rho_l(u_i)
+sum_g beta_gl(u_i) mean_{j in N_g(i)} zhat_jl,}
+where \eqn{\tau_l(u)} is the trend (included when \code{trend = TRUE}, the
+default; it is a constant offset of the prior mean and does not change the
+determinant of the simultaneous system),
+\eqn{\hat z_j} is the encoder mean of neighbour \eqn{j},
 \eqn{\rho_l(u)} in \eqn{(0, 1)} (scaled by \code{rho_max}) is the total
 coupling strength of component \eqn{l}, \eqn{\beta_{gl}(u)} (softmax over
 the graphs) distributes it between the graphs, and \eqn{\sigma_l^2(u)} is

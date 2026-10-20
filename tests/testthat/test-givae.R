@@ -28,6 +28,13 @@ test_that("GiVAE fits with a spatial and a directed temporal graph", {
                tolerance = 1e-5)
   expect_true(all(predict(fit, type = "variance") > 0))
   expect_error(predict(fit, type = "forecast"), "not available")
+  # trend is on by default
+  expect_equal(dim(fit$prior$mean), c(nrow(x), 3))
+  expect_equal(dim(predict(fit, type = "trend")), c(nrow(x), 3))
+  fit0 <- GiVAE(x, graphs, K = c(4, 3), latent_dim = 3, epochs = 1,
+                batch_size = 32, verbose = 0, seed = 1, trend = FALSE)
+  expect_null(fit0$prior$mean)
+  expect_error(predict(fit0, type = "trend"), "not available")
 
   # default auxiliary data are Laplacian eigenvectors, one block per graph
   expect_equal(fit$aux$specs[[1]]$n_features, 4 + 3)

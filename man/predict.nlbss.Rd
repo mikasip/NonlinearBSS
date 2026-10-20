@@ -68,7 +68,8 @@ The available types are
 decoded back, on the scale of the data. Not for \code{\link[=TCL]{TCL()}}.}
 \item{\code{"trend"}}{The prior mean \eqn{\mu(u)} of the latent components
 given by the auxiliary function. For \code{\link[=iVAEar]{iVAEar()}} this does not include
-the autoregressive part. iVAE type models only.}
+the autoregressive part. For \code{\link[=GiVAE]{GiVAE()}} it is the trend \eqn{\tau(u)}
+only (models fitted with \code{trend = TRUE}), without the graph part.}
 \item{\code{"variance"}}{The prior variance of the latent components. iVAE
 type models only.}
 \item{\code{"ar_coef"}}{The autoregressive coefficients, one column per

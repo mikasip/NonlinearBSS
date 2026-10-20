@@ -42,11 +42,11 @@ n_area <- nrow(areal$W)
 n_time <- 200
 
 src <- simulate_sources_areal(p = 5, areal = areal, n_time = n_time,
-                              n_segments_time = 10, sd_range = c(0.4, 0.4),
+                              n_segments_time = 10, sd_range = c(1, 1),
                               nonstat_dependence = TRUE, basis = "laplacian",
                               nonstat_dependence_time = TRUE,
-                              ar_range = c(0, 0), beta_s_range = c(0.01, 0.99), seed = 3)
-x <- mix_data(src$sources, n_layers = 2, nonlinearity = "xtanh", normalize = FALSE)
+                              ar_range = c(0, 0), beta_s_range = c(0.01, 0.95), seed = 3)
+x <- mix_data(src$sources, n_layers = 3, nonlinearity = "elu", normalize = FALSE)
 ```
 
 The rows are ordered with the areal unit varying fastest within each time

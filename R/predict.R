@@ -14,7 +14,8 @@
 #'   decoded back, on the scale of the data. Not for [TCL()].}
 #'   \item{`"trend"`}{The prior mean \eqn{\mu(u)} of the latent components
 #'   given by the auxiliary function. For [iVAEar()] this does not include
-#'   the autoregressive part. iVAE type models only.}
+#'   the autoregressive part. For [GiVAE()] it is the trend \eqn{\tau(u)}
+#'   only (models fitted with `trend = TRUE`), without the graph part.}
 #'   \item{`"variance"`}{The prior variance of the latent components. iVAE
 #'   type models only.}
 #'   \item{`"ar_coef"`}{The autoregressive coefficients, one column per
@@ -180,7 +181,8 @@ check_type <- function(object, type) {
     VAE = c("components", "reconstruction"),
     iVAE = c("components", "reconstruction", "trend", "variance"),
     iVAEar = c("components", "reconstruction", "trend", "variance", "ar_coef", "forecast"),
-    GiVAE = c("components", "reconstruction", "variance")
+    GiVAE = c("components", "reconstruction", "variance",
+             if (isTRUE(object$spec$trend)) "trend")
   )
   if (!type %in% allowed) {
     stop("`type = \"", type, "\"` is not available for ", object$method,

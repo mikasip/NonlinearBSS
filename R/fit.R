@@ -8,7 +8,8 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
                            call, data_name, vdat = NULL, callbacks = NULL,
                            graphs = NULL, rho_max = 0.9, max_neighbors = NULL,
                            jacobian = "none", jacobian_terms = 30L,
-                           jacobian_probes = 2L, jacobian_max_exact = 1500L) {
+                           jacobian_probes = 2L, jacobian_max_exact = 1500L,
+                           trend = FALSE) {
   check_tf()
   if (!is.null(seed)) {
     old_rng <- set_seed(seed)
@@ -88,7 +89,7 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
     seed = seed,
     n_graphs = if (is.null(neigh)) 0L else neigh$G,
     max_neighbors = if (is.null(neigh)) 0L else neigh$M,
-    rho_max = rho_max
+    rho_max = rho_max, trend = isTRUE(trend)
   )
   if (is.null(optimizer)) optimizer <- default_optimizer(lr_start, lr_end, steps)
   net <- build_network(spec, optimizer$iterations, jac)

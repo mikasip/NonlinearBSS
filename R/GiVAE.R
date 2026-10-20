@@ -8,11 +8,14 @@
 #' @details
 #' For observation \eqn{i} the prior of the latent components is
 #' \deqn{z_{il} | \{\hat z_j\}, u_i \sim N(\mu_{il}, \sigma_l^2(u_i)),\quad
-#' \mu_{il} = \rho_{max}\,\rho_l(u_i) \sum_{g=1}^G \beta_{gl}(u_i)
+#' \mu_{il} = \tau_l(u_i) + \rho_{max}\,\rho_l(u_i) \sum_{g=1}^G \beta_{gl}(u_i)
 #' \frac{1}{|\partial_g i|}\sum_{j \in \partial_g i} \hat z_{jl},}{
-#' z_il ~ N(mu_il, sigma_l^2(u_i)), mu_il = rho_max rho_l(u_i) sum_g
-#' beta_gl(u_i) mean_{j in N_g(i)} zhat_jl,}
-#' where \eqn{\hat z_j} is the encoder mean of neighbour \eqn{j},
+#' z_il ~ N(mu_il, sigma_l^2(u_i)), mu_il = tau_l(u_i) + rho_max rho_l(u_i)
+#' sum_g beta_gl(u_i) mean_{j in N_g(i)} zhat_jl,}
+#' where \eqn{\tau_l(u)} is the trend (included when `trend = TRUE`, the
+#' default; it is a constant offset of the prior mean and does not change the
+#' determinant of the simultaneous system),
+#' \eqn{\hat z_j} is the encoder mean of neighbour \eqn{j},
 #' \eqn{\rho_l(u)} in \eqn{(0, 1)} (scaled by `rho_max`) is the total
 #' coupling strength of component \eqn{l}, \eqn{\beta_{gl}(u)} (softmax over
 #' the graphs) distributes it between the graphs, and \eqn{\sigma_l^2(u)} is
@@ -49,6 +52,9 @@
 #'   specifications, or combined with them.
 #' @param K Number of Laplacian eigenvectors per graph if `aux` is not given.
 #' @param rho_max Upper bound of the total coupling strength, in (0, 1].
+#' @param trend Logical. Add a component-specific trend \eqn{\tau_l(u)} (a
+#'   neural network of the auxiliary variables, as the mean of [iVAE()]) to
+#'   the prior mean? See Details.
 #' @param jacobian Log-determinant term of the simultaneous autoregressive
 #'   prior: `"none"` (default; the objective then omits \eqn{\log|\det(I -
 #'   B)|} and is exact only for acyclic graphs such as a directed time graph),
@@ -76,7 +82,7 @@
 #' @export
 GiVAE <- function(x, graphs, aux = NULL, K = 10L, latent_dim = NULL,
                   coords = NULL, time = NULL, group = NULL, vars = NULL,
-                  rho_max = 0.99, max_neighbors = NULL,
+                  rho_max = 0.99, trend = TRUE, max_neighbors = NULL,
                   jacobian = c("none", "exact", "stochastic"),
                   jacobian_terms = 30L, jacobian_probes = 2L,
                   jacobian_max_exact = 1500L,
@@ -112,6 +118,7 @@ GiVAE <- function(x, graphs, aux = NULL, K = 10L, latent_dim = NULL,
     graphs = graphs, rho_max = rho_max, max_neighbors = max_neighbors,
     jacobian = jacobian, jacobian_terms = as.integer(jacobian_terms),
     jacobian_probes = as.integer(jacobian_probes),
-    jacobian_max_exact = as.integer(jacobian_max_exact)
+    jacobian_max_exact = as.integer(jacobian_max_exact),
+    trend = trend
   )
 }

@@ -1,6 +1,7 @@
 # Construction of the (i)VAE networks.
 #
 # `spec` is a list with elements
+#   trend             GiVAE: add a trend to the prior mean
 #   method            "VAE", "iVAE" or "iVAEar"
 #   p, latent_dim     data and latent dimension
 #   n_aux             number of columns of the raw auxiliary input
@@ -59,7 +60,7 @@ build_network <- function(spec, step, jac = NULL) {
   # Auxiliary function w(u) giving the prior parameters
   if (has_aux) {
     prior_hidden <- lapply(spec$aux_hidden_units, dense, activation = act)
-    prior_mean_layer <- if (!is_graph) dense(L)
+    prior_mean_layer <- if (!is_graph || isTRUE(spec$trend)) dense(L)
     prior_log_var_layer <- dense(L)
     prior_ar_layers <- lapply(seq_len(R), function(r) dense(L, "tanh"))
     if (is_graph) {
@@ -100,7 +101,8 @@ build_network <- function(spec, step, jac = NULL) {
       for (layer in prior_hidden) h <- layer(h)
       if (is_graph) {
         cp <- coupling(f)
-        return(list(mean = NULL, log_var = prior_log_var_layer(h),
+        trend <- if (isTRUE(spec$trend)) prior_mean_layer(h)
+        return(list(mean = trend, log_var = prior_log_var_layer(h),
                     rho = cp$rho, beta = cp$beta, ar = list()))
       }
       list(mean = prior_mean_layer(h), log_var = prior_log_var_layer(h),
@@ -162,6 +164,7 @@ build_network <- function(spec, step, jac = NULL) {
       z_nb <- encode(nb_x, features(nb_aux), nb_mask)$mean   # batch x S x L
       prior_mean <- graph_aggregate(z_nb, nb_valid, pr$rho, pr$beta, G, M, L,
                                     spec$rho_max)
+      if (!is.null(pr$mean)) prior_mean <- keras3::op_add(pr$mean, prior_mean)
       inputs <- c(inputs, list(nb_x), if (spec$use_mask) list(nb_mask),
                   list(nb_aux, nb_valid))
     }
@@ -197,7 +200,8 @@ build_network <- function(spec, step, jac = NULL) {
   z_in <- keras3::layer_input(shape = L)
   decoder <- keras3::keras_model(z_in, decode(z_in))
   prior_model <- if (has_aux && is_graph) {
-    keras3::keras_model(aux_in, list(pr$log_var, pr$rho, pr$beta))
+    keras3::keras_model(aux_in, c(list(pr$log_var, pr$rho, pr$beta),
+                                  if (!is.null(pr$mean)) list(pr$mean)))
   } else if (has_aux) {
     keras3::keras_model(aux_in, c(list(pr$mean, pr$log_var), pr$ar))
   }
@@ -253,7 +257,8 @@ run_prior <- function(net, A) {
     rho <- as.matrix(out[[2]])
     G <- as.integer(round(length(out[[3]]) / length(rho)))
     beta <- array(out[[3]], c(nrow(rho), G, ncol(rho)))
-    return(list(mean = NULL, log_var = out[[1]], rho = rho, beta = beta))
+    trend <- if (length(out) >= 4L) as.matrix(out[[4]])
+    return(list(mean = trend, log_var = out[[1]], rho = rho, beta = beta))
   }
   list(mean = out[[1]], log_var = out[[2]], ar = out[-(1:2)])
 }

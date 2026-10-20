@@ -350,7 +350,8 @@ build_neighbor_index <- function(graphs, n, max_neighbors = NULL) {
 
 # Prior mean of the graph prior, computed from the encoder means Z, for every
 # latent component l (prior$rho: n x L, prior$beta: n x G x L):
-#   rho_max * rho_l(u_i) * sum_g beta_{g,l}(u_i) * mean_{j in N_g(i)} z_jl
+#   tau_l(u_i) + rho_max * rho_l(u_i) * sum_g beta_{g,l}(u_i) * mean_{j in N_g(i)} z_jl
+# (the trend tau, prior$mean, is optional)
 graph_prior_mean <- function(prior, Z, neigh, rho_max) {
   n <- nrow(Z)
   L <- ncol(Z)
@@ -368,5 +369,7 @@ graph_prior_mean <- function(prior, Z, neigh, rho_max) {
     }
     agg <- agg + matrix(beta[, g, ], n, L) * num / pmax(cnt, 1)
   }
-  rho_max * rho * agg
+  out <- rho_max * rho * agg
+  if (!is.null(prior$mean)) out <- out + prior$mean
+  out
 }
