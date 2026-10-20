@@ -15,6 +15,7 @@ simulate_sources_areal(
   sd_range = c(0.1, 5),
   ar_range = c(0.3, 0.9),
   beta_s_range = c(0.3, 0.9),
+  K = 10L,
   seed_type = c("uniform", "clustered"),
   n_clusters = 3L,
   cluster_sd = 0.04,
@@ -51,6 +52,9 @@ variance.}
 parameter. For stationary dependence one value per component is drawn from
 it; for \code{nonstat_dependence = TRUE} it bounds the range over which
 \eqn{\beta_i} varies.}
+
+\item{K}{Positive integer giving the number of basis functions to
+create nonstationarity.}
 
 \item{seed_type}{Type of seed placement when generating areal units.}
 
