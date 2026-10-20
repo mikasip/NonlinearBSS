@@ -6,7 +6,9 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
                            mask_encoder, optimizer, lr_start, lr_end, steps,
                            epochs, batch_size, validation_split, seed, verbose,
                            call, data_name, vdat = NULL, callbacks = NULL,
-                           graphs = NULL, rho_max = 0.9, max_neighbors = NULL) {
+                           graphs = NULL, rho_max = 0.9, max_neighbors = NULL,
+                           jacobian = "none", jacobian_terms = 30L,
+                           jacobian_probes = 2L, jacobian_max_exact = 1500L) {
   check_tf()
   if (!is.null(seed)) {
     old_rng <- set_seed(seed)
@@ -52,6 +54,27 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
     }
   }
 
+  jac <- NULL
+  if (method == "GiVAE" && jacobian != "none") {
+    jac <- graph_blocks(neigh, n)
+    if (jac$m == 0L) {
+      message("The graphs are acyclic: the log-determinant is 0 and the Jacobian ",
+              "term is not needed.")
+      jacobian <- "none"
+      jac <- NULL
+    } else if (jacobian == "exact" && jac$Smax > jacobian_max_exact) {
+      stop("The largest strongly connected component has ", jac$Smax,
+           " nodes, more than `jacobian_max_exact` (", jacobian_max_exact,
+           "). Use `jacobian = \"stochastic\"`.", call. = FALSE)
+    } else {
+      jac$mode <- jacobian
+      jac$terms <- as.integer(jacobian_terms)
+      jac$probes <- as.integer(jacobian_probes)
+      jac$A <- A
+      jac$N <- n
+    }
+  }
+
   spec <- list(
     method = method, p = p, latent_dim = latent_dim,
     n_aux = if (is.null(A)) 0L else ncol(A),
@@ -68,8 +91,9 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
     rho_max = rho_max
   )
   if (is.null(optimizer)) optimizer <- default_optimizer(lr_start, lr_end, steps)
-  net <- build_network(spec, optimizer$iterations)
-  keras3::compile(net$train, optimizer = optimizer, loss = elbo_loss,
+  net <- build_network(spec, optimizer$iterations, jac)
+  keras3::compile(net$train, optimizer = optimizer,
+                  loss = loss_with_jacobian(net$jacobian_term),
                   metrics = elbo_metrics())
 
   inputs <- network_inputs(sc$X, sc$mask, A, lags, use_mask = spec$use_mask,
@@ -105,6 +129,7 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
     shuffle = TRUE, verbose = verbose
   )
 
+  net$jacobian_term <- NULL    # training only; do not keep the arrays alive
   enc <- run_encoder(net, spec, sc$X, A, sc$mask)
   Z <- enc$mean
   prior <- NULL
@@ -155,6 +180,9 @@ fit_vae_family <- function(method, dat, aux, batch_aux, latent_dim, ar_order,
     graphs = graphs,
     neighbors = neigh,
     rho_max = rho_max,
+    jacobian = if (is.null(jac)) list(mode = "none") else
+      list(mode = jac$mode, terms = jac$terms, probes = jac$probes,
+           components = jac$m, largest = jac$Smax),
     prior = prior,
     elbo = mean(log_px + log_pz - log_qz),
     history = history_df(history),

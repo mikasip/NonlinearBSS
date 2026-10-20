@@ -14,8 +14,12 @@ GiVAE(
   time = NULL,
   group = NULL,
   vars = NULL,
-  rho_max = 0.9,
+  rho_max = 0.99,
   max_neighbors = NULL,
+  jacobian = c("none", "exact", "stochastic"),
+  jacobian_terms = 30L,
+  jacobian_probes = 2L,
+  jacobian_max_exact = 1500L,
   hidden_units = c(128, 128, 128),
   aux_hidden_units = c(128, 128, 128),
   activation = "leaky_relu",
@@ -68,6 +72,26 @@ numeric columns not used for \code{coords}, \code{time}, \code{group} or \code{a
 \item{max_neighbors}{Optional cap on the number of neighbours per graph and
 row (a fixed random subset is used for nodes with more neighbours). Saves
 memory for graphs with hubs.}
+
+\item{jacobian}{Log-determinant term of the simultaneous autoregressive
+prior: \code{"none"} (default; the objective then omits \eqn{\log|\det(I -
+B)|} and is exact only for acyclic graphs such as a directed time graph),
+\code{"exact"} (dense log-determinant of the sampled component, for components
+up to \code{jacobian_max_exact} nodes) or \code{"stochastic"} (truncated series with
+Hutchinson probes, for any size). The term is estimated unbiasedly by
+sampling one strongly connected component of the observation graph per
+training step, e.g. one time point for a spatial graph. It needs the
+coupling networks to be evaluated on that component at every step, so it
+is slow for one very large graph. Pure acyclic graphs need no term and
+\code{jacobian} is then ignored. See \code{\link[=givae_logdet]{givae_logdet()}} for evaluating it exactly
+after fitting.}
+
+\item{jacobian_terms, jacobian_probes}{Number of series terms and probe
+vectors for \code{jacobian = "stochastic"}. The series is truncated, which
+under-estimates the penalty when \code{rho_max} is close to 1; the cost and
+memory grow with both.}
+
+\item{jacobian_max_exact}{Largest component size allowed for \code{"exact"}.}
 
 \item{hidden_units}{Numbers of units in the hidden layers of the encoder
 (the decoder uses the reverse order).}
@@ -129,16 +153,20 @@ the dependence between observations is described by graphs.
 }
 \details{
 For observation \eqn{i} the prior of the latent components is
-\deqn{z_i | \{\hat z_j\}, u_i \sim N(\mu_i, \sigma^2(u_i) I),\quad
-\mu_i = \rho_{max}\,\rho(u_i) \sum_{g=1}^G \beta_g(u_i)
-\frac{1}{|\partial_g i|}\sum_{j \in \partial_g i} \hat z_j,}{
-z_i ~ N(mu_i, sigma^2(u_i) I), mu_i = rho_max rho(u_i) sum_g beta_g(u_i)
-mean_{j in N_g(i)} zhat_j,}
-where \eqn{\hat z_j} is the encoder mean of neighbour \eqn{j}, \eqn{\rho(u)}
-in \eqn{(0, 1)} (scaled by \code{rho_max}) is the total coupling strength,
-\eqn{\beta_g(u)} (softmax over the graphs) distributes it between the
-graphs, and \eqn{\sigma^2(u)} is the nonstationary prior variance that
-gives identifiability. The neural networks for \eqn{\rho}, \eqn{\beta} and
+\deqn{z_{il} | \{\hat z_j\}, u_i \sim N(\mu_{il}, \sigma_l^2(u_i)),\quad
+\mu_{il} = \rho_{max}\,\rho_l(u_i) \sum_{g=1}^G \beta_{gl}(u_i)
+\frac{1}{|\partial_g i|}\sum_{j \in \partial_g i} \hat z_{jl},}{
+z_il ~ N(mu_il, sigma_l^2(u_i)), mu_il = rho_max rho_l(u_i) sum_g
+beta_gl(u_i) mean_{j in N_g(i)} zhat_jl,}
+where \eqn{\hat z_j} is the encoder mean of neighbour \eqn{j},
+\eqn{\rho_l(u)} in \eqn{(0, 1)} (scaled by \code{rho_max}) is the total
+coupling strength of component \eqn{l}, \eqn{\beta_{gl}(u)} (softmax over
+the graphs) distributes it between the graphs, and \eqn{\sigma_l^2(u)} is
+the nonstationary prior variance. The coupling and the variance are
+component-specific; this is what makes the components identifiable from
+nonstationary dependence (with a coupling shared by all components the
+prior is invariant to rotations of the latent space when the variances are
+equal). The neural networks for \eqn{\rho}, \eqn{\beta} and
 \eqn{\sigma^2} take the auxiliary variables \eqn{u} as input.
 
 The graphs are given as \code{\link[=nlbss_graph]{nlbss_graph()}} objects. A graph can have fewer
@@ -154,7 +182,10 @@ batch-wise.
 
 The prior uses the neighbours' encoder means in a conditional (pseudo
 likelihood) form; the determinant term of a joint simultaneous
-autoregressive model is not included.
+autoregressive model is not included. For a directed graph that only points
+backwards in time the determinant is 1 and the prior is an exact
+autoregressive model; for undirected (e.g. spatial) graphs the omission
+favours smooth latent fields and strong coupling.
 }
 \seealso{
 \code{\link[=nlbss_graph]{nlbss_graph()}}, \code{\link[=aux_laplacian]{aux_laplacian()}}, \code{\link[=iVAE]{iVAE()}}

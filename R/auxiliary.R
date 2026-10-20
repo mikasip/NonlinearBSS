@@ -843,7 +843,28 @@ count_components <- function(W) {
   k
 }
 
-compute_laplacian_eigenvectors <- function(adj_list, K = 10L) {
+# Smallest eigenpairs of a sparse Laplacian by shift-and-invert (Lanczos).
+# Returns NULL if RSpectra is missing or does not converge, so that the caller
+# can fall back to a dense eigendecomposition. The shift is tiny so that the
+# wanted (smallest) eigenvalues are well separated after inversion even when
+# they are very close to each other, as on long chains.
+sparse_smallest_eigs <- function(L, k) {
+  n <- nrow(L)
+  if (!requireNamespace("RSpectra", quietly = TRUE)) return(NULL)
+  # RSpectra has methods for general sparse matrices (dgCMatrix) but not for
+  # every symmetric class, so convert explicitly
+  Lg <- methods::as(methods::as(L, "generalMatrix"), "CsparseMatrix")
+  res <- tryCatch(
+    RSpectra::eigs_sym(Lg, k = k, sigma = -1e-6,
+                       opts = list(ncv = min(n, max(2L * k + 1L, 40L)),
+                                   maxitr = 5000L)),
+    error = function(e) NULL)
+  if (is.null(res) || length(res$values) < k || anyNA(res$values)) return(NULL)
+  list(values = res$values, vectors = res$vectors)
+}
+
+# `dense_max`: graphs up to this size use base eigen() directly.
+compute_laplacian_eigenvectors <- function(adj_list, K = 10L, dense_max = 1000L) {
   W <- methods::as(graph_sparse_W(adj_list), "generalMatrix")
   W <- methods::as(W, "CsparseMatrix")
   n <- nrow(W)
@@ -851,22 +872,21 @@ compute_laplacian_eigenvectors <- function(adj_list, K = 10L) {
   K <- min(as.integer(K), n - n_comp)
   if (K < 1L) stop("The graph has too few nodes for the requested K.", call. = FALSE)
   L <- Matrix::Diagonal(n, x = Matrix::rowSums(W)) - W
-  if (n <= 500L) {
-    eig <- eigen(as.matrix(L), symmetric = TRUE)
-    ord <- order(eig$values)
-    vals <- eig$values[ord]
-    vecs <- eig$vectors[, ord, drop = FALSE]
-  } else {
-    if (!requireNamespace("RSpectra", quietly = TRUE)) {
-      stop("Package 'RSpectra' is needed for Laplacian eigenvectors of graphs ",
-           "with more than 500 nodes.", call. = FALSE)
+  eig <- if (n > dense_max) sparse_smallest_eigs(L, K + n_comp)
+  if (is.null(eig)) {
+    if (n > 5000L) {
+      stop("The sparse eigensolver is not available or did not converge for a ",
+           "graph with ", n, " nodes. Install 'RSpectra' or supply the ",
+           "auxiliary variables as a matrix.", call. = FALSE)
     }
-    eig <- RSpectra::eigs_sym(Matrix::forceSymmetric(L), k = K + n_comp,
-                              sigma = -1e-3)
-    ord <- order(eig$values)
-    vals <- eig$values[ord]
-    vecs <- eig$vectors[, ord, drop = FALSE]
+    if (n > dense_max) {
+      message("Using a dense eigendecomposition for a graph with ", n, " nodes.")
+    }
+    eig <- eigen(as.matrix(L), symmetric = TRUE)
   }
+  ord <- order(eig$values)
+  vals <- eig$values[ord]
+  vecs <- eig$vectors[, ord, drop = FALSE]
   keep <- n_comp + seq_len(K)
   phi <- vecs[, keep, drop = FALSE]
   for (k in seq_len(ncol(phi))) {

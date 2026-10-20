@@ -157,6 +157,81 @@ nlbss_time_graph <- function(n_time, each = 1L, lags = 1L, directed = TRUE,
   nlbss_graph(adj, each = each, node = node, context = context, name = name)
 }
 
+#' Spatial Graph for Geostatistical Data
+#'
+#' Builds a graph over continuous point locations, either from a Delaunay
+#' triangulation or from distances. Each location is a node.
+#'
+#' @param coords An `n x 2` matrix (or data frame) of locations.
+#' @param method `"triangulation"` (Delaunay triangulation, needs the
+#'   `deldir` package) or `"distance"`.
+#' @param order For `method = "triangulation"`: neighbours of order `1` share
+#'   a triangulation edge, order `2` also include the neighbours of neighbours
+#'   (reachable in at most 2 edges), and so on.
+#' @param dist For `method = "distance"`: two locations are neighbours when
+#'   their Euclidean distance is at most `dist`.
+#' @inheritParams nlbss_graph
+#' @param name Optional label.
+#' @return An undirected object of class `nlbss_graph`. Use [nlbss_dag()] on
+#'   `x$adj_list` for an acyclic version.
+#' @examples
+#' xy <- cbind(runif(50), runif(50))
+#' nlbss_space_graph(xy, "distance", dist = 0.2)
+#' if (requireNamespace("deldir", quietly = TRUE)) {
+#'   nlbss_space_graph(xy, "triangulation", order = 2)
+#' }
+#' @export
+nlbss_space_graph <- function(coords, method = c("triangulation", "distance"),
+                              order = 1L, dist = NULL, each = 1L,
+                              node = NULL, context = NULL, name = "space") {
+  method <- match.arg(method)
+  coords <- as.matrix(coords)
+  if (ncol(coords) != 2L || !is.numeric(coords) || anyNA(coords)) {
+    stop("`coords` must be a numeric n x 2 matrix without missing values.",
+         call. = FALSE)
+  }
+  n <- nrow(coords)
+  if (n < 2L) stop("At least two locations are needed.", call. = FALSE)
+
+  if (method == "distance") {
+    if (is.null(dist) || length(dist) != 1L || !is.finite(dist) || dist <= 0) {
+      stop("`dist` must be a single positive number for method = \"distance\".",
+           call. = FALSE)
+    }
+    D <- as.matrix(stats::dist(coords))
+    A <- D <= dist
+    diag(A) <- FALSE
+  } else {
+    order <- as.integer(order)
+    if (length(order) != 1L || is.na(order) || order < 1L) {
+      stop("`order` must be a positive integer.", call. = FALSE)
+    }
+    if (n < 3L) stop("At least three locations are needed for a triangulation.",
+                     call. = FALSE)
+    if (anyDuplicated(coords)) {
+      stop("`coords` contains duplicated locations.", call. = FALSE)
+    }
+    if (!requireNamespace("deldir", quietly = TRUE)) {
+      stop("The `deldir` package is required for method = \"triangulation\".",
+           call. = FALSE)
+    }
+    del <- deldir::deldir(coords[, 1], coords[, 2], suppressMsge = TRUE)
+    A1 <- matrix(FALSE, n, n)
+    A1[cbind(del$delsgs$ind1, del$delsgs$ind2)] <- TRUE
+    A1 <- A1 | t(A1)
+    A <- A1
+    reach <- A1
+    for (k in seq_len(order - 1L)) {
+      reach <- (reach %*% A1 > 0) | reach
+      if (identical(reach, A)) break
+      A <- reach
+    }
+    diag(A) <- FALSE
+  }
+  adj <- lapply(seq_len(n), function(i) which(A[i, ]))
+  nlbss_graph(adj, each = each, node = node, context = context, name = name)
+}
+
 as_adj_list <- function(g) {
   if (is.list(g) && !is.data.frame(g)) {
     adj <- lapply(g, function(v) as.integer(v))

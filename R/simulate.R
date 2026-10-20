@@ -168,7 +168,7 @@ mix_data <- function(x, n_layers = 1,
   omega <- switch(nonlinearity,
     elu = function(a) ifelse(a < 0, exp(a) - 1, a),
     lrelu = function(a) ifelse(a < 0, 0.2 * a, a),
-    xtanh = function(a) tanh(a) + 0.1 * a,
+    xtanh = function(a) tanh(a) + 0.2 * a,
     smooth_lrelu = function(a) 0.5 * (1.05 * a + 0.95 * sqrt(a^2 + 0.1)),
     exp_arctan = function(a) 0.5 * a * exp(atan(a)),
     leaky_softplus = function(a) 0.1 * a + 0.9 * log1p(exp(a)),
@@ -468,6 +468,10 @@ generate_areal_units <- function(n_area, n_fine = NULL,
 #' @param seed Optional random seed.
 #' @param nonstat_dependence Logical. Let the spatial dependence parameter vary
 #'   between areas, driven by a graph eigenvector?
+#' @param nonstat_dependence_time Logical. Together with
+#'   `nonstat_dependence = TRUE`, draw a separate eigenvector index for each
+#'   temporal segment (`n_segments_time`), so that the spatial dependence
+#'   pattern also changes in time.
 #' @param basis Eigenvectors used for the spatial patterns of the variance and
 #'   the dependence: `"moran"` (positive Moran eigenvector maps) or
 #'   `"laplacian"` (smoothest non-trivial graph Laplacian eigenvectors).
@@ -475,7 +479,9 @@ generate_areal_units <- function(n_area, n_fine = NULL,
 #'   `area`, `group`, `areal`, `mem` (the eigenvectors of the chosen basis),
 #'   `basis`, and `beta_s`, an `n_area x p` matrix with the dependence
 #'   parameter of every area and component (constant over the areas unless
-#'   `nonstat_dependence = TRUE`).
+#'   `nonstat_dependence = TRUE`; averaged over time if
+#'   `nonstat_dependence_time = TRUE`), and `beta_s_time`, an
+#'   `n_area x n_time x p` array with the dependence parameter at each time.
 #' @examples
 #' areal <- generate_areal_units(8, n_fine = 200, seed = 1)
 #' src <- simulate_sources_areal(3, areal = areal, n_time = 20,
@@ -486,6 +492,11 @@ generate_areal_units <- function(n_area, n_fine = NULL,
 #' src2 <- simulate_sources_areal(3, areal = areal, n_time = 20,
 #'                                nonstat_dependence = TRUE, basis = "laplacian")
 #' round(src2$beta_s, 2)
+#'
+#' # dependence pattern also changing between temporal segments
+#' src3 <- simulate_sources_areal(3, areal = areal, n_time = 20,
+#'                                nonstat_dependence = TRUE,
+#'                                nonstat_dependence_time = TRUE)
 #' @export
 simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
                                    n_fine = NULL, n_time = 50,
@@ -498,6 +509,7 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
                                    xy_coef = 1, radius = NULL,
                                    seed = NULL,
                                    nonstat_dependence = FALSE,
+                                   nonstat_dependence_time = FALSE,
                                    basis = c("moran", "laplacian")) {
   seed_type <- match.arg(seed_type)
   basis <- match.arg(basis)
@@ -568,6 +580,7 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
 
   z <- matrix(NA_real_, n_area * n_time, p)
   beta_s_used <- matrix(NA_real_, n_area, p)
+  beta_s_time <- array(NA_real_, c(n_area, n_time, p))
   I_n <- diag(n_area)
 
   for (j in seq_len(p)) {
@@ -578,26 +591,44 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
     # ---- temporal variance and AR profiles share the same segment labels -
     time_labels <- draw_time_labels()
     time_mult <- runif(n_segments_time, sd_range[1], sd_range[2])[time_labels]
-
-    # ---- spatial dependence: constant, or driven by another eigenvector --
-    if (nonstat_dependence) {
-      b <- sort(runif(2L, beta_s_range[1], beta_s_range[2]))
-      others <- setdiff(seq_len(K_basis), idx_var)
-      idx_dep <- if (length(others) > 0L) others[sample.int(length(others), 1L)] else idx_var
-      beta_i <- b[1] + (b[2] - b[1]) * scale01(as.numeric(basis_mat[, idx_dep]))
+    
+    # ---- spatial dependence: constant, or driven by eigenvectors ---------
+    # With `nonstat_dependence_time`, every temporal segment draws its own
+    # eigenvector index, so the dependence pattern changes between segments.
+    b <- beta_s_range
+    others <- setdiff(seq_len(K_basis), idx_var)
+    if (length(others) == 0L) others <- idx_var
+    pick <- function(n) others[sample.int(length(others), n, replace = n > length(others))]
+    if (nonstat_dependence && nonstat_dependence_time) {
+      seg_idx <- pick(n_segments_time)
+      seg_beta <- vapply(seg_idx, function(k) {
+        b[1] + (b[2] - b[1]) * scale01(as.numeric(basis_mat[, k]))
+      }, numeric(n_area))
+      seg_beta <- matrix(seg_beta, n_area, n_segments_time)
+    } else if (nonstat_dependence) {
+      idx_dep <- pick(1L)
+      seg_beta <- matrix(b[1] + (b[2] - b[1]) * scale01(as.numeric(basis_mat[, idx_dep])),
+                         n_area, n_segments_time)
     } else {
-      beta_i <- rep(runif(1L, beta_s_range[1], beta_s_range[2]), n_area)
+      seg_beta <- matrix(runif(1L, b[1], b[2]), n_area, n_segments_time)
     }
-    beta_s_used[, j] <- beta_i
+    beta_s_time[, , j] <- seg_beta[, time_labels, drop = FALSE]
+    beta_s_used[, j] <- rowMeans(beta_s_time[, , j, drop = FALSE])
     # (I - diag(beta) W_row)^{-1}; beta_i * W_row scales row i by beta_i
-    A_inv <- solve(I_n - beta_i * W_row)
+    A_inv_seg <- lapply(seq_len(n_segments_time), function(g) {
+      solve(I_n - seg_beta[, g] * W_row)
+    })
 
     ar_coeff <- runif(n_segments_time, min(ar_range), max(ar_range))[time_labels]
 
     # ---- innovations: heteroscedastic noise, then SAR filtering ----------
     sd_mat  <- outer(sigma_i, sqrt(time_mult))                 # n_area x n_time
     eps_mat <- matrix(rnorm(n_area * n_time, sd = sd_mat), n_area, n_time)
-    u_mat   <- A_inv %*% eps_mat                               # SAR on innovation only
+    u_mat   <- eps_mat                                         # SAR on innovation only
+    for (g in seq_len(n_segments_time)) {
+      cols <- which(time_labels == g)
+      if (length(cols)) u_mat[, cols] <- A_inv_seg[[g]] %*% eps_mat[, cols, drop = FALSE]
+    }
 
     # ---- plain AR(1) recursion over time ---------------------------------
     z_t <- matrix(0, n_area, n_time)
@@ -626,7 +657,8 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
        areal = areal,
        mem = basis_mat,
        basis = basis,
-       beta_s = beta_s_used)
+       beta_s = beta_s_used,
+       beta_s_time = beta_s_time)
 }
 
 #' Absolute Mean Correlation Coefficient
@@ -657,4 +689,129 @@ absolute_mean_correlation <- function(x, y = NULL) {
   K <- if (is.null(y)) as.matrix(x) else cor(as.matrix(x), as.matrix(y))
   if (nrow(K) > ncol(K)) K <- t(K)
   -RcppHungarian::HungarianSolver(-abs(K))$cost / min(dim(K))
+}
+
+#' Simulate Areal Sources from a Directed Acyclic Spatial Prior
+#'
+#' Simulates latent components over areal units and time from a spatial
+#' autoregression on a directed acyclic version of the areal graph: visiting
+#' the areas in a fixed order, each area depends on the average of its
+#' already visited neighbours,
+#' \deqn{z_{i} = \beta_i \cdot \mathrm{mean}_{j \in pa(i)} z_{j} + \sigma_i \epsilon_i,}{
+#' z_i = beta_i * mean_{j in pa(i)} z_j + sigma_i * eps_i,}
+#' with independent standard normal \eqn{\epsilon_i} for every area and time
+#' point. Because the graph is acyclic, this is an exact joint model whose
+#' conditional distributions are the Gaussian conditionals fitted by [GiVAE()]
+#' with the graph returned in `graph`, so the model matches the data
+#' generating process exactly. Time points are independent replicates (there is
+#' no temporal dependence).
+#'
+#' The coupling \eqn{\beta_i} of each component varies over the areas: it is
+#' one eigenvector of the areal graph (see `basis`) scaled to `beta_s_range`.
+#' The variance \eqn{\sigma_i^2} is constant unless `sd_range` has two
+#' different values; then it follows another eigenvector.
+#'
+#' @param p Number of components.
+#' @param areal Output of [generate_areal_units()].
+#' @param n_time Number of time points (independent replicates).
+#' @param ordering Optional numeric vector with one value per area giving the
+#'   order in which the areas are visited (smaller first). Defaults to the
+#'   x-coordinate of the area centres.
+#' @param sd_range Range of the innovation standard deviations.
+#' @param beta_s_range Range (inside (-1, 1)) of the coupling.
+#' @param basis Eigenvectors used for the spatial patterns: `"laplacian"` or
+#'   `"moran"`. With `"laplacian"` the coupling of component `j` is the scaled
+#'   `j`-th column of [aux_laplacian()] of the same graph.
+#' @param seed Optional random seed.
+#' @return A list like [simulate_sources_areal()] with `sources`, `time`,
+#'   `area`, `group`, `coords`, `W`, `areal`, `mem`, `basis` and `beta_s`
+#'   (an `n_area x p` matrix of the couplings), plus `graph` (the directed
+#'   acyclic [nlbss_graph()] of the parents) and `ordering`.
+#' @examples
+#' areal <- generate_areal_units(20, n_fine = 400, seed = 1)
+#' src <- simulate_sources_dag(3, areal, n_time = 50, seed = 1)
+#' src$graph
+#' @seealso [nlbss_dag()], [simulate_sources_areal()], [GiVAE()]
+#' @export
+simulate_sources_dag <- function(p, areal, n_time = 100, ordering = NULL,
+                                 sd_range = c(1, 1), beta_s_range = c(0.1, 0.95),
+                                 basis = c("laplacian", "moran"), seed = NULL) {
+  basis <- match.arg(basis)
+  if (!is.null(seed)) set.seed(seed)
+  W <- as.matrix(areal$W)
+  n_area <- nrow(W)
+  if (length(beta_s_range) != 2L || any(!is.finite(beta_s_range)) ||
+      any(abs(beta_s_range) >= 1)) {
+    stop("`beta_s_range` must be a numeric vector of length 2 inside (-1, 1).",
+         call. = FALSE)
+  }
+  if (length(sd_range) != 2L || any(!is.finite(sd_range)) || any(sd_range <= 0)) {
+    stop("`sd_range` must be a numeric vector of length 2 with positive values.",
+         call. = FALSE)
+  }
+  beta_s_range <- sort(beta_s_range)
+  sd_range <- sort(sd_range)
+  if (is.null(ordering)) {
+    if (is.null(areal$area_coords)) {
+      stop("Give `ordering`: `areal` has no area coordinates.", call. = FALSE)
+    }
+    ordering <- areal$area_coords[, 1]
+  }
+
+  graph <- nlbss_dag(W, order = ordering, name = "space (DAG)")
+  parents <- graph$adj_list
+  visit <- sort.list(rank(ordering, ties.method = "first"))   # areas in visiting order
+
+  K <- min(10L, max(1L, n_area - 1L))
+  basis_mat <- if (basis == "moran") {
+    compute_MEM_vectors(W, K = K, positive_only = TRUE)$mem
+  } else {
+    compute_laplacian_eigenvectors(as_adj_list(W), K = K)$phi
+  }
+  K_basis <- ncol(basis_mat)
+  scale01 <- function(v) {
+    v <- v - min(v)
+    if (max(v) > 0) v / max(v) else v
+  }
+
+  z <- matrix(NA_real_, n_area * n_time, p)
+  beta_used <- matrix(NA_real_, n_area, p)
+  for (j in seq_len(p)) {
+    idx <- ((j - 1L) %% K_basis) + 1L
+    beta_i <- beta_s_range[1] + diff(beta_s_range) * scale01(basis_mat[, idx])
+    sigma_i <- if (diff(sd_range) == 0) {
+      rep(sd_range[1], n_area)
+    } else {
+      idx_var <- (idx %% K_basis) + 1L
+      sd_range[1] + diff(sd_range) * scale01(basis_mat[, idx_var])
+    }
+    beta_used[, j] <- beta_i
+
+    Z <- matrix(0, n_area, n_time)
+    for (i in visit) {
+      pa <- parents[[i]]
+      m <- if (length(pa)) colMeans(Z[pa, , drop = FALSE]) else 0
+      Z[i, ] <- beta_i[i] * m + rnorm(n_time, sd = sigma_i[i])
+    }
+    z[, j] <- as.numeric(Z)          # area varies fastest within time
+  }
+
+  area_order <- rep(seq_len(n_area), n_time)
+  time_order <- rep(seq_len(n_time), each = n_area)
+  colnames(z) <- paste0("Z", seq_len(p))
+  colnames(beta_used) <- colnames(z)
+  coords <- if (is.null(areal$area_coords)) matrix(NA_real_, n_area, 2) else areal$area_coords
+  list(sources = z,
+       labels = time_order,
+       W = W,
+       coords = coords[area_order, , drop = FALSE],
+       time = time_order,
+       area = area_order,
+       group = area_order,
+       areal = areal,
+       mem = basis_mat,
+       basis = basis,
+       beta_s = beta_used,
+       graph = graph,
+       ordering = ordering)
 }

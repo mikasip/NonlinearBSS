@@ -31,7 +31,7 @@ method_title <- function(method) {
 #' x <- ts(mix_data(matrix(rnorm(3000), ncol = 3), n_layers = 2))
 #' fit <- VAE(x, epochs = 2, verbose = 0)
 #' class(components(fit))
-#' @exportS3Method ICS::components
+#' @exportS3Method generics::components
 components.nlbss <- function(object, format = c("input", "matrix"),
                              unscaled = FALSE, ...) {
   M <- if (unscaled) object$S_unscaled else object$S
@@ -69,6 +69,12 @@ print.nlbss <- function(x, ...) {
   if (x$method == "GiVAE") {
     for (g in x$graphs) cat("  ", format_graph(g), "\n", sep = "")
     cat("  Neighbour slots per graph: ", x$neighbors$M, ", rho_max: ", x$rho_max, "\n", sep = "")
+    if (!is.null(x$jacobian) && x$jacobian$mode != "none") {
+      cat("  Jacobian term: ", x$jacobian$mode, " (", x$jacobian$components,
+          " components, largest ", x$jacobian$largest, ")\n", sep = "")
+    } else {
+      cat("  Jacobian term: none\n")
+    }
   }
   if (x$method %in% c("iVAE", "iVAEar", "GiVAE")) {
     for (s in x$aux$specs) cat(format(s), "\n", sep = "")

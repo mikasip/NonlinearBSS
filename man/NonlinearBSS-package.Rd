@@ -88,6 +88,7 @@ Useful links:
 
 Authors:
 \itemize{
+  \item Mika Sipilä \email{mika.e.sipila@jyu.fi} (\href{https://orcid.org/0000-0002-5912-840X}{ORCID})
   \item Klaus Nordhausen (\href{https://orcid.org/0000-0002-3758-8501}{ORCID})
   \item Sara Taskinen (\href{https://orcid.org/0000-0001-9470-7258}{ORCID})
 }

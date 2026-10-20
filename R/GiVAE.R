@@ -49,6 +49,23 @@
 #'   specifications, or combined with them.
 #' @param K Number of Laplacian eigenvectors per graph if `aux` is not given.
 #' @param rho_max Upper bound of the total coupling strength, in (0, 1].
+#' @param jacobian Log-determinant term of the simultaneous autoregressive
+#'   prior: `"none"` (default; the objective then omits \eqn{\log|\det(I -
+#'   B)|} and is exact only for acyclic graphs such as a directed time graph),
+#'   `"exact"` (dense log-determinant of the sampled component, for components
+#'   up to `jacobian_max_exact` nodes) or `"stochastic"` (truncated series with
+#'   Hutchinson probes, for any size). The term is estimated unbiasedly by
+#'   sampling one strongly connected component of the observation graph per
+#'   training step, e.g. one time point for a spatial graph. It needs the
+#'   coupling networks to be evaluated on that component at every step, so it
+#'   is slow for one very large graph. Pure acyclic graphs need no term and
+#'   `jacobian` is then ignored. See [givae_logdet()] for evaluating it exactly
+#'   after fitting.
+#' @param jacobian_terms,jacobian_probes Number of series terms and probe
+#'   vectors for `jacobian = "stochastic"`. The series is truncated, which
+#'   under-estimates the penalty when `rho_max` is close to 1; the cost and
+#'   memory grow with both.
+#' @param jacobian_max_exact Largest component size allowed for `"exact"`.
 #' @param max_neighbors Optional cap on the number of neighbours per graph and
 #'   row (a fixed random subset is used for nodes with more neighbours). Saves
 #'   memory for graphs with hubs.
@@ -60,6 +77,9 @@
 GiVAE <- function(x, graphs, aux = NULL, K = 10L, latent_dim = NULL,
                   coords = NULL, time = NULL, group = NULL, vars = NULL,
                   rho_max = 0.99, max_neighbors = NULL,
+                  jacobian = c("none", "exact", "stochastic"),
+                  jacobian_terms = 30L, jacobian_probes = 2L,
+                  jacobian_max_exact = 1500L,
                   hidden_units = c(128, 128, 128),
                   aux_hidden_units = c(128, 128, 128),
                   activation = "leaky_relu",
@@ -71,6 +91,7 @@ GiVAE <- function(x, graphs, aux = NULL, K = 10L, latent_dim = NULL,
                   validation_split = 0, callbacks = NULL, seed = NULL,
                   verbose = 1) {
   check_common_args(epochs, batch_size, validation_split)
+  jacobian <- match.arg(jacobian)
   if (!is.numeric(rho_max) || length(rho_max) != 1 || rho_max <= 0 || rho_max > 1) {
     stop("`rho_max` must be in (0, 1].", call. = FALSE)
   }
@@ -88,6 +109,9 @@ GiVAE <- function(x, graphs, aux = NULL, K = 10L, latent_dim = NULL,
     validation_split = validation_split, seed = seed, verbose = verbose,
     call = match.call(), data_name = deparse1(substitute(x)),
     vdat = NULL, callbacks = callbacks,
-    graphs = graphs, rho_max = rho_max, max_neighbors = max_neighbors
+    graphs = graphs, rho_max = rho_max, max_neighbors = max_neighbors,
+    jacobian = jacobian, jacobian_terms = as.integer(jacobian_terms),
+    jacobian_probes = as.integer(jacobian_probes),
+    jacobian_max_exact = as.integer(jacobian_max_exact)
   )
 }

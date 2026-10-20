@@ -150,3 +150,53 @@ test_that("nlbss_dag keeps only earlier neighbours", {
   # default order: neighbours with a smaller index
   expect_equal(nlbss_dag(W)$adj_list, list(integer(0), 1L, 2L, 3L))
 })
+
+test_that("graph_blocks finds one block per time point for space + directed time", {
+  skip_if_not_installed("igraph")
+  n_s <- 4; n_t <- 3; n <- n_s * n_t
+  g_s <- nlbss_graph(path_adj(n_s))
+  g_t <- nlbss_time_graph(n_t, each = n_s)
+  ni <- NonlinearBSS:::build_neighbor_index(list(g_s, g_t), n)
+  bl <- NonlinearBSS:::graph_blocks(ni, n)
+  expect_equal(bl$m, n_t)
+  expect_equal(bl$sizes, rep(n_s, n_t), ignore_attr = TRUE)
+  expect_equal(sort(unlist(apply(bl$rows, 1, function(r) r + 1L))), seq_len(n))
+  expect_equal(unname(rowSums(bl$e_w > 0)), rep(6L, n_t))   # 6 directed spatial edges per slice
+  # only the directed time graph: acyclic, nothing to do
+  ni_t <- NonlinearBSS:::build_neighbor_index(list(g_t), n)
+  expect_equal(NonlinearBSS:::graph_blocks(ni_t, n)$m, 0L)
+})
+
+test_that("givae_logdet equals the dense determinant of the full system", {
+  skip_if_not_installed("igraph")
+  set.seed(1)
+  n_s <- 5; n_t <- 3; n <- n_s * n_t; L <- 2
+  g_s <- nlbss_graph(path_adj(n_s))
+  g_t <- nlbss_time_graph(n_t, each = n_s)
+  ni <- NonlinearBSS:::build_neighbor_index(list(g_s, g_t), n)
+  prior <- list(rho = matrix(runif(n * L, 0.2, 0.9), n, L),
+                beta = array(0, c(n, 2, L)))
+  b1 <- matrix(runif(n * L), n, L)
+  prior$beta[, 1, ] <- b1
+  prior$beta[, 2, ] <- 1 - b1
+  fake <- structure(list(neighbors = ni, n = n, latent_dim = L, prior = prior,
+                         rho_max = 0.9, elbo = -1), class = c("GiVAE", "nlbss"))
+  res <- givae_logdet(fake)
+
+  # dense B of the full observation graph
+  total <- 0
+  for (l in seq_len(L)) {
+    B <- matrix(0, n, n)
+    for (g in 1:2) {
+      cols <- (g - 1L) * ni$M + seq_len(ni$M)
+      for (i in seq_len(n)) {
+        nb <- ni$index[i, cols]; nb <- nb[!is.na(nb)]
+        if (length(nb)) B[i, nb] <- B[i, nb] + 0.9 * prior$rho[i, l] * prior$beta[i, g, l] / length(nb)
+      }
+    }
+    total <- total + as.numeric(determinant(diag(n) - B, logarithm = TRUE)$modulus)
+  }
+  expect_equal(res$total, total, tolerance = 1e-8)
+  expect_equal(res$elbo_full, -1 + total / n)
+  expect_true(res$total < 0)
+})

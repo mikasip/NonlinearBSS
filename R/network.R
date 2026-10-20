@@ -18,7 +18,7 @@
 # prediction: encoder (mean and log variance), prior (mean, log variance and
 # AR coefficients) and decoder.
 
-build_network <- function(spec, step) {
+build_network <- function(spec, step, jac = NULL) {
   L <- as.integer(spec$latent_dim)
   p <- as.integer(spec$p)
   R <- as.integer(spec$ar_order)
@@ -82,20 +82,26 @@ build_network <- function(spec, step) {
           name = "beta_one")
       }
     }
-    prior <- function(f) {
+    # coupling heads of the graph prior: rho (batch x L), beta (batch x G x L)
+    coupling <- function(f) {
+      hc <- f
+      for (layer in coupling_hidden) hc <- layer(hc)
+      rho <- prior_rho_layer(hc)
+      beta <- if (G > 1L) {
+        prior_beta_softmax(prior_beta_reshape(prior_beta_layer(hc)))
+      } else {
+        prior_beta_one(rho)
+      }
+      list(rho = rho, beta = beta)
+    }
+    prior <- function(f, coupling_only = FALSE) {
+      if (is_graph && coupling_only) return(coupling(f))
       h <- f
       for (layer in prior_hidden) h <- layer(h)
       if (is_graph) {
-        hc <- f
-        for (layer in coupling_hidden) hc <- layer(hc)
-        rho <- prior_rho_layer(hc)
-        beta <- if (G > 1L) {
-          prior_beta_softmax(prior_beta_reshape(prior_beta_layer(hc)))   # batch x G x L
-        } else {
-          prior_beta_one(rho)                                            # batch x 1 x L
-        }
+        cp <- coupling(f)
         return(list(mean = NULL, log_var = prior_log_var_layer(h),
-                    rho = rho, beta = beta, ar = list()))
+                    rho = cp$rho, beta = cp$beta, ar = list()))
       }
       list(mean = prior_mean_layer(h), log_var = prior_log_var_layer(h),
            ar = lapply(prior_ar_layers, function(layer) layer(h)))
@@ -171,6 +177,17 @@ build_network <- function(spec, step) {
   )
   out <- elbo(list(x_in, x_hat, loss_mask, z, enc$mean, enc$log_var,
                    prior_mean, prior_log_var))
+  jac_term <- NULL
+  if (is_graph && !is.null(jac)) {
+    # log-determinant (Jacobian) term of the SAR prior, added to the loss and
+    # estimated by sampling a strongly connected component of the observation
+    # graph at every step
+    coef_fn <- function(a) {
+      cp <- prior(features(a), coupling_only = TRUE)
+      list(rho = cp$rho, beta = cp$beta)
+    }
+    jac_term <- jacobian_term_fn(jac, coef_fn, L, spec$rho_max)
+  }
   train <- keras3::keras_model(inputs, out)
 
   # Prediction models
@@ -185,7 +202,7 @@ build_network <- function(spec, step) {
     keras3::keras_model(aux_in, c(list(pr$mean, pr$log_var), pr$ar))
   }
   list(train = train, encoder = encoder, decoder = decoder, prior = prior_model,
-       method = spec$method)
+       method = spec$method, jacobian_term = jac_term)
 }
 
 # Graph prior mean from the encoder means of the neighbours:
