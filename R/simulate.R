@@ -460,6 +460,8 @@ generate_areal_units <- function(n_area, n_fine = NULL,
 #'   parameter. For stationary dependence one value per component is drawn from
 #'   it; for `nonstat_dependence = TRUE` it bounds the range over which
 #'   \eqn{\beta_i} varies.
+#' @param beta_base_mult_range Range of the multiplicative factor for the base
+#'   value of the spatial dependence parameter when `nonstat_dependence = TRUE`.
 #' @param K Positive integer giving the number of basis functions to 
 #' create nonstationarity.
 #' @param seed_type Type of seed placement when generating areal units.
@@ -506,6 +508,7 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
                                    sd_range = c(0.1, 5),
                                    ar_range = c(0.3, 0.9),
                                    beta_s_range = c(0.3, 0.9),
+                                   beta_base_mult_range = c(0.75, 1),
                                    K = 10L,
                                    seed_type = c("uniform", "clustered"),
                                    n_clusters = 3L, cluster_sd = 0.04,
@@ -587,6 +590,7 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
   I_n <- diag(n_area)
 
   for (j in seq_len(p)) {
+    base_beta_coef <- runif(1L, beta_base_mult_range[1], beta_base_mult_range[2])
     # ---- spatial variance pattern from one leading eigenvector -----------
     idx_var <- sample.int(K_basis, 1L)
     sigma_i <- scale01(as.numeric(basis_mat[, idx_var])) * diff(sd_range) + sd_range[1]
@@ -608,6 +612,8 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
         b[1] + (b[2] - b[1]) * scale01(as.numeric(basis_mat[, k]))
       }, numeric(n_area))
       seg_beta <- matrix(seg_beta, n_area, n_segments_time)
+      # Scale betas from both ends according to base_beta_coef
+      seg_beta <- seg_beta * base_beta_coef + (1 - base_beta_coef) / 2
     } else if (nonstat_dependence) {
       idx_dep <- pick(1L)
       seg_beta <- matrix(b[1] + (b[2] - b[1]) * scale01(as.numeric(basis_mat[, idx_dep])),
