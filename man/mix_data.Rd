@@ -11,7 +11,8 @@ mix_data(
     "leaky_softplus", "logsumexp"),
   output_dim = ncol(x),
   final_activation = c("none", "exp", "softplus"),
-  normalize = TRUE
+  normalize = TRUE,
+  normalize_sd = 1
 )
 }
 \arguments{
@@ -27,6 +28,9 @@ mix_data(
 \code{"exp"} or \code{"softplus"}.}
 
 \item{normalize}{Logical. Scale the data after each layer?}
+
+\item{normalize_sd}{The mean standard deviation of the data after each
+layer if \code{normalize = TRUE}. The default is 1.}
 }
 \value{
 A numeric matrix with \code{output_dim} columns.

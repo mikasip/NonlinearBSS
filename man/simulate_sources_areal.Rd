@@ -14,7 +14,9 @@ simulate_sources_areal(
   n_segments_time = 5,
   sd_range = c(0.1, 5),
   ar_range = c(0.3, 0.9),
+  base_ar_mult_range = c(0.7, 1),
   beta_s_range = c(0.3, 0.9),
+  beta_base_mult_range = c(0.75, 1),
   K = 10L,
   seed_type = c("uniform", "clustered"),
   n_clusters = 3L,
@@ -48,10 +50,16 @@ variance.}
 
 \item{ar_range}{Range for the AR(1) coefficients.}
 
+\item{base_ar_mult_range}{Range of the multiplicative factor for the base
+value of the AR(1) coefficient when \code{nonstat_dependence_time = TRUE}.}
+
 \item{beta_s_range}{Range (inside (-1, 1)) of the spatial dependence
 parameter. For stationary dependence one value per component is drawn from
 it; for \code{nonstat_dependence = TRUE} it bounds the range over which
 \eqn{\beta_i} varies.}
+
+\item{beta_base_mult_range}{Range of the multiplicative factor for the base
+value of the spatial dependence parameter when \code{nonstat_dependence = TRUE}.}
 
 \item{K}{Positive integer giving the number of basis functions to
 create nonstationarity.}
