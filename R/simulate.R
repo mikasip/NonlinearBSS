@@ -157,7 +157,8 @@ mix_data <- function(x, n_layers = 1,
                                       "logsumexp"),
                      output_dim = ncol(x),
                      final_activation = c("none", "exp", "softplus"),
-                     normalize = TRUE) {
+                     normalize = TRUE,
+                     normalize_sd = 1) {
   nonlinearity <- match.arg(nonlinearity)
   final_activation <- match.arg(final_activation)
   x <- as.matrix(x)
@@ -177,7 +178,7 @@ mix_data <- function(x, n_layers = 1,
   for (l in seq_len(n_layers)) {
     B <- svd(matrix(runif(output_dim * ncol(x), -1, 1), output_dim))$u
     x <- x %*% t(B)
-    if (normalize) x <- x / mean(apply(x, 2, sd))
+    if (normalize) x <- normalize_sd * x / mean(apply(x, 2, sd))
     if (l < n_layers) x <- omega(x)
   }
   x <- switch(final_activation,
