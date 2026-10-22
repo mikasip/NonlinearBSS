@@ -140,6 +140,8 @@ simulate_sources <- function(p, coords = NULL, time = NULL,
 #' @param final_activation Activation applied to the output: `"none"`,
 #'   `"exp"` or `"softplus"`.
 #' @param normalize Logical. Scale the data after each layer?
+#' @param normalize_sd The mean standard deviation of the data after each
+#' layer if `normalize = TRUE`. The default is 1.
 #' @return A numeric matrix with `output_dim` columns.
 #' @seealso [simulate_sources()]
 #' @examples
@@ -457,6 +459,8 @@ generate_areal_units <- function(n_area, n_fine = NULL,
 #'   to scale the eigenvector-based spatial variance and the time-block
 #'   variance.
 #' @param ar_range Range for the AR(1) coefficients.
+#' @param base_ar_mult_range Range of the multiplicative factor for the base
+#'   value of the AR(1) coefficient when `nonstat_dependence_time = TRUE`.
 #' @param beta_s_range Range (inside (-1, 1)) of the spatial dependence
 #'   parameter. For stationary dependence one value per component is drawn from
 #'   it; for `nonstat_dependence = TRUE` it bounds the range over which
@@ -508,6 +512,7 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
                                    n_segments_time = 5,
                                    sd_range = c(0.1, 5),
                                    ar_range = c(0.3, 0.9),
+                                   base_ar_mult_range = c(0.7, 1),
                                    beta_s_range = c(0.3, 0.9),
                                    beta_base_mult_range = c(0.75, 1),
                                    K = 10L,
@@ -592,6 +597,7 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
 
   for (j in seq_len(p)) {
     base_beta_coef <- runif(1L, beta_base_mult_range[1], beta_base_mult_range[2])
+    base_ar_mult <- runif(1L, base_ar_mult_range[1], base_ar_mult_range[2])
     # ---- spatial variance pattern from one leading eigenvector -----------
     idx_var <- sample.int(K_basis, 1L)
     sigma_i <- scale01(as.numeric(basis_mat[, idx_var])) * diff(sd_range) + sd_range[1]
@@ -630,6 +636,7 @@ simulate_sources_areal <- function(p, areal = NULL, W = NULL, n_area = NULL,
     })
 
     ar_coeff <- runif(n_segments_time, min(ar_range), max(ar_range))[time_labels]
+    ar_coeff <- ar_coeff * base_ar_mult
 
     # ---- innovations: heteroscedastic noise, then SAR filtering ----------
     sd_mat  <- outer(sigma_i, sqrt(time_mult))                 # n_area x n_time
