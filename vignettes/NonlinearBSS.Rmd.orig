@@ -227,7 +227,6 @@ instead of the absolute time point in order to allow the model to generalize bet
 ```{r}
 fit <- iVAEar(train_subset, aux = aux_rbf(spatial_basis = c(2, 9),
                                    temporal_basis = c(9, 17), seasonal_period = 365),
-              aux_hidden_units = c(16),
               coords = c("Longitude", "Latitude"), time = "time", vars = vars,
               epochs = 30, verbose = 0, seed = 1)
 summary(fit)
@@ -373,8 +372,8 @@ all.equal(predict(fit2, type = "trend"), predict(fit, type = "trend"))
   autoencoders and nonlinear ICA: A unifying framework. *AISTATS 2020*,
   2207–2217.
 * Sipilä, M., Nordhausen, K. and Taskinen, S. (2024). Nonlinear blind source
-  separation exploiting spatial nonstationarity. *Information Sciences*, 665,
-  120365. <https://doi.org/10.1016/j.ins.2024.120365>
+  separation exploiting spatial nonstationarity. *Information Sciences*, 665, 120365. 
+  <https://doi.org/10.1016/j.ins.2024.120365>
 * Sipilä, M., Cappello, C., De Iaco, S., Nordhausen, K. and Taskinen, S.
   (2025). Modelling multivariate spatio-temporal data with identifiable
   variational autoencoders. *Neural Networks*, 181, 106774.

@@ -226,8 +226,7 @@ instead of the absolute time point in order to allow the model to generalize bet
 
 ```{r}
 fit <- iVAEar(train_subset, aux = aux_rbf(spatial_basis = c(2, 9),
-                                    temporal_basis = c(9, 17), seasonal_period = 365),
-              aux_hidden_units = c(16),
+                                   temporal_basis = c(9, 17), seasonal_period = 365),
               coords = c("Longitude", "Latitude"), time = "time", vars = vars,
               epochs = 30, verbose = 0, seed = 1)
 summary(fit)
