@@ -1,0 +1,10 @@
+test_that("plot_areal draws polygons and checks the input", {
+  skip_if_not_installed("sf")
+  skip_if_not_installed("deldir")
+  areal <- generate_areal_units(10, n_fine = 200, seed = 1)
+  n <- nrow(areal$W)
+  p <- plot_areal(areal, cbind(a = rnorm(n), b = rnorm(n)))
+  expect_s3_class(p, "ggplot")
+  expect_no_error(ggplot2::ggplot_build(p))
+  expect_error(plot_areal(areal, rnorm(n + 1)), "one row per areal unit")
+})

@@ -2,6 +2,7 @@
 #
 # `spec` is a list with elements
 #   trend             GiVAE: add a trend to the prior mean
+#   detach_neighbors  GiVAE: no gradient to the encoder through the neighbours
 #   method            "VAE", "iVAE" or "iVAEar"
 #   p, latent_dim     data and latent dimension
 #   n_aux             number of columns of the raw auxiliary input
@@ -67,10 +68,7 @@ build_network <- function(spec, step, jac = NULL) {
       # Coupling networks with their own hidden layers (separate from the
       # variance network). The coupling is COMPONENT-WISE: rho_l(u) in (0, 1)
       # is the total coupling of latent component l and beta_{g,l}(u) its split
-      # between the graphs (softmax over graphs, per component). A coupling
-      # shared by all components would make the prior invariant to rotations
-      # of the latent space when the variances do not differ, so the
-      # components could not be identified. With one graph the split is 1.
+      # between the graphs (softmax over graphs, per component).
       coupling_hidden <- lapply(spec$aux_hidden_units, dense, activation = act)
       prior_rho_layer <- dense(L, "sigmoid")
       if (G > 1L) {
@@ -95,10 +93,11 @@ build_network <- function(spec, step, jac = NULL) {
       }
       list(rho = rho, beta = beta)
     }
-    prior <- function(f, coupling_only = FALSE) {
+    prior <- function(f, coupling_only = FALSE, trend_only = FALSE) {
       if (is_graph && coupling_only) return(coupling(f))
       h <- f
       for (layer in prior_hidden) h <- layer(h)
+      if (is_graph && trend_only) return(prior_mean_layer(h))
       if (is_graph) {
         cp <- coupling(f)
         trend <- if (isTRUE(spec$trend)) prior_mean_layer(h)
@@ -162,6 +161,14 @@ build_network <- function(spec, step, jac = NULL) {
       nb_aux <- keras3::layer_input(shape = c(S, as.integer(spec$n_aux)), name = "nb_aux")
       nb_valid <- keras3::layer_input(shape = S, name = "nb_valid")
       z_nb <- encode(nb_x, features(nb_aux), nb_mask)$mean   # batch x S x L
+      if (isTRUE(spec$detach_neighbors)) {
+        z_nb <- keras3::layer_lambda(f = keras3::op_stop_gradient,
+                                     name = "detach_neighbors")(z_nb)
+      }
+      if (isTRUE(spec$trend)) {
+        # neighbours enter centred at their own trend, as the lags of iVAEar
+        z_nb <- keras3::op_subtract(z_nb, prior(features(nb_aux), trend_only = TRUE))
+      }
       prior_mean <- graph_aggregate(z_nb, nb_valid, pr$rho, pr$beta, G, M, L,
                                     spec$rho_max)
       if (!is.null(pr$mean)) prior_mean <- keras3::op_add(pr$mean, prior_mean)

@@ -39,14 +39,16 @@ library(NonlinearBSS)
 areal <- generate_areal_units(n_area = 400, n_fine = 600,
                               seed_type = "uniform", seed = 1)
 n_area <- nrow(areal$W)
-n_time <- 200
+n_time <- 100
 
 src <- simulate_sources_areal(p = 5, areal = areal, n_time = n_time,
-                              n_segments_time = 10, sd_range = c(1, 1),
+                              n_segments_time = 1, sd_range = c(0.5, 0.5),
                               nonstat_dependence = TRUE, basis = "laplacian",
+                              K = 20,
                               nonstat_dependence_time = TRUE,
-                              ar_range = c(0, 0), beta_s_range = c(0.01, 0.95), seed = 3)
-x <- mix_data(src$sources, n_layers = 3, nonlinearity = "elu", normalize = FALSE)
+                              beta_base_mult_range = c(0.8, 1),
+                              ar_range = c(0, 0), beta_s_range = c(0.01, 0.99), seed = 3)
+x <- mix_data(src$sources, n_layers = 3, nonlinearity = "xtanh", normalize = FALSE)
 ```
 
 The rows are ordered with the areal unit varying fastest within each time
@@ -83,7 +85,8 @@ with the other methods, e.g. in `iVAE()`.
 
 ```{r aux}
 aux <- aux_laplacian(list(g_space, g_time), K = c(20L, 10L))
-A <- aux_matrix(aux, matrix(0, nrow(x), 0))
+aux_m <- aux_moran(areal$W)
+A <- aux_matrix(aux_m, matrix(0, nrow(x), 0))
 dim(A)
 ```
 
@@ -166,11 +169,11 @@ fit_ivae <- iVAEar(x, aux = aux, time = rep(1:n_time, each = n_area),
                    group = rep(1:n_area, times = n_time), latent_dim = 5, 
                    epochs = 60, batch_size = 64,
                    verbose = 1, seed = 1, lr_end = 0.001)
-fit_givae <- GiVAE(x, graphs = list(g_space, g_time), K = c(20L, 20L),
-                   latent_dim = 5, epochs = 60, batch_size = 64, jacobian = "exact",
-                   verbose = 1, seed = 1, error_dist_sigma = 0.01, lr_end = 0.001)
+fit_givae <- GiVAE(x, graphs = list(g_space), aux = aux,
+                   latent_dim = 5, epochs = 50, batch_size = 64, 
+                   trend = FALSE, detach_neighbors = FALSE, jacobian = "exact",
+                   verbose = 1, seed = 3, error_dist_sigma = 0.05, lr_end = 0.001)
 absolute_mean_correlation(fastICA::fastICA(x, 5)$S, src$sources)
-
 ```
 
 The recovery of the sources is measured with the mean absolute correlation

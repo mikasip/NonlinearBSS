@@ -19,14 +19,17 @@ from $x$. Without further assumptions this is impossible, but nonstationarity
 of the components over time or space, or temporal dependence, makes them
 identifiable.
 
-The package contains four methods:
+This vignette illustrates three methods:
 
-* `TCL()`: time contrastive learning for time series,
 * `VAE()`: a variational autoencoder for i.i.d. data (a baseline; not
   identifiable),
 * `iVAE()`: the identifiable variational autoencoder for any data with
   auxiliary variables,
 * `iVAEar()`: iVAE with nonstationary autoregressive latent components.
+
+The graph-based `GiVAE()` for areal data and networks is described in its own
+vignettes. All plots of the package are made with **ggplot2** and return
+`ggplot` objects that can be modified further.
 
 The models are fitted with TensorFlow through **keras3**. Install it once
 with `keras3::install_keras()` and check the setup with `tf_available()`.
@@ -61,35 +64,58 @@ with coordinates or time points:
 
 
 ``` r
-A <- aux_matrix(aux_rbf(temporal_basis = c(9, 17, 37)), x, time = 1:3000)
+A <- aux_matrix(aux_segments(100), x, time = 1:3000)
 dim(A)
-#> [1] 3000   63
+#> [1] 3000   30
 ```
 
 ## Fitting iVAE
 
 
 ``` r
-fit <- iVAE(x, aux_rbf(c(9, 17, 37)), time = 1:3000, epochs = 50,
+fit <- iVAE(x, aux_rbf(temporal_basis = c(9, 17, 37)), time = 1:3000, epochs = 50,
             verbose = 0, seed = 1)
 fit
 #> Identifiable variational autoencoder (iVAE)
 #> 
-#> Call: iVAE(x = x, aux = aux_segments(100), time = 1:3000, epochs = 50, 
-#>     seed = 1, verbose = 0)
+#> Call: iVAE(x = x, aux = aux_rbf(temporal_basis = c(9, 17, 37)), time = 1:3000, 
+#>     epochs = 50, seed = 1, verbose = 0)
 #> Data: x (3000 observations, 3 variables, format matrix)
 #> Latent components: 3
-#> Auxiliary data: segmentation, size = 100, joint = 1 [30 variables]
+#> Auxiliary data: radial basis functions, spatial = 2, 9, temporal = 9, 17, 37 (gaussian) [63 variables]
 #> Distributions: source gaussian, error gaussian (sigma 0.02)
-#> ELBO: -3.377
+#> ELBO: -3.1172
 absolute_mean_correlation(fit$S, src$sources)
-#> [1] 0.8743261
+#> [1] 0.9565594
+```
+
+For comparison, the plain `VAE()` has no auxiliary variables. It is a
+baseline whose components are not identifiable in general, so its recovery
+is not guaranteed:
+
+
+``` r
+fit_vae <- VAE(x, latent_dim = 3, epochs = 50, verbose = 0, seed = 1)
+absolute_mean_correlation(fit_vae$S, src$sources)
+#> [1] 0.7132899
 ```
 
 The mean correlation coefficient compares the estimates with the true
 components up to permutation and sign; 1 means perfect recovery. The
 components are stored as `fit$S` and are returned in the format of the data
 by `components()`.
+
+
+``` r
+head(components(fit))
+#>             IC1        IC2        IC3
+#> [1,]  2.0283578  0.1393474 -0.4877269
+#> [2,] -1.6412711 -0.6063424 -1.6819368
+#> [3,]  1.0652925 -0.6113633 -1.2268908
+#> [4,] -0.7140939  0.9349620 -0.6195569
+#> [5,]  0.4349818 -1.6999949 -1.6443090
+#> [6,] -0.8067482  0.4258073 -0.2712600
+```
 
 ## Choosing the number of latent components
 
@@ -111,12 +137,12 @@ sel
 #> Selection of the number of latent components
 #> 
 #>  latent_dim    elbo    pAIC selected
-#>           1 -32.837 -33.837         
-#>           2  -8.422 -10.422         
-#>           3  -1.496  -4.496        *
-#>           4  -1.679  -5.679         
-#>           5  -1.553  -6.553         
-#>           6  -1.624  -7.624         
+#>           1 -31.703 -32.703         
+#>           2  -8.562 -10.562         
+#>           3  -1.491  -4.491        *
+#>           4  -1.696  -5.696         
+#>           5  -1.585  -6.585         
+#>           6  -1.631  -7.631         
 #> 
 #> Selected by the largest pAIC = ELBO - number of components: 3
 ```
@@ -129,7 +155,10 @@ nearly constant after that:
 plot(sel)
 ```
 
-![plot of chunk dimsel](figures/dimsel-1.png)
+<div class="figure">
+<img src="figures/dimsel-1.png" alt="plot of chunk dimsel" width="80%" />
+<p class="caption">plot of chunk dimsel</p>
+</div>
 
 The selected model is kept in the result. Models that were fitted
 separately, for example in different sessions, can be compared with
@@ -142,15 +171,101 @@ auxiliary variables and `error_dist_sigma`.
 Time series objects (`ts`, `xts`, `zoo`, `tsibble`) can be used directly, and
 the results are returned in the same format.
 
+The time points of these objects are measured in observation steps (here
+months), as for matrices, so the auxiliary variables are specified in the same
+way for all data formats:
+
 
 ``` r
-xt <- ts(x, start = c(2000, 1), frequency = 12)
-tcl <- TCL(xt, n_segments = 30, epochs = 50, verbose = 0, seed = 1)
-class(components(tcl))
+xt <- ts(x, start = c(1800, 1), frequency = 12)
+fit_ts <- iVAE(xt, aux_segments(100), epochs = 50, verbose = 0, seed = 1)
+class(components(fit_ts))
 #> [1] "mts"    "ts"     "matrix" "array"
-absolute_mean_correlation(tcl$S, src$sources)
-#> [1] 0.7072431
+absolute_mean_correlation(fit_ts$S, src$sources)
+#> [1] 0.7475805
 ```
+
+
+``` r
+plot(fit_ts)
+```
+
+<div class="figure">
+<img src="figures/ts-components-1.png" alt="plot of chunk ts-components" width="80%" />
+<p class="caption">plot of chunk ts-components</p>
+</div>
+
+## A second simulated example: spatio-temporal data
+
+`simulate_sources()` also creates spatio-temporal components, with
+nonstationarity over space and time and, optionally, autoregressive
+dependence. Here three latent components are observed at 60 random locations 
+are at 40 time points, and the three components are mixed
+into five observed variables with a two-layer random mixing function:
+
+
+``` r
+set.seed(1)
+n_s <- 60
+n_t <- 40
+xy <- cbind(lon = runif(n_s), lat = runif(n_s))
+coords <- xy[rep(seq_len(n_s), n_t), ]
+time <- rep(seq_len(n_t), each = n_s)
+src_st <- simulate_sources(3, coords = coords, time = time,
+                           n_segments_space = 6, n_segments_time = 5,
+                           ar_range = c(0.3, 0.9))
+x_st <- mix_data(src_st$sources, n_layers = 2, output_dim = 5)
+dat <- data.frame(x_st, coords, time = time)
+vars_st <- colnames(x_st)
+```
+
+The data frame is used with the names of the coordinate, time and variable
+columns. The radial basis functions of `aux_rbf()` are the auxiliary
+variables. `VAE()` ignores the coordinates and times, `iVAE()` treats the
+observations as independent given the auxiliary variables, and `iVAEar()` also
+models the autoregressive dependence:
+
+
+``` r
+aux <- aux_rbf(spatial_basis = c(2, 5), temporal_basis = c(5, 9))
+fit_st_vae <- VAE(dat[vars_st], latent_dim = 3, epochs = 60, verbose = 0, seed = 1)
+fit_st_ivae <- iVAE(dat, aux, coords = c("lon", "lat"), time = "time",
+                    vars = vars_st, latent_dim = 3, epochs = 60, verbose = 0,
+                    seed = 1)
+fit_st_ar <- iVAEar(dat, aux, coords = c("lon", "lat"), time = "time",
+                    vars = vars_st, latent_dim = 3, epochs = 60, verbose = 0,
+                    seed = 1)
+sapply(list(VAE = fit_st_vae, iVAE = fit_st_ivae, iVAEar = fit_st_ar),
+       function(f) absolute_mean_correlation(f$S, src_st$sources))
+#>       VAE      iVAE    iVAEar 
+#> 0.8017165 0.9903469 0.9518216
+```
+
+The estimated components as a map at the last time point, and as a time
+series at the first location:
+
+
+``` r
+plot(fit_st_ar)
+```
+
+<div class="figure">
+<img src="figures/st-map-1.png" alt="plot of chunk st-map" width="80%" />
+<p class="caption">plot of chunk st-map</p>
+</div>
+
+
+``` r
+plot(fit_st_ar, type = "series", series = 1)
+```
+
+<div class="figure">
+<img src="figures/st-series-1.png" alt="plot of chunk st-series" width="80%" />
+<p class="caption">plot of chunk st-series</p>
+</div>
+
+Since the result is a `ggplot` object, it can be customised with the usual
+ggplot2 functions, for example `plot(fit_st_ar) + ggplot2::ggtitle("iVAEar")`.
 
 ## Spatio-temporal data
 
@@ -203,21 +318,21 @@ summary(fit)
 #> Network: hidden units 128-128-128, auxiliary function 128-128-128, activation leaky_relu
 #> Distributions: source gaussian, error gaussian
 #> 
-#> Training: 14 epochs, final loss 1.38, validation loss 2.3
-#> ELBO: -1.3575 
-#> Largest absolute correlation between components: 0.416 
+#> Training: 14 epochs, final loss 1.39, validation loss 2.47
+#> ELBO: -1.3427 
+#> Largest absolute correlation between components: 0.413 
 #> 
 #> Prior variance of the standardised components over the data:
 #>         0%   50%  100%
-#> IC1 0.0369 0.137 0.436
-#> IC2 0.1157 0.255 0.769
-#> IC3 0.1899 0.346 1.798
+#> IC1 0.0389 0.135 0.418
+#> IC2 0.1205 0.263 0.761
+#> IC3 0.1828 0.347 1.753
 #> 
 #> Autoregressive coefficients over the data:
 #>  component lag   min  mean   max
-#>        IC1   1 0.323 0.825 0.969
-#>        IC2   1 0.278 0.717 0.866
-#>        IC3   1 0.341 0.635 0.901
+#>        IC1   1 0.340 0.828 0.971
+#>        IC2   1 0.278 0.715 0.872
+#>        IC3   1 0.357 0.638 0.908
 ```
 
 
@@ -225,7 +340,10 @@ summary(fit)
 plot(fit, type = "history")
 ```
 
-![plot of chunk history](figures/history-1.png)
+<div class="figure">
+<img src="figures/history-1.png" alt="plot of chunk history" width="80%" />
+<p class="caption">plot of chunk history</p>
+</div>
 
 The components can be shown as maps at a given day, or as time series at a
 station:
@@ -235,14 +353,20 @@ station:
 plot(fit, time = as.Date("2020-04-01"))
 ```
 
-![plot of chunk maps](figures/maps-1.png)
+<div class="figure">
+<img src="figures/maps-1.png" alt="plot of chunk maps" width="80%" />
+<p class="caption">plot of chunk maps</p>
+</div>
 
 
 ``` r
 plot(fit, type = "series", series = 1)
 ```
 
-![plot of chunk series](figures/series-1.png)
+<div class="figure">
+<img src="figures/series-1.png" alt="plot of chunk series" width="80%" />
+<p class="caption">plot of chunk series</p>
+</div>
 
 ## Forecasting and interpolation
 
@@ -261,12 +385,12 @@ fc <- predict(fit, first_week, type = "forecast",
               space = "data")
 head(fc)
 #>       Longitude Latitude       time  mean_O3  mean_NO2 mean_PM10
-#> 62964  11.43317 46.58967 2020-06-01 86.05085  5.336327  19.96109
-#> 62965  11.43317 46.58967 2020-06-02 82.13615  7.210164  18.25286
-#> 62966  11.43317 46.58967 2020-06-03 78.74678  8.549547  17.21989
-#> 62967  11.43317 46.58967 2020-06-04 75.76857  9.616633  16.63974
-#> 62968  11.43317 46.58967 2020-06-05 73.19196 10.475907  16.41044
-#> 62969  11.43317 46.58967 2020-06-06 70.78212 11.234819  16.50159
+#> 62964  11.43317 46.58967 2020-06-01 85.78925  5.342453  19.90191
+#> 62965  11.43317 46.58967 2020-06-02 81.87273  7.177661  18.28841
+#> 62966  11.43317 46.58967 2020-06-03 78.45758  8.503309  17.18722
+#> 62967  11.43317 46.58967 2020-06-04 75.37272  9.577545  16.52091
+#> 62968  11.43317 46.58967 2020-06-05 72.72477 10.454922  16.27311
+#> 62969  11.43317 46.58967 2020-06-06 70.32511 11.213539  16.36197
 ```
 
 The mean absolute error of the ozone forecasts by forecast day, compared
@@ -277,7 +401,7 @@ with the standard deviation of ozone in June:
 err <- abs(fc$mean_O3 - first_week$mean_O3)
 round(tapply(err, first_week$time, mean), 1)
 #> 2020-06-01 2020-06-02 2020-06-03 2020-06-04 2020-06-05 2020-06-06 2020-06-07 
-#>        6.2       13.2       11.3       13.4       11.2       12.8        8.7
+#>        6.2       13.4       11.4       13.3       11.5       13.1        8.7
 round(sd(valid$mean_O3), 1)
 #> [1] 19
 ```
@@ -295,7 +419,7 @@ interp <- predict(fit, test, type = "trend",
 round(c(MAE = mean(abs(interp$mean_O3 - test$mean_O3)),
         sd = sd(test$mean_O3)), 1)
 #>  MAE   sd 
-#> 19.9 31.9
+#> 20.0 31.9
 ```
 
 ## Interpretation
@@ -313,10 +437,10 @@ ms
 #> Scaled mean absolute SHAP values (rows: variables, columns: components)
 #> 
 #>             IC1   IC2   IC3
-#> mean_O3   0.618 0.307 0.075
+#> mean_O3   0.616 0.308 0.075
 #> mean_NO2  0.619 0.133 0.248
-#> mean_PM10 0.690 0.105 0.204
-#> Average   0.642 0.182 0.176
+#> mean_PM10 0.691 0.105 0.204
+#> Average   0.642 0.182 0.175
 #> 
 #> Based on 500 observations and 50 background observations.
 ```
@@ -326,28 +450,86 @@ ms
 plot(ms)
 ```
 
-![plot of chunk mshap](figures/mshap-1.png)
+<div class="figure">
+<img src="figures/mshap-1.png" alt="plot of chunk mshap" width="80%" />
+<p class="caption">plot of chunk mshap</p>
+</div>
 
 ## Spatial data formats
 
 With an `sf` or `sftime` object the coordinates and time points are taken
-from the object, and the results are again `sf` objects.
+from the object, and the results are again `sf` objects. For points, the
+coordinates are those of the geometry:
 
 
 ``` r
-s <- sf::st_as_sf(train, coords = c("Longitude", "Latitude"), crs = 4326)
-fit_sf <- iVAE(s, aux_rbf(c(2, 5), c(5, 9)), time = "time", vars = vars,
-               epochs = 10, verbose = 0, seed = 1)
+s <- sf::st_as_sf(dat, coords = c("lon", "lat"))
+fit_sf <- iVAEar(s, aux, time = "time", vars = vars_st, latent_dim = 3,
+                 epochs = 60, verbose = 0, seed = 1)
 head(components(fit_sf), 3)
 #> Simple feature collection with 3 features and 4 fields
 #> Geometry type: POINT
 #> Dimension:     XY
-#> Bounding box:  xmin: 11.43317 ymin: 46.58967 xmax: 11.43317 ymax: 46.58967
-#> Geodetic CRS:  WGS 84
-#>         time       IC1       IC2        IC3                  geometry
-#> 1 2020-01-01 -1.568821 -1.209133 -0.7660792 POINT (11.43317 46.58967)
-#> 2 2020-01-02 -1.475576 -1.162208 -0.8238250 POINT (11.43317 46.58967)
-#> 3 2020-01-03 -1.285793 -1.195195 -0.9457133 POINT (11.43317 46.58967)
+#> Bounding box:  xmin: 0.2655087 ymin: 0.2936034 xmax: 0.5728534 ymax: 0.9128759
+#> CRS:           NA
+#>   time        IC1        IC2       IC3                    geometry
+#> 1    1  0.8731580 -1.2569259 1.8065176 POINT (0.2655087 0.9128759)
+#> 2    1 -0.4654844 -0.1059572 0.8605397 POINT (0.3721239 0.2936034)
+#> 3    1 -0.6006908 -0.2605227 0.7343472 POINT (0.5728534 0.4590657)
+```
+
+Polygon data, such as areal units, are supported in the same way: the
+coordinates are the centroids of the polygons, and `plot()` draws a
+choropleth map of the components. Here areal units and nonstationary
+spatial processes over time are simulated by `generate_areal_units()` and
+`simulate_sources_areal()`:
+
+
+``` r
+areal <- generate_areal_units(n_area = 50, n_fine = 400, seed = 1)
+n_area <- nrow(areal$W)
+src_ar <- simulate_sources_areal(3, areal = areal, n_time = 30, seed = 1)
+x_ar <- mix_data(src_ar$sources, n_layers = 1, output_dim = 5)
+areal_sf <- areal$areas_sf[src_ar$area, ]
+areal_sf <- sf::st_sf(data.frame(x_ar, time = src_ar$time),
+                      geometry = sf::st_geometry(areal_sf))
+fit_areal <- iVAEar(areal_sf, aux_rbf(spatial_basis = c(2, 5),
+                                      temporal_basis = c(5, 9)),
+                    time = "time", vars = colnames(x_ar), latent_dim = 3,
+                    epochs = 60, verbose = 0, seed = 1)
+absolute_mean_correlation(fit_areal$S, src_ar$sources)
+#> [1] 0.9127976
+plot(fit_areal)
+```
+
+<div class="figure">
+<img src="figures/sf-areal-1.png" alt="plot of chunk sf-areal" width="80%" />
+<p class="caption">plot of chunk sf-areal</p>
+</div>
+
+The true sources can be drawn in the same way with `plot_areal()`:
+
+
+``` r
+plot_areal(areal, src_ar$sources[src_ar$time == 30, ],
+           labels = paste("Source", 1:3))
+```
+
+<div class="figure">
+<img src="figures/sf-areal-true-1.png" alt="plot of chunk sf-areal-true" width="80%" />
+<p class="caption">plot of chunk sf-areal-true</p>
+</div>
+
+Spatio-temporal objects of the **sp** and **spacetime** packages (`STFDF`)
+are also accepted, and the results are returned as `STFDF` objects:
+
+
+``` r
+sp_pts <- sp::SpatialPoints(xy)
+st <- spacetime::STFDF(sp_pts, as.POSIXct("2020-01-01", tz = "UTC") + 86400 * (seq_len(n_t) - 1),
+                       data.frame(x_st))
+fit_stfdf <- iVAEar(st, aux, latent_dim = 3, epochs = 20, verbose = 0, seed = 1)
+class(components(fit_stfdf))
 ```
 
 ## Large data

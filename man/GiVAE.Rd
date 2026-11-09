@@ -16,6 +16,7 @@ GiVAE(
   vars = NULL,
   rho_max = 0.99,
   trend = TRUE,
+  detach_neighbors = FALSE,
   max_neighbors = NULL,
   jacobian = c("none", "exact", "stochastic"),
   jacobian_terms = 30L,
@@ -73,6 +74,10 @@ numeric columns not used for \code{coords}, \code{time}, \code{group} or \code{a
 \item{trend}{Logical. Add a component-specific trend \eqn{\tau_l(u)} (a
 neural network of the auxiliary variables, as the mean of \code{\link[=iVAE]{iVAE()}}) to
 the prior mean? See Details.}
+
+\item{detach_neighbors}{Logical. Stop the gradient through the encoded
+neighbours, so that the encoder is trained only through the row's own
+observation (the neighbours act as fixed inputs of the prior).}
 
 \item{max_neighbors}{Optional cap on the number of neighbours per graph and
 row (a fixed random subset is used for nodes with more neighbours). Saves
@@ -160,9 +165,9 @@ the dependence between observations is described by graphs.
 For observation \eqn{i} the prior of the latent components is
 \deqn{z_{il} | \{\hat z_j\}, u_i \sim N(\mu_{il}, \sigma_l^2(u_i)),\quad
 \mu_{il} = \tau_l(u_i) + \rho_{max}\,\rho_l(u_i) \sum_{g=1}^G \beta_{gl}(u_i)
-\frac{1}{|\partial_g i|}\sum_{j \in \partial_g i} \hat z_{jl},}{
+\frac{1}{|\partial_g i|}\sum_{j \in \partial_g i} (\hat z_{jl} - \tau_l(u_j)),}{
 z_il ~ N(mu_il, sigma_l^2(u_i)), mu_il = tau_l(u_i) + rho_max rho_l(u_i)
-sum_g beta_gl(u_i) mean_{j in N_g(i)} zhat_jl,}
+sum_g beta_gl(u_i) mean_{j in N_g(i)} (zhat_jl - tau_l(u_j)),}
 where \eqn{\tau_l(u)} is the trend (included when \code{trend = TRUE}, the
 default; it is a constant offset of the prior mean and does not change the
 determinant of the simultaneous system),

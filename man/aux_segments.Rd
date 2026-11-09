@@ -56,6 +56,13 @@ For a seasonal period, the time dimension is segmented within the season
 (time modulo \code{seasonal_period}) and an additional indicator block gives the
 season number. \code{week_component = TRUE} adds indicators for the day of the
 week.
+
+Time points taken from the index of a time series object (\code{ts}, \code{zoo},
+\code{xts}, \code{tsibble}, \code{sftime}, \code{STFDF}) are measured in observation steps (one
+step is the sampling interval, for example a month), as the time points
+\verb{1, 2, ...} of a matrix. The same specification therefore gives the same
+auxiliary variables for all data formats. Time points given with \code{time} are
+used as such.
 }
 \examples{
 # time series: segments of length 50

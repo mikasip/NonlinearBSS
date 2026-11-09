@@ -1,0 +1,704 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+\documentclass[
+]{article}
+\usepackage{xcolor}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{color}
+\usepackage{fancyvrb}
+\newcommand{\VerbBar}{|}
+\newcommand{\VERB}{\Verb[commandchars=\\\{\}]}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{commandchars=\\\{\}}
+% Add ',fontsize=\small' for more characters per line
+\usepackage{framed}
+\definecolor{shadecolor}{RGB}{248,248,248}
+\newenvironment{Shaded}{\begin{snugshade}}{\end{snugshade}}
+\newcommand{\AlertTok}[1]{\textcolor[rgb]{0.94,0.16,0.16}{#1}}
+\newcommand{\AnnotationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\AttributeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
+\newcommand{\BaseNTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\BuiltInTok}[1]{#1}
+\newcommand{\CharTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\CommentTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\CommentVarTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ConstantTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
+\newcommand{\ControlFlowTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\DataTypeTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{#1}}
+\newcommand{\DecValTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\DocumentationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\ErrorTok}[1]{\textcolor[rgb]{0.64,0.00,0.00}{\textbf{#1}}}
+\newcommand{\ExtensionTok}[1]{#1}
+\newcommand{\FloatTok}[1]{\textcolor[rgb]{0.00,0.00,0.81}{#1}}
+\newcommand{\FunctionTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\ImportTok}[1]{#1}
+\newcommand{\InformationTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\newcommand{\KeywordTok}[1]{\textcolor[rgb]{0.13,0.29,0.53}{\textbf{#1}}}
+\newcommand{\NormalTok}[1]{#1}
+\newcommand{\OperatorTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
+\newcommand{\OtherTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{#1}}
+\newcommand{\PreprocessorTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textit{#1}}}
+\newcommand{\RegionMarkerTok}[1]{#1}
+\newcommand{\SpecialCharTok}[1]{\textcolor[rgb]{0.81,0.36,0.00}{\textbf{#1}}}
+\newcommand{\SpecialStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\StringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\VariableTok}[1]{\textcolor[rgb]{0.00,0.00,0.00}{#1}}
+\newcommand{\VerbatimStringTok}[1]{\textcolor[rgb]{0.31,0.60,0.02}{#1}}
+\newcommand{\WarningTok}[1]{\textcolor[rgb]{0.56,0.35,0.01}{\textbf{\textit{#1}}}}
+\usepackage{graphicx}
+\makeatletter
+\newsavebox\pandoc@box
+\newcommand*\pandocbounded[1]{% scales image to fit in text height/width
+  \sbox\pandoc@box{#1}%
+  \Gscale@div\@tempa{\textheight}{\dimexpr\ht\pandoc@box+\dp\pandoc@box\relax}%
+  \Gscale@div\@tempb{\linewidth}{\wd\pandoc@box}%
+  \ifdim\@tempb\p@<\@tempa\p@\let\@tempa\@tempb\fi% select the smaller of both
+  \ifdim\@tempa\p@<\p@\scalebox{\@tempa}{\usebox\pandoc@box}%
+  \else\usebox{\pandoc@box}%
+  \fi%
+}
+% Set default figure placement to htbp
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  pdftitle={Introduction to NonlinearBSS},
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\title{Introduction to NonlinearBSS}
+\author{}
+\date{\vspace{-2.5em}}
+
+\begin{document}
+\maketitle
+
+In nonlinear blind source separation the observed \(p\)-variate data
+\(x\) are assumed to be generated as \(x = f(z)\), where \(f\) is an
+unknown injective function and \(z\) are independent latent components.
+The aim is to recover \(z\) from \(x\). Without further assumptions this
+is impossible, but nonstationarity of the components over time or space,
+or temporal dependence, makes them identifiable.
+
+This vignette illustrates three methods:
+
+\begin{itemize}
+\tightlist
+\item
+  \texttt{VAE()}: a variational autoencoder for i.i.d. data (a baseline;
+  not identifiable),
+\item
+  \texttt{iVAE()}: the identifiable variational autoencoder for any data
+  with auxiliary variables,
+\item
+  \texttt{iVAEar()}: iVAE with nonstationary autoregressive latent
+  components.
+\end{itemize}
+
+The graph-based \texttt{GiVAE()} for areal data and networks is
+described in its own vignettes. All plots of the package are made with
+\textbf{ggplot2} and return \texttt{ggplot} objects that can be modified
+further.
+
+The models are fitted with TensorFlow through \textbf{keras3}. Install
+it once with \texttt{keras3::install\_keras()} and check the setup with
+\texttt{tf\_available()}.
+
+\subsection{Simulated data}\label{simulated-data}
+
+\texttt{simulate\_sources()} creates components whose means and
+variances change over segments and \texttt{mix\_data()} mixes them with
+a random neural network.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{set.seed}\NormalTok{(}\DecValTok{1}\NormalTok{)}
+\NormalTok{src }\OtherTok{\textless{}{-}} \FunctionTok{simulate\_sources}\NormalTok{(}\DecValTok{3}\NormalTok{, }\AttributeTok{time =} \DecValTok{1}\SpecialCharTok{:}\DecValTok{3000}\NormalTok{, }\AttributeTok{n\_segments\_time =} \DecValTok{30}\NormalTok{)}
+\NormalTok{x }\OtherTok{\textless{}{-}} \FunctionTok{mix\_data}\NormalTok{(src}\SpecialCharTok{$}\NormalTok{sources, }\AttributeTok{n\_layers =} \DecValTok{3}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{Auxiliary data}\label{auxiliary-data}
+
+For iVAE the auxiliary variables \(u\) should explain how the
+distribution of the components changes. For a time series, indicators of
+time segments are a simple choice:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{A }\OtherTok{\textless{}{-}} \FunctionTok{aux\_matrix}\NormalTok{(}\FunctionTok{aux\_segments}\NormalTok{(}\DecValTok{100}\NormalTok{), x, }\AttributeTok{time =} \DecValTok{1}\SpecialCharTok{:}\DecValTok{3000}\NormalTok{)}
+\FunctionTok{dim}\NormalTok{(A)}
+\CommentTok{\#\textgreater{} [1] 3000   30}
+\end{Highlighting}
+\end{Shaded}
+
+Radial basis functions give a smooth and more flexible alternative:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{A }\OtherTok{\textless{}{-}} \FunctionTok{aux\_matrix}\NormalTok{(}\FunctionTok{aux\_rbf}\NormalTok{(}\AttributeTok{temporal\_basis =} \FunctionTok{c}\NormalTok{(}\DecValTok{9}\NormalTok{, }\DecValTok{17}\NormalTok{, }\DecValTok{37}\NormalTok{)), x, }\AttributeTok{time =} \DecValTok{1}\SpecialCharTok{:}\DecValTok{3000}\NormalTok{)}
+\FunctionTok{dim}\NormalTok{(A)}
+\CommentTok{\#\textgreater{} [1] 3000   63}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{Fitting iVAE}\label{fitting-ivae}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{fit }\OtherTok{\textless{}{-}} \FunctionTok{iVAE}\NormalTok{(x, }\FunctionTok{aux\_rbf}\NormalTok{(}\AttributeTok{temporal\_basis =} \FunctionTok{c}\NormalTok{(}\DecValTok{9}\NormalTok{, }\DecValTok{17}\NormalTok{, }\DecValTok{37}\NormalTok{)), }\AttributeTok{time =} \DecValTok{1}\SpecialCharTok{:}\DecValTok{3000}\NormalTok{, }\AttributeTok{epochs =} \DecValTok{50}\NormalTok{,}
+            \AttributeTok{verbose =} \DecValTok{0}\NormalTok{, }\AttributeTok{seed =} \DecValTok{1}\NormalTok{)}
+\NormalTok{fit}
+\CommentTok{\#\textgreater{} Identifiable variational autoencoder (iVAE)}
+\CommentTok{\#\textgreater{} }
+\CommentTok{\#\textgreater{} Call: iVAE(x = x, aux = aux\_rbf(temporal\_basis = c(9, 17, 37)), time = 1:3000, }
+\CommentTok{\#\textgreater{}     epochs = 50, seed = 1, verbose = 0)}
+\CommentTok{\#\textgreater{} Data: x (3000 observations, 3 variables, format matrix)}
+\CommentTok{\#\textgreater{} Latent components: 3}
+\CommentTok{\#\textgreater{} Auxiliary data: radial basis functions, spatial = 2, 9, temporal = 9, 17, 37 (gaussian) [63 variables]}
+\CommentTok{\#\textgreater{} Distributions: source gaussian, error gaussian (sigma 0.02)}
+\CommentTok{\#\textgreater{} ELBO: {-}3.1172}
+\FunctionTok{absolute\_mean\_correlation}\NormalTok{(fit}\SpecialCharTok{$}\NormalTok{S, src}\SpecialCharTok{$}\NormalTok{sources)}
+\CommentTok{\#\textgreater{} [1] 0.9565594}
+\end{Highlighting}
+\end{Shaded}
+
+For comparison, the plain \texttt{VAE()} has no auxiliary variables. It
+is a baseline whose components are not identifiable in general, so its
+recovery is not guaranteed:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{fit\_vae }\OtherTok{\textless{}{-}} \FunctionTok{VAE}\NormalTok{(x, }\AttributeTok{latent\_dim =} \DecValTok{3}\NormalTok{, }\AttributeTok{epochs =} \DecValTok{50}\NormalTok{, }\AttributeTok{verbose =} \DecValTok{0}\NormalTok{, }\AttributeTok{seed =} \DecValTok{1}\NormalTok{)}
+\FunctionTok{absolute\_mean\_correlation}\NormalTok{(fit\_vae}\SpecialCharTok{$}\NormalTok{S, src}\SpecialCharTok{$}\NormalTok{sources)}
+\CommentTok{\#\textgreater{} [1] 0.7132899}
+\end{Highlighting}
+\end{Shaded}
+
+The mean correlation coefficient compares the estimates with the true
+components up to permutation and sign; 1 means perfect recovery. The
+components are stored as \texttt{fit\$S} and are returned in the format
+of the data by \texttt{components()}.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{head}\NormalTok{(}\FunctionTok{components}\NormalTok{(fit))}
+\CommentTok{\#\textgreater{}             IC1        IC2        IC3}
+\CommentTok{\#\textgreater{} [1,]  2.0283578  0.1393474 {-}0.4877269}
+\CommentTok{\#\textgreater{} [2,] {-}1.6412711 {-}0.6063424 {-}1.6819368}
+\CommentTok{\#\textgreater{} [3,]  1.0652925 {-}0.6113633 {-}1.2268908}
+\CommentTok{\#\textgreater{} [4,] {-}0.7140939  0.9349620 {-}0.6195569}
+\CommentTok{\#\textgreater{} [5,]  0.4349818 {-}1.6999949 {-}1.6443090}
+\CommentTok{\#\textgreater{} [6,] {-}0.8067482  0.4258073 {-}0.2712600}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{Choosing the number of latent
+components}\label{choosing-the-number-of-latent-components}
+
+In practice the number of latent components is unknown. Following Sipilä
+et al.~(2025, \emph{Neural Networks}; 2026, \emph{Spatial Statistics}),
+it can be selected by fitting models with different numbers of
+components \(L\) and maximising the profile AIC
+\[\mathrm{pAIC} = \mathrm{ELBO} - L,\] where the ELBO is the average
+evidence lower bound per observation. Here the three sources are mixed
+into six observed variables, and models with one to six components are
+compared:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{x6 }\OtherTok{\textless{}{-}} \FunctionTok{mix\_data}\NormalTok{(src}\SpecialCharTok{$}\NormalTok{sources, }\AttributeTok{n\_layers =} \DecValTok{3}\NormalTok{, }\AttributeTok{output\_dim =} \DecValTok{6}\NormalTok{)}
+\NormalTok{sel }\OtherTok{\textless{}{-}} \FunctionTok{select\_latent\_dim}\NormalTok{(x6, }\AttributeTok{latent\_dims =} \DecValTok{1}\SpecialCharTok{:}\DecValTok{6}\NormalTok{, }\AttributeTok{aux =} \FunctionTok{aux\_segments}\NormalTok{(}\DecValTok{100}\NormalTok{),}
+                         \AttributeTok{time =} \DecValTok{1}\SpecialCharTok{:}\DecValTok{3000}\NormalTok{, }\AttributeTok{epochs =} \DecValTok{50}\NormalTok{, }\AttributeTok{verbose =} \DecValTok{0}\NormalTok{, }\AttributeTok{seed =} \DecValTok{1}\NormalTok{)}
+\NormalTok{sel}
+\CommentTok{\#\textgreater{} Selection of the number of latent components}
+\CommentTok{\#\textgreater{} }
+\CommentTok{\#\textgreater{}  latent\_dim    elbo    pAIC selected}
+\CommentTok{\#\textgreater{}           1 {-}31.703 {-}32.703         }
+\CommentTok{\#\textgreater{}           2  {-}8.562 {-}10.562         }
+\CommentTok{\#\textgreater{}           3  {-}1.491  {-}4.491        *}
+\CommentTok{\#\textgreater{}           4  {-}1.696  {-}5.696         }
+\CommentTok{\#\textgreater{}           5  {-}1.585  {-}6.585         }
+\CommentTok{\#\textgreater{}           6  {-}1.631  {-}7.631         }
+\CommentTok{\#\textgreater{} }
+\CommentTok{\#\textgreater{} Selected by the largest pAIC = ELBO {-} number of components: 3}
+\end{Highlighting}
+\end{Shaded}
+
+The ELBO increases steeply until the true number of components and stays
+nearly constant after that:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{plot}\NormalTok{(sel)}
+\end{Highlighting}
+\end{Shaded}
+
+\includegraphics[width=1\linewidth]{figures/dimsel-1}
+
+The selected model is kept in the result. Models that were fitted
+separately, for example in different sessions, can be compared with
+\texttt{latent\_dim\_selection(list(fit1,\ fit2,\ ...))}. The models
+should differ only in the number of components, since the ELBO also
+depends on the data, the auxiliary variables and
+\texttt{error\_dist\_sigma}.
+
+\subsection{Time series formats}\label{time-series-formats}
+
+Time series objects (\texttt{ts}, \texttt{xts}, \texttt{zoo},
+\texttt{tsibble}) can be used directly, and the results are returned in
+the same format.
+
+The time points of these objects are measured in observation steps (here
+months), as for matrices, so the auxiliary variables are specified in
+the same way for all data formats:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{xt }\OtherTok{\textless{}{-}} \FunctionTok{ts}\NormalTok{(x, }\AttributeTok{start =} \FunctionTok{c}\NormalTok{(}\DecValTok{1800}\NormalTok{, }\DecValTok{1}\NormalTok{), }\AttributeTok{frequency =} \DecValTok{12}\NormalTok{)}
+\NormalTok{fit\_ts }\OtherTok{\textless{}{-}} \FunctionTok{iVAE}\NormalTok{(xt, }\FunctionTok{aux\_segments}\NormalTok{(}\DecValTok{100}\NormalTok{), }\AttributeTok{epochs =} \DecValTok{50}\NormalTok{, }\AttributeTok{verbose =} \DecValTok{0}\NormalTok{, }\AttributeTok{seed =} \DecValTok{1}\NormalTok{)}
+\FunctionTok{class}\NormalTok{(}\FunctionTok{components}\NormalTok{(fit\_ts))}
+\CommentTok{\#\textgreater{} [1] "mts"    "ts"     "matrix" "array"}
+\FunctionTok{absolute\_mean\_correlation}\NormalTok{(fit\_ts}\SpecialCharTok{$}\NormalTok{S, src}\SpecialCharTok{$}\NormalTok{sources)}
+\CommentTok{\#\textgreater{} [1] 0.7475805}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{plot}\NormalTok{(fit\_ts)}
+\end{Highlighting}
+\end{Shaded}
+
+\includegraphics[width=1\linewidth]{figures/ts-components-1}
+
+\subsection{A second simulated example: spatio-temporal
+data}\label{a-second-simulated-example-spatio-temporal-data}
+
+\texttt{simulate\_sources()} also creates spatio-temporal components,
+with nonstationarity over space and time and, optionally, autoregressive
+dependence. Here three latent components are observed at 60 random
+locations and at 40 time points, and the three components are mixed into
+five observed variables with a two-layer random mixing function:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{set.seed}\NormalTok{(}\DecValTok{1}\NormalTok{)}
+\NormalTok{n\_s }\OtherTok{\textless{}{-}} \DecValTok{60}
+\NormalTok{n\_t }\OtherTok{\textless{}{-}} \DecValTok{100}
+\NormalTok{xy }\OtherTok{\textless{}{-}} \FunctionTok{cbind}\NormalTok{(}\AttributeTok{lon =} \FunctionTok{runif}\NormalTok{(n\_s), }\AttributeTok{lat =} \FunctionTok{runif}\NormalTok{(n\_s))}
+\NormalTok{coords }\OtherTok{\textless{}{-}}\NormalTok{ xy[}\FunctionTok{rep}\NormalTok{(}\FunctionTok{seq\_len}\NormalTok{(n\_s), n\_t), ]}
+\NormalTok{time }\OtherTok{\textless{}{-}} \FunctionTok{rep}\NormalTok{(}\FunctionTok{seq\_len}\NormalTok{(n\_t), }\AttributeTok{each =}\NormalTok{ n\_s)}
+\NormalTok{src\_st }\OtherTok{\textless{}{-}} \FunctionTok{simulate\_sources}\NormalTok{(}\DecValTok{3}\NormalTok{, }\AttributeTok{coords =}\NormalTok{ coords, }\AttributeTok{time =}\NormalTok{ time,}
+                           \AttributeTok{n\_segments\_space =} \DecValTok{6}\NormalTok{, }\AttributeTok{n\_segments\_time =} \DecValTok{5}\NormalTok{,}
+                           \AttributeTok{ar\_range =} \FunctionTok{c}\NormalTok{(}\FloatTok{0.3}\NormalTok{, }\FloatTok{0.9}\NormalTok{))}
+\NormalTok{x\_st }\OtherTok{\textless{}{-}} \FunctionTok{mix\_data}\NormalTok{(src\_st}\SpecialCharTok{$}\NormalTok{sources, }\AttributeTok{n\_layers =} \DecValTok{2}\NormalTok{, }\AttributeTok{output\_dim =} \DecValTok{5}\NormalTok{)}
+\NormalTok{dat }\OtherTok{\textless{}{-}} \FunctionTok{data.frame}\NormalTok{(x\_st, coords, }\AttributeTok{time =}\NormalTok{ time)}
+\NormalTok{vars\_st }\OtherTok{\textless{}{-}} \FunctionTok{colnames}\NormalTok{(x\_st)}
+\end{Highlighting}
+\end{Shaded}
+
+The data frame is used with the names of the coordinate, time and
+variable columns. The radial basis functions of \texttt{aux\_rbf()} are
+the auxiliary variables. \texttt{VAE()} ignores the coordinates and
+times, \texttt{iVAE()} treats the observations as independent given the
+auxiliary variables, and \texttt{iVAEar()} also models the
+autoregressive dependence:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{aux }\OtherTok{\textless{}{-}} \FunctionTok{aux\_rbf}\NormalTok{(}\AttributeTok{spatial\_basis =} \FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DecValTok{9}\NormalTok{), }\AttributeTok{temporal\_basis =} \FunctionTok{c}\NormalTok{(}\DecValTok{9}\NormalTok{, }\DecValTok{17}\NormalTok{))}
+\NormalTok{fit\_st\_vae }\OtherTok{\textless{}{-}} \FunctionTok{VAE}\NormalTok{(dat[vars\_st], }\AttributeTok{latent\_dim =} \DecValTok{3}\NormalTok{, }\AttributeTok{epochs =} \DecValTok{60}\NormalTok{, }\AttributeTok{verbose =} \DecValTok{0}\NormalTok{, }\AttributeTok{seed =} \DecValTok{1}\NormalTok{)}
+\NormalTok{fit\_st\_ivae }\OtherTok{\textless{}{-}} \FunctionTok{iVAE}\NormalTok{(dat, aux, }\AttributeTok{coords =} \FunctionTok{c}\NormalTok{(}\StringTok{"lon"}\NormalTok{, }\StringTok{"lat"}\NormalTok{), }\AttributeTok{time =} \StringTok{"time"}\NormalTok{,}
+                    \AttributeTok{vars =}\NormalTok{ vars\_st, }\AttributeTok{latent\_dim =} \DecValTok{3}\NormalTok{, }\AttributeTok{epochs =} \DecValTok{60}\NormalTok{, }\AttributeTok{verbose =} \DecValTok{0}\NormalTok{,}
+                    \AttributeTok{seed =} \DecValTok{1}\NormalTok{)}
+\NormalTok{fit\_st\_ar }\OtherTok{\textless{}{-}} \FunctionTok{iVAEar}\NormalTok{(dat, aux, }\AttributeTok{coords =} \FunctionTok{c}\NormalTok{(}\StringTok{"lon"}\NormalTok{, }\StringTok{"lat"}\NormalTok{), }\AttributeTok{time =} \StringTok{"time"}\NormalTok{,}
+                    \AttributeTok{vars =}\NormalTok{ vars\_st, }\AttributeTok{latent\_dim =} \DecValTok{3}\NormalTok{, }\AttributeTok{epochs =} \DecValTok{60}\NormalTok{, }\AttributeTok{verbose =} \DecValTok{0}\NormalTok{,}
+                    \AttributeTok{seed =} \DecValTok{1}\NormalTok{)}
+\FunctionTok{sapply}\NormalTok{(}\FunctionTok{list}\NormalTok{(}\AttributeTok{VAE =}\NormalTok{ fit\_st\_vae, }\AttributeTok{iVAE =}\NormalTok{ fit\_st\_ivae, }\AttributeTok{iVAEar =}\NormalTok{ fit\_st\_ar),}
+       \ControlFlowTok{function}\NormalTok{(f) }\FunctionTok{absolute\_mean\_correlation}\NormalTok{(f}\SpecialCharTok{$}\NormalTok{S, src\_st}\SpecialCharTok{$}\NormalTok{sources))}
+\CommentTok{\#\textgreater{}       VAE      iVAE    iVAEar }
+\CommentTok{\#\textgreater{} 0.8760115 0.9822837 0.9917308}
+\end{Highlighting}
+\end{Shaded}
+
+The estimated components as a map at the last time point, and as a time
+series at the first location:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{plot}\NormalTok{(fit\_st\_ar)}
+\end{Highlighting}
+\end{Shaded}
+
+\includegraphics[width=1\linewidth]{figures/st-map-1}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{plot}\NormalTok{(fit\_st\_ar, }\AttributeTok{type =} \StringTok{"series"}\NormalTok{, }\AttributeTok{series =} \DecValTok{1}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\includegraphics[width=1\linewidth]{figures/st-series-1}
+
+Since the result is a \texttt{ggplot} object, it can be customised with
+the usual ggplot2 functions, for example
+\texttt{plot(fit\_st\_ar)\ +\ ggplot2::ggtitle("iVAEar")}.
+
+\subsection{Spatio-temporal data}\label{spatio-temporal-data}
+
+The data set \texttt{pollution\_northern\_italy} contains daily air
+quality measurements at 50 stations. Here, the observations from January
+2020 to April 2022 are used for training, May 2022 as forecasting test
+data. Five stations are set aside to test spatial interpolation. The
+data frame is used with the column names of the coordinates, time points
+and variables.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{train\_subset\_time }\OtherTok{\textless{}{-}} \FunctionTok{subset}\NormalTok{(pollution\_northern\_italy, time }\SpecialCharTok{\textless{}} \FunctionTok{as.Date}\NormalTok{(}\StringTok{"2022{-}05{-}01"}\NormalTok{))}
+\NormalTok{stations }\OtherTok{\textless{}{-}} \FunctionTok{unique}\NormalTok{(train\_subset\_time}\SpecialCharTok{$}\NormalTok{AirQualityStation)}
+\FunctionTok{set.seed}\NormalTok{(}\DecValTok{2}\NormalTok{)}
+\NormalTok{test\_stations }\OtherTok{\textless{}{-}} \FunctionTok{sample}\NormalTok{(stations, }\DecValTok{5}\NormalTok{)}
+\NormalTok{train\_subset }\OtherTok{\textless{}{-}} \FunctionTok{subset}\NormalTok{(train\_subset\_time, }\SpecialCharTok{!}\NormalTok{AirQualityStation }\SpecialCharTok{\%in\%}\NormalTok{ test\_stations)}
+\NormalTok{vars }\OtherTok{\textless{}{-}} \FunctionTok{c}\NormalTok{(}\StringTok{"mean\_O3"}\NormalTok{, }\StringTok{"mean\_NO2"}\NormalTok{, }\StringTok{"mean\_PM10"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\texttt{iVAEar()} models the components as nonstationary autoregressive
+processes. The model is trained for 30 epochs with RBF auxiliary
+variables. The temporal RBFs are formed based on the seasonal time point
+(1 to 365) instead of the absolute time point in order to allow the
+model to generalize better to future.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{fit }\OtherTok{\textless{}{-}} \FunctionTok{iVAEar}\NormalTok{(train\_subset, }\AttributeTok{aux =} \FunctionTok{aux\_rbf}\NormalTok{(}\AttributeTok{spatial\_basis =} \FunctionTok{c}\NormalTok{(}\DecValTok{2}\NormalTok{, }\DecValTok{9}\NormalTok{),}
+                                   \AttributeTok{temporal\_basis =} \FunctionTok{c}\NormalTok{(}\DecValTok{9}\NormalTok{, }\DecValTok{17}\NormalTok{), }\AttributeTok{seasonal\_period =} \DecValTok{365}\NormalTok{),}
+              \AttributeTok{coords =} \FunctionTok{c}\NormalTok{(}\StringTok{"Longitude"}\NormalTok{, }\StringTok{"Latitude"}\NormalTok{), }\AttributeTok{time =} \StringTok{"time"}\NormalTok{, }\AttributeTok{vars =}\NormalTok{ vars,}
+              \AttributeTok{epochs =} \DecValTok{30}\NormalTok{, }\AttributeTok{verbose =} \DecValTok{0}\NormalTok{, }\AttributeTok{seed =} \DecValTok{1}\NormalTok{)}
+\FunctionTok{summary}\NormalTok{(fit)}
+\CommentTok{\#\textgreater{} Identifiable variational autoencoder with autoregressive components (iVAEar)}
+\CommentTok{\#\textgreater{} }
+\CommentTok{\#\textgreater{} Call: iVAEar(x = train\_subset, aux = aux\_rbf(spatial\_basis = c(2, 9), }
+\CommentTok{\#\textgreater{}     temporal\_basis = c(9, 17), seasonal\_period = 365), coords = c("Longitude", }
+\CommentTok{\#\textgreater{}     "Latitude"), time = "time", vars = vars, epochs = 30, seed = 1, }
+\CommentTok{\#\textgreater{}     verbose = 0)}
+\CommentTok{\#\textgreater{} }
+\CommentTok{\#\textgreater{} Data: train\_subset }
+\CommentTok{\#\textgreater{}   observations: 38295 }
+\CommentTok{\#\textgreater{}   variables: 3 }
+\CommentTok{\#\textgreater{}   format: data.frame }
+\CommentTok{\#\textgreater{} Latent components: 3 }
+\CommentTok{\#\textgreater{} Autoregressive order: 1 }
+\CommentTok{\#\textgreater{} Auxiliary data: radial basis functions, spatial = 2, 9, temporal = 9, 17 (gaussian) + seasonal period 365 [114 variables]}
+\CommentTok{\#\textgreater{} }
+\CommentTok{\#\textgreater{} Network: hidden units 128{-}128{-}128, auxiliary function 128{-}128{-}128, activation leaky\_relu}
+\CommentTok{\#\textgreater{} Distributions: source gaussian, error gaussian}
+\CommentTok{\#\textgreater{} }
+\CommentTok{\#\textgreater{} Training: 30 epochs, final loss 0.975}
+\CommentTok{\#\textgreater{} ELBO: {-}0.95145 }
+\CommentTok{\#\textgreater{} Largest absolute correlation between components: 0.463 }
+\CommentTok{\#\textgreater{} }
+\CommentTok{\#\textgreater{} Prior variance of the standardised components over the data:}
+\CommentTok{\#\textgreater{}         0\%    50\%  100\%}
+\CommentTok{\#\textgreater{} IC1 0.0118 0.0947 0.897}
+\CommentTok{\#\textgreater{} IC2 0.0339 0.1442 0.690}
+\CommentTok{\#\textgreater{} IC3 0.1039 0.3463 1.741}
+\CommentTok{\#\textgreater{} }
+\CommentTok{\#\textgreater{} Autoregressive coefficients over the data:}
+\CommentTok{\#\textgreater{}  component lag     min  mean   max}
+\CommentTok{\#\textgreater{}        IC1   1 {-}0.1478 0.566 0.980}
+\CommentTok{\#\textgreater{}        IC2   1  0.1481 0.656 0.960}
+\CommentTok{\#\textgreater{}        IC3   1  0.0871 0.579 0.855}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{plot}\NormalTok{(fit, }\AttributeTok{type =} \StringTok{"history"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\includegraphics[width=1\linewidth]{figures/history-1}
+
+The components can be shown as maps at a given day, or as time series at
+a station:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{plot}\NormalTok{(fit, }\AttributeTok{time =} \FunctionTok{as.Date}\NormalTok{(}\StringTok{"2022{-}04{-}01"}\NormalTok{))}
+\end{Highlighting}
+\end{Shaded}
+
+\includegraphics[width=1\linewidth]{figures/maps-1}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{plot}\NormalTok{(fit, }\AttributeTok{type =} \StringTok{"series"}\NormalTok{, }\AttributeTok{series =} \DecValTok{1}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\includegraphics[width=1\linewidth]{figures/series-1}
+
+\subsection{Forecasting and
+interpolation}\label{forecasting-and-interpolation}
+
+The trend, variance and autoregressive coefficient functions can be
+evaluated anywhere, and the components can be forecast from their last
+values by iterating the autoregressive prior. With
+\texttt{space\ =\ "data"} the predicted components are decoded to the
+observed variables. Here we forecast the first week of May 2022, one to
+seven days after the end of the training data:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{test\_time }\OtherTok{\textless{}{-}} \FunctionTok{subset}\NormalTok{(pollution\_northern\_italy, }
+\NormalTok{                     time }\SpecialCharTok{\textless{}} \FunctionTok{as.Date}\NormalTok{(}\StringTok{"2022{-}05{-}08"}\NormalTok{) }\SpecialCharTok{\&}\NormalTok{ time }\SpecialCharTok{\textgreater{}} \FunctionTok{as.Date}\NormalTok{(}\StringTok{"2022{-}04{-}30"}\NormalTok{))}
+\NormalTok{pred\_time }\OtherTok{\textless{}{-}} \FunctionTok{predict}\NormalTok{(fit, test\_time, }\AttributeTok{type =} \StringTok{"forecast"}\NormalTok{,}
+              \AttributeTok{coords =} \FunctionTok{c}\NormalTok{(}\StringTok{"Longitude"}\NormalTok{, }\StringTok{"Latitude"}\NormalTok{), }\AttributeTok{time =} \StringTok{"time"}\NormalTok{,}
+              \AttributeTok{space =} \StringTok{"data"}\NormalTok{)}
+\FunctionTok{head}\NormalTok{(pred\_time)}
+\CommentTok{\#\textgreater{}       Longitude Latitude       time   mean\_O3 mean\_NO2 mean\_PM10}
+\CommentTok{\#\textgreater{} 63663  11.43317 46.58967 2022{-}05{-}01 104.59662 4.334665  12.58798}
+\CommentTok{\#\textgreater{} 63664  11.43317 46.58967 2022{-}05{-}02  98.84446 4.166092  12.81774}
+\CommentTok{\#\textgreater{} 63665  11.43317 46.58967 2022{-}05{-}03  94.61120 4.104034  12.39065}
+\CommentTok{\#\textgreater{} 63666  11.43317 46.58967 2022{-}05{-}04  91.35274 4.034678  12.00895}
+\CommentTok{\#\textgreater{} 63667  11.43317 46.58967 2022{-}05{-}05  88.59262 3.947743  11.64543}
+\CommentTok{\#\textgreater{} 63668  11.43317 46.58967 2022{-}05{-}06  86.35072 3.904140  11.32179}
+\end{Highlighting}
+\end{Shaded}
+
+The mean absolute error of the ozone forecasts by forecast day, compared
+with the standard deviation of ozone in the test period:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{round}\NormalTok{(}\FunctionTok{c}\NormalTok{(}\AttributeTok{MAE =} \FunctionTok{mean}\NormalTok{(}\FunctionTok{abs}\NormalTok{(pred\_time}\SpecialCharTok{$}\NormalTok{mean\_O3 }\SpecialCharTok{{-}}\NormalTok{ test\_time}\SpecialCharTok{$}\NormalTok{mean\_O3)),}
+        \AttributeTok{sd =} \FunctionTok{sd}\NormalTok{(test\_time}\SpecialCharTok{$}\NormalTok{mean\_O3)), }\DecValTok{1}\NormalTok{)}
+\CommentTok{\#\textgreater{}  MAE   sd }
+\CommentTok{\#\textgreater{} 13.5 18.8}
+\end{Highlighting}
+\end{Shaded}
+
+Spatial interpolation uses the trend function at the locations of the
+five stations not used in fitting:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{test\_space }\OtherTok{\textless{}{-}} \FunctionTok{subset}\NormalTok{(train\_subset\_time, AirQualityStation }\SpecialCharTok{\%in\%}\NormalTok{ test\_stations)}
+\NormalTok{pred\_space }\OtherTok{\textless{}{-}} \FunctionTok{predict}\NormalTok{(fit, test\_space, }\AttributeTok{type =} \StringTok{"trend"}\NormalTok{,}
+                  \AttributeTok{coords =} \FunctionTok{c}\NormalTok{(}\StringTok{"Longitude"}\NormalTok{, }\StringTok{"Latitude"}\NormalTok{), }\AttributeTok{time =} \StringTok{"time"}\NormalTok{,}
+                  \AttributeTok{space =} \StringTok{"data"}\NormalTok{)}
+\FunctionTok{round}\NormalTok{(}\FunctionTok{c}\NormalTok{(}\AttributeTok{MAE =} \FunctionTok{mean}\NormalTok{(}\FunctionTok{abs}\NormalTok{(pred\_space}\SpecialCharTok{$}\NormalTok{mean\_O3 }\SpecialCharTok{{-}}\NormalTok{ test\_space}\SpecialCharTok{$}\NormalTok{mean\_O3)),}
+        \AttributeTok{sd =} \FunctionTok{sd}\NormalTok{(test\_space}\SpecialCharTok{$}\NormalTok{mean\_O3)), }\DecValTok{1}\NormalTok{)}
+\CommentTok{\#\textgreater{}  MAE   sd }
+\CommentTok{\#\textgreater{} 14.9 33.2}
+\end{Highlighting}
+\end{Shaded}
+
+The predictions can be made also to future time points of new stations
+by using the trend function:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{test\_space\_time }\OtherTok{\textless{}{-}} \FunctionTok{subset}\NormalTok{(pollution\_northern\_italy, AirQualityStation }\SpecialCharTok{\%in\%}\NormalTok{ test\_stations }\SpecialCharTok{\&}
+\NormalTok{                          time }\SpecialCharTok{\textless{}} \FunctionTok{as.Date}\NormalTok{(}\StringTok{"2022{-}05{-}08"}\NormalTok{) }\SpecialCharTok{\&}\NormalTok{ time }\SpecialCharTok{\textgreater{}} \FunctionTok{as.Date}\NormalTok{(}\StringTok{"2022{-}04{-}30"}\NormalTok{))}
+\NormalTok{pred\_space\_time }\OtherTok{\textless{}{-}} \FunctionTok{predict}\NormalTok{(fit, test\_space\_time, }\AttributeTok{type =} \StringTok{"trend"}\NormalTok{,}
+                  \AttributeTok{coords =} \FunctionTok{c}\NormalTok{(}\StringTok{"Longitude"}\NormalTok{, }\StringTok{"Latitude"}\NormalTok{), }\AttributeTok{time =} \StringTok{"time"}\NormalTok{,}
+                  \AttributeTok{space =} \StringTok{"data"}\NormalTok{)}
+\FunctionTok{round}\NormalTok{(}\FunctionTok{c}\NormalTok{(}\AttributeTok{MAE =} \FunctionTok{mean}\NormalTok{(}\FunctionTok{abs}\NormalTok{(pred\_space\_time}\SpecialCharTok{$}\NormalTok{mean\_O3 }\SpecialCharTok{{-}}\NormalTok{ test\_space\_time}\SpecialCharTok{$}\NormalTok{mean\_O3)),}
+        \AttributeTok{sd =} \FunctionTok{sd}\NormalTok{(test\_space\_time}\SpecialCharTok{$}\NormalTok{mean\_O3)), }\DecValTok{1}\NormalTok{)              }
+\CommentTok{\#\textgreater{}  MAE   sd }
+\CommentTok{\#\textgreater{} 18.2 24.3}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{Interpretation}\label{interpretation}
+
+\texttt{mshap()} measures how much each latent component contributes to
+each observed variable by mean absolute kernel SHAP values of the
+decoder. The scaled values sum to one for each variable. Sipilä et
+al.~(2026, \emph{Spatial Statistics}) used them to interpret the latent
+components of weather and air pollution data over Northern Italy.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{ms }\OtherTok{\textless{}{-}} \FunctionTok{mshap}\NormalTok{(fit, }\AttributeTok{n\_sample =} \DecValTok{500}\NormalTok{, }\AttributeTok{n\_background =} \DecValTok{50}\NormalTok{, }\AttributeTok{seed =} \DecValTok{1}\NormalTok{)}
+\NormalTok{ms}
+\CommentTok{\#\textgreater{} Scaled mean absolute SHAP values (rows: variables, columns: components)}
+\CommentTok{\#\textgreater{} }
+\CommentTok{\#\textgreater{}             IC1   IC2   IC3}
+\CommentTok{\#\textgreater{} mean\_O3   0.364 0.584 0.053}
+\CommentTok{\#\textgreater{} mean\_NO2  0.815 0.096 0.089}
+\CommentTok{\#\textgreater{} mean\_PM10 0.375 0.111 0.514}
+\CommentTok{\#\textgreater{} Average   0.518 0.264 0.219}
+\CommentTok{\#\textgreater{} }
+\CommentTok{\#\textgreater{} Based on 500 observations and 50 background observations.}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\FunctionTok{plot}\NormalTok{(ms)}
+\end{Highlighting}
+\end{Shaded}
+
+\includegraphics[width=1\linewidth]{figures/mshap-1}
+
+\subsection{Spatial data formats}\label{spatial-data-formats}
+
+With an \texttt{sf} or \texttt{sftime} object the coordinates and time
+points are taken from the object, and the results are again \texttt{sf}
+objects. For points, the coordinates are those of the geometry:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{s }\OtherTok{\textless{}{-}}\NormalTok{ sf}\SpecialCharTok{::}\FunctionTok{st\_as\_sf}\NormalTok{(dat, }\AttributeTok{coords =} \FunctionTok{c}\NormalTok{(}\StringTok{"lon"}\NormalTok{, }\StringTok{"lat"}\NormalTok{))}
+\NormalTok{fit\_sf }\OtherTok{\textless{}{-}} \FunctionTok{iVAEar}\NormalTok{(s, aux, }\AttributeTok{time =} \StringTok{"time"}\NormalTok{, }\AttributeTok{vars =}\NormalTok{ vars\_st, }\AttributeTok{latent\_dim =} \DecValTok{3}\NormalTok{,}
+                 \AttributeTok{epochs =} \DecValTok{60}\NormalTok{, }\AttributeTok{verbose =} \DecValTok{0}\NormalTok{, }\AttributeTok{seed =} \DecValTok{1}\NormalTok{)}
+\FunctionTok{head}\NormalTok{(}\FunctionTok{components}\NormalTok{(fit\_sf), }\DecValTok{3}\NormalTok{)}
+\CommentTok{\#\textgreater{} Simple feature collection with 3 features and 4 fields}
+\CommentTok{\#\textgreater{} Geometry type: POINT}
+\CommentTok{\#\textgreater{} Dimension:     XY}
+\CommentTok{\#\textgreater{} Bounding box:  xmin: 0.2655087 ymin: 0.2936034 xmax: 0.5728534 ymax: 0.9128759}
+\CommentTok{\#\textgreater{} CRS:           NA}
+\CommentTok{\#\textgreater{}   time        IC1       IC2        IC3                    geometry}
+\CommentTok{\#\textgreater{} 1    1 {-}0.1744864 0.5799103 {-}1.0028925 POINT (0.2655087 0.9128759)}
+\CommentTok{\#\textgreater{} 2    1  1.0015271 0.3588701 {-}0.1335403 POINT (0.3721239 0.2936034)}
+\CommentTok{\#\textgreater{} 3    1  0.5771135 0.6203762 {-}1.1136303 POINT (0.5728534 0.4590657)}
+\end{Highlighting}
+\end{Shaded}
+
+Spatio-temporal objects of the \textbf{sp} and \textbf{spacetime}
+packages (\texttt{STFDF}) are also accepted, and the results are
+returned as \texttt{STFDF} objects:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{sp\_pts }\OtherTok{\textless{}{-}}\NormalTok{ sp}\SpecialCharTok{::}\FunctionTok{SpatialPoints}\NormalTok{(xy)}
+\NormalTok{st }\OtherTok{\textless{}{-}}\NormalTok{ spacetime}\SpecialCharTok{::}\FunctionTok{STFDF}\NormalTok{(sp\_pts, }\FunctionTok{as.POSIXct}\NormalTok{(}\StringTok{"2020{-}01{-}01"}\NormalTok{, }\AttributeTok{tz =} \StringTok{"UTC"}\NormalTok{) }\SpecialCharTok{+} \DecValTok{86400} \SpecialCharTok{*}\NormalTok{ (}\FunctionTok{seq\_len}\NormalTok{(n\_t) }\SpecialCharTok{{-}} \DecValTok{1}\NormalTok{),}
+                       \FunctionTok{data.frame}\NormalTok{(x\_st))}
+\NormalTok{fit\_stfdf }\OtherTok{\textless{}{-}} \FunctionTok{iVAEar}\NormalTok{(st, aux, }\AttributeTok{latent\_dim =} \DecValTok{3}\NormalTok{, }\AttributeTok{epochs =} \DecValTok{20}\NormalTok{, }\AttributeTok{verbose =} \DecValTok{0}\NormalTok{, }\AttributeTok{seed =} \DecValTok{1}\NormalTok{)}
+\FunctionTok{class}\NormalTok{(}\FunctionTok{components}\NormalTok{(fit\_stfdf))}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{Large data}\label{large-data}
+
+For large spatio-temporal data the auxiliary matrix can become very
+large. With \texttt{batch\_aux\ =\ TRUE} the auxiliary variables are
+computed for each batch inside the network from the coordinates and time
+points, which gives the same model with much less memory:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{fit }\OtherTok{\textless{}{-}} \FunctionTok{iVAEar}\NormalTok{(pollution\_northern\_italy, }\FunctionTok{aux\_rbf}\NormalTok{(),}
+              \AttributeTok{coords =} \FunctionTok{c}\NormalTok{(}\StringTok{"Longitude"}\NormalTok{, }\StringTok{"Latitude"}\NormalTok{), }\AttributeTok{time =} \StringTok{"time"}\NormalTok{, }\AttributeTok{vars =}\NormalTok{ vars,}
+              \AttributeTok{batch\_aux =} \ConstantTok{TRUE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{Saving models}\label{saving-models}
+
+The trained weights are stored in the fitted object, so models can be
+saved with \texttt{save\_nlbss()} (or \texttt{saveRDS()}) and used in a
+new session:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{file }\OtherTok{\textless{}{-}} \FunctionTok{tempfile}\NormalTok{(}\AttributeTok{fileext =} \StringTok{".rds"}\NormalTok{)}
+\FunctionTok{save\_nlbss}\NormalTok{(fit, file)}
+\NormalTok{fit2 }\OtherTok{\textless{}{-}} \FunctionTok{load\_nlbss}\NormalTok{(file)}
+\FunctionTok{all.equal}\NormalTok{(}\FunctionTok{predict}\NormalTok{(fit2, }\AttributeTok{type =} \StringTok{"trend"}\NormalTok{), }\FunctionTok{predict}\NormalTok{(fit, }\AttributeTok{type =} \StringTok{"trend"}\NormalTok{))}
+\CommentTok{\#\textgreater{} [1] TRUE}
+\end{Highlighting}
+\end{Shaded}
+
+\subsection{References}\label{references}
+
+\begin{itemize}
+\tightlist
+\item
+  Hyvärinen, A. and Morioka, H. (2016). Unsupervised feature extraction
+  by time-contrastive learning and nonlinear ICA. \emph{Advances in
+  Neural Information Processing Systems}, 29.
+\item
+  Khemakhem, I., Kingma, D., Monti, R. and Hyvärinen, A. (2020).
+  Variational autoencoders and nonlinear ICA: A unifying framework.
+  \emph{AISTATS 2020}, 2207--2217.
+\item
+  Sipilä, M., Nordhausen, K. and Taskinen, S. (2024). Nonlinear blind
+  source separation exploiting spatial nonstationarity.
+  \emph{Information Sciences}, 665,
+
+  \begin{enumerate}
+  \def\labelenumi{\arabic{enumi}.}
+  \setcounter{enumi}{120364}
+  \tightlist
+  \item
+    \url{https://doi.org/10.1016/j.ins.2024.120365}
+  \end{enumerate}
+\item
+  Sipilä, M., Cappello, C., De Iaco, S., Nordhausen, K. and Taskinen, S.
+  (2025). Modelling multivariate spatio-temporal data with identifiable
+  variational autoencoders. \emph{Neural Networks}, 181, 106774.
+  \url{https://doi.org/10.1016/j.neunet.2024.106774}
+\item
+  Sipilä, M., Nordhausen, K. and Taskinen, S. (2025). Identifiable
+  autoregressive variational autoencoders for nonlinear and
+  nonstationary spatio-temporal blind source separation. \emph{ECML PKDD
+  2025}, Lecture Notes in Computer Science 16019, 362--380.
+  \url{https://doi.org/10.1007/978-3-032-06109-6_21}
+\item
+  Sipilä, M., De Iaco, S., Cappello, C., Nordhausen, K., Palma, M. and
+  Taskinen, S. (2026). Enhancing identifiable variational autoencoder in
+  the presence of missing values and auxiliary covariates for
+  spatio-temporal ozone modeling. \emph{Environmetrics}, 37(6), e70121.
+  \url{https://doi.org/10.1002/env.70121}
+\item
+  Sipilä, M., Cappello, C., De Iaco, S., Nordhausen, K., Palma, M. and
+  Taskinen, S. (2026). Identifiable variational autoencoders for
+  interpretable dimension reduction and prediction in multivariate
+  spatio-temporal processes. \emph{Spatial Statistics}, 101054.
+  \url{https://doi.org/10.1016/j.spasta.2026.101054}
+\end{itemize}
+
+\end{document}

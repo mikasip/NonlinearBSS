@@ -12,10 +12,10 @@
 
 \item{which}{The criterion to plot, \code{"elbo"} or \code{"pAIC"}.}
 
-\item{...}{Further graphical parameters passed to \code{\link[=plot]{plot()}}.}
+\item{...}{Further arguments passed to \code{\link[ggplot2:geom_line]{ggplot2::geom_line()}}.}
 }
 \value{
-\code{x}, invisibly.
+A \code{ggplot} object.
 }
 \description{
 Plots the ELBO (or pAIC) of models with different numbers of latent

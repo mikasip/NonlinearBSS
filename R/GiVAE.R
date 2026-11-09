@@ -9,9 +9,9 @@
 #' For observation \eqn{i} the prior of the latent components is
 #' \deqn{z_{il} | \{\hat z_j\}, u_i \sim N(\mu_{il}, \sigma_l^2(u_i)),\quad
 #' \mu_{il} = \tau_l(u_i) + \rho_{max}\,\rho_l(u_i) \sum_{g=1}^G \beta_{gl}(u_i)
-#' \frac{1}{|\partial_g i|}\sum_{j \in \partial_g i} \hat z_{jl},}{
+#' \frac{1}{|\partial_g i|}\sum_{j \in \partial_g i} (\hat z_{jl} - \tau_l(u_j)),}{
 #' z_il ~ N(mu_il, sigma_l^2(u_i)), mu_il = tau_l(u_i) + rho_max rho_l(u_i)
-#' sum_g beta_gl(u_i) mean_{j in N_g(i)} zhat_jl,}
+#' sum_g beta_gl(u_i) mean_{j in N_g(i)} (zhat_jl - tau_l(u_j)),}
 #' where \eqn{\tau_l(u)} is the trend (included when `trend = TRUE`, the
 #' default; it is a constant offset of the prior mean and does not change the
 #' determinant of the simultaneous system),
@@ -55,6 +55,9 @@
 #' @param trend Logical. Add a component-specific trend \eqn{\tau_l(u)} (a
 #'   neural network of the auxiliary variables, as the mean of [iVAE()]) to
 #'   the prior mean? See Details.
+#' @param detach_neighbors Logical. Stop the gradient through the encoded
+#'   neighbours, so that the encoder is trained only through the row's own
+#'   observation (the neighbours act as fixed inputs of the prior).
 #' @param jacobian Log-determinant term of the simultaneous autoregressive
 #'   prior: `"none"` (default; the objective then omits \eqn{\log|\det(I -
 #'   B)|} and is exact only for acyclic graphs such as a directed time graph),
@@ -82,7 +85,7 @@
 #' @export
 GiVAE <- function(x, graphs, aux = NULL, K = 10L, latent_dim = NULL,
                   coords = NULL, time = NULL, group = NULL, vars = NULL,
-                  rho_max = 0.99, trend = TRUE, max_neighbors = NULL,
+                  rho_max = 0.99, trend = TRUE, detach_neighbors = FALSE, max_neighbors = NULL,
                   jacobian = c("none", "exact", "stochastic"),
                   jacobian_terms = 30L, jacobian_probes = 2L,
                   jacobian_max_exact = 1500L,
@@ -119,6 +122,6 @@ GiVAE <- function(x, graphs, aux = NULL, K = 10L, latent_dim = NULL,
     jacobian = jacobian, jacobian_terms = as.integer(jacobian_terms),
     jacobian_probes = as.integer(jacobian_probes),
     jacobian_max_exact = as.integer(jacobian_max_exact),
-    trend = trend
+    trend = trend, detach_neighbors = detach_neighbors
   )
 }

@@ -281,11 +281,9 @@ test_that("spatial input formats give outputs in the same format", {
   ic <- components(fit)
   expect_s3_class(ic, "sf")
   expect_equal(nrow(ic), nrow(P))
-  pdf(NULL)
-  on.exit(grDevices::dev.off())
-  expect_silent(plot(fit))
-  expect_silent(plot(fit, "series", series = 2))
-  expect_silent(plot(fit, "history"))
+  expect_s3_class(plot(fit), "ggplot")
+  expect_s3_class(plot(fit, "series", series = 2), "ggplot")
+  expect_s3_class(plot(fit, "history"), "ggplot")
 })
 
 test_that("mshap gives scaled mean absolute SHAP values", {
@@ -307,9 +305,7 @@ test_that("mshap gives scaled mean absolute SHAP values", {
   expect_equal(unname(rowSums(ms$shap[[1]]) + ms$kernelshap$baseline[1]),
                unname(pred[, 1]), tolerance = 1e-3)
   expect_output(print(ms), "Average")
-  pdf(NULL)
-  on.exit(grDevices::dev.off())
-  expect_silent(plot(ms))
+  expect_s3_class(plot(ms), "ggplot")
   expect_error(mshap(TCL(d$x, epochs = 1, verbose = 0)), "iVAE")
 })
 
@@ -328,10 +324,8 @@ test_that("the number of latent components can be selected by pAIC", {
   expect_equal(pAIC(sel$models[[2]]), sel$models[[2]]$elbo - 2)
   expect_equal(pAIC(sel$models), sel$table$pAIC)
   expect_output(print(sel), "Selected")
-  pdf(NULL)
-  on.exit(grDevices::dev.off())
-  expect_silent(plot(sel))
-  expect_silent(plot(sel, which = "pAIC"))
+  expect_s3_class(plot(sel), "ggplot")
+  expect_s3_class(plot(sel, which = "pAIC"), "ggplot")
 
   other <- iVAE(x, aux_coords(), latent_dim = 2, time = 1:400, epochs = 1,
                 verbose = 0)

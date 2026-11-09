@@ -24,10 +24,10 @@
 
 \item{col}{Colour palette.}
 
-\item{...}{Further graphical parameters passed to \code{\link[graphics:image]{graphics::image()}}.}
+\item{...}{Further arguments passed to \code{\link[ggplot2:geom_tile]{ggplot2::geom_tile()}}.}
 }
 \value{
-\code{x}, invisibly.
+A \code{ggplot} object.
 }
 \description{
 Shows the (scaled) mean absolute SHAP values of \code{\link[=mshap]{mshap()}} as a heatmap with

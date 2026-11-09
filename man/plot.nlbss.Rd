@@ -29,19 +29,24 @@ Defaults to the last time point.}
 
 \item{unscaled}{Logical. Plot the unstandardised components?}
 
-\item{...}{Further graphical parameters passed to \code{\link[=plot]{plot()}}.}
+\item{...}{Further arguments passed to the main geom of the plot
+(\code{\link[ggplot2:geom_line]{ggplot2::geom_line()}}, \code{\link[ggplot2:geom_point]{ggplot2::geom_point()}} or \code{\link[ggplot2:geom_sf]{ggplot2::geom_sf()}}).}
 }
 \value{
-\code{x}, invisibly.
+A \code{ggplot} object, which can be modified with the usual ggplot2
+functions.
 }
 \description{
-Plots the estimated latent components or the training history.
+Plots the estimated latent components or the training history with
+ggplot2.
 }
 \details{
 \code{type = "series"} plots the components against time (or the observation
 index); for data with several series (locations or groups), the series
 given by \code{series} is shown. \code{type = "map"} shows the components at the
 spatial locations, at the time point given by \code{time} for spatio-temporal
-data. \code{type = "history"} plots the loss for each epoch. The default
-\code{"auto"} uses a map for spatial data and series otherwise.
+data. Polygon data (an \code{sf} object with areal units, or \code{STFDF} data with
+polygons) are drawn as a choropleth, point data as coloured points.
+\code{type = "history"} plots the loss for each epoch. The default \code{"auto"}
+uses a map for spatial data and series otherwise.
 }

@@ -17,7 +17,11 @@ test_that("matrices and data frames are converted", {
 test_that("time series formats are converted and restored", {
   x <- ts(matrix(rnorm(30), 10), start = c(2020, 1), frequency = 12)
   d <- NonlinearBSS:::nlbss_data(x)
-  expect_equal(d$time, as.numeric(time(x)))
+  expect_equal(diff(d$time), rep(1, 9))
+  expect_equal(d$time %% 12, (0:9 + 0) %% 12)
+  xx <- zoo::zoo(matrix(rnorm(20), 10), as.Date("2024-01-31") + 30.4375 * 0:9)
+  expect_equal(diff(NonlinearBSS:::nlbss_data(xx)$time), rep(1, 9),
+               tolerance = 0.05)
   expect_s3_class(NonlinearBSS:::restore_format(d, d$X), "ts")
 
   skip_if_not_installed("xts")

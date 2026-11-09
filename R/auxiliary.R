@@ -33,6 +33,13 @@ new_aux <- function(type, ...) {
 #' season number. `week_component = TRUE` adds indicators for the day of the
 #' week.
 #'
+#' Time points taken from the index of a time series object (`ts`, `zoo`,
+#' `xts`, `tsibble`, `sftime`, `STFDF`) are measured in observation steps (one
+#' step is the sampling interval, for example a month), as the time points
+#' `1, 2, ...` of a matrix. The same specification therefore gives the same
+#' auxiliary variables for all data formats. Time points given with `time` are
+#' used as such.
+#'
 #' @param size Segment sizes, a single value or one value per dimension
 #'   (spatial dimensions first, then time). For time series this is the
 #'   segment length in time units.

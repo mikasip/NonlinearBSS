@@ -34,6 +34,9 @@ test_that("GiVAE fits with a spatial and a directed temporal graph", {
   fit0 <- GiVAE(x, graphs, K = c(4, 3), latent_dim = 3, epochs = 1,
                 batch_size = 32, verbose = 0, seed = 1, trend = FALSE)
   expect_null(fit0$prior$mean)
+  fit1 <- GiVAE(x, graphs, K = c(4, 3), latent_dim = 3, epochs = 1,
+                batch_size = 32, verbose = 0, seed = 1, detach_neighbors = TRUE)
+  expect_true(is.finite(fit1$elbo))
   expect_error(predict(fit0, type = "trend"), "not available")
 
   # default auxiliary data are Laplacian eigenvectors, one block per graph

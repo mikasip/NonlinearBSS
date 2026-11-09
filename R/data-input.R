@@ -44,9 +44,13 @@ as_nlbss_data.ts <- function(x, coords = NULL, time = NULL, group = NULL,
   X <- matrix(unclass(x), ncol = NCOL(x))
   colnames(X) <- if (is.null(colnames(x))) "Series 1" else colnames(x)
   X <- select_vars(X, vars)
-  if (is.null(time)) time <- as.numeric(stats::time(x))
-  new_nlbss_data(X, coords = coords, time_raw = time, group = group,
-                 format = "ts", template = list(tsp = stats::tsp(x)))
+  default_time <- is.null(time)
+  if (default_time) time <- as.numeric(stats::time(x))
+  dat <- new_nlbss_data(X, coords = coords, time_raw = time, group = group,
+                        format = "ts", template = list(tsp = stats::tsp(x)))
+  # time in observation steps (not years), as for matrices
+  if (default_time) dat$time <- round(time * stats::frequency(x), 8)
+  dat
 }
 
 #' @export
@@ -56,10 +60,13 @@ as_nlbss_data.zoo <- function(x, coords = NULL, time = NULL, group = NULL,
   if (is.null(colnames(X))) colnames(X) <- paste0("X", seq_len(ncol(X)))
   X <- select_vars(X, vars)
   index <- zoo::index(x)
-  if (is.null(time)) time <- index
+  default_time <- is.null(time)
+  if (default_time) time <- index
   format <- if (inherits(x, "xts")) "xts" else "zoo"
-  new_nlbss_data(X, coords = coords, time_raw = time, group = group,
-                 format = format, template = list(index = index))
+  dat <- new_nlbss_data(X, coords = coords, time_raw = time, group = group,
+                        format = format, template = list(index = index))
+  if (default_time) dat$time <- index_steps(time)
+  dat
 }
 
 #' @export
@@ -68,7 +75,8 @@ as_nlbss_data.tbl_ts <- function(x, coords = NULL, time = NULL, group = NULL,
   require_pkg("tsibble")
   index <- tsibble::index_var(x)
   keys <- tsibble::key_vars(x)
-  if (is.null(time)) time <- index
+  default_time <- is.null(time)
+  if (default_time) time <- index
   if (is.null(group) && length(keys) > 0) group <- keys
   df <- as.data.frame(x)
   if (is.null(vars)) {
@@ -79,6 +87,7 @@ as_nlbss_data.tbl_ts <- function(x, coords = NULL, time = NULL, group = NULL,
                      aux_cols = aux_cols)
   dat$template$index <- index
   dat$template$keys <- keys
+  if (default_time) dat$time <- index_steps(dat$time_raw)
   dat
 }
 
@@ -90,13 +99,16 @@ as_nlbss_data.sf <- function(x, coords = NULL, time = NULL, group = NULL,
   df <- sf::st_drop_geometry(x)
   if (is.null(coords)) coords <- sf_coordinates(geometry)
   format <- "sf"
+  default_time <- FALSE
   if (inherits(x, "sftime")) {
     format <- "sftime"
     time_column <- attr(x, "time_column")
-    if (is.null(time)) time <- time_column
+    default_time <- is.null(time)
+    if (default_time) time <- time_column
   }
   dat <- df_to_nlbss(as.data.frame(df), coords, time, group, vars,
                      format = format, aux_cols = aux_cols)
+  if (default_time) dat$time <- index_steps(dat$time_raw)
   dat$template$geometry <- geometry
   if (format == "sftime") dat$template$time_column <- time_column
   dat
@@ -112,10 +124,12 @@ as_nlbss_data.STFDF <- function(x, coords = NULL, time = NULL, group = NULL,
   if (is.null(coords)) {
     coords <- sp::coordinates(x@sp)[rep(seq_len(n_s), n_t), , drop = FALSE]
   }
-  if (is.null(time)) time <- rep(zoo::index(x@time), each = n_s)
+  default_time <- is.null(time)
+  if (default_time) time <- rep(zoo::index(x@time), each = n_s)
   df <- as.data.frame(x@data)
   dat <- df_to_nlbss(df, coords, time, group, vars, format = "STFDF",
                      aux_cols = aux_cols)
+  if (default_time) dat$time <- index_steps(dat$time_raw)
   dat$template$sp <- x@sp
   dat$template$time <- x@time
   dat$template$endTime <- x@endTime
@@ -209,6 +223,24 @@ time_to_numeric <- function(t) {
     stop("Time points must be numeric, Date or POSIXct.", call. = FALSE)
   }
   out
+}
+
+# Time points measured in observation steps (one step = the regular sampling
+# interval of the index), so that the units of the auxiliary variables do not
+# depend on the data class. Calendar intervals are snapped to a fixed length
+# (a month is always 30.4375 days) so that new data get consistent time points.
+index_steps <- function(t_raw) {
+  t <- time_to_numeric(t_raw)
+  d <- diff(sort(unique(t)))
+  if (length(d) == 0) return(t)
+  step <- stats::median(d)
+  if (inherits(t_raw, c("Date", "POSIXt"))) {
+    units <- c(hour = 1 / 24, day = 1, week = 7, month = 30.4375,
+               quarter = 91.3125, year = 365.25)
+    near <- which(abs(step / units - 1) < 0.1)
+    if (length(near) > 0) step <- units[[near[1]]]
+  }
+  t / step
 }
 
 weekday_of <- function(t_raw, t_num) {

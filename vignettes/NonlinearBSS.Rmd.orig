@@ -1,6 +1,6 @@
 ---
 title: "Introduction to NonlinearBSS"
-output: rmarkdown::html_vignette
+output: pdf_document
 vignette: >
   %\VignetteIndexEntry{Introduction to NonlinearBSS}
   %\VignetteEngine{knitr::rmarkdown}
@@ -12,8 +12,9 @@ TensorFlow. Edit NonlinearBSS.Rmd.orig and run vignettes/precompile.R. -->
 
 ```{r setup, include = FALSE}
 library(NonlinearBSS)
-knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 7,
-                      fig.height = 5, fig.path = "figures/", dpi = 72)
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", fig.width = 5,
+                      fig.height = 3, fig.path = "figures/", dpi = 120,
+                      out.width = "100%")
 ```
 
 In nonlinear blind source separation the observed $p$-variate data $x$ are
@@ -23,14 +24,16 @@ from $x$. Without further assumptions this is impossible, but nonstationarity
 of the components over time or space, or temporal dependence, makes them
 identifiable.
 
-The package contains four methods:
+This vignette illustrates three methods:
 
-* `TCL()`: time contrastive learning for time series,
 * `VAE()`: a variational autoencoder for i.i.d. data (a baseline; not
   identifiable),
 * `iVAE()`: the identifiable variational autoencoder for any data with
   auxiliary variables,
 * `iVAEar()`: iVAE with nonstationary autoregressive latent components.
+
+All plots of the package are made with **ggplot2** and return
+`ggplot` objects that can be modified further.
 
 The models are fitted with TensorFlow through **keras3**. Install it once
 with `keras3::install_keras()` and check the setup with `tf_available()`.
@@ -57,8 +60,7 @@ A <- aux_matrix(aux_segments(100), x, time = 1:3000)
 dim(A)
 ```
 
-Radial basis functions give a smooth alternative and are the default for data
-with coordinates or time points:
+Radial basis functions give a smooth and more flexible alternative:
 
 ```{r}
 A <- aux_matrix(aux_rbf(temporal_basis = c(9, 17, 37)), x, time = 1:3000)
@@ -68,16 +70,29 @@ dim(A)
 ## Fitting iVAE
 
 ```{r}
-fit <- iVAE(x, aux_segments(100), time = 1:3000, epochs = 50,
+fit <- iVAE(x, aux_rbf(temporal_basis = c(9, 17, 37)), time = 1:3000, epochs = 50,
             verbose = 0, seed = 1)
 fit
 absolute_mean_correlation(fit$S, src$sources)
+```
+
+For comparison, the plain `VAE()` has no auxiliary variables. It is a
+baseline whose components are not identifiable in general, so its recovery
+is not guaranteed:
+
+```{r}
+fit_vae <- VAE(x, latent_dim = 3, epochs = 50, verbose = 0, seed = 1)
+absolute_mean_correlation(fit_vae$S, src$sources)
 ```
 
 The mean correlation coefficient compares the estimates with the true
 components up to permutation and sign; 1 means perfect recovery. The
 components are stored as `fit$S` and are returned in the format of the data
 by `components()`.
+
+```{r}
+head(components(fit))
+```
 
 ## Choosing the number of latent components
 
@@ -100,7 +115,7 @@ sel
 The ELBO increases steeply until the true number of components and stays
 nearly constant after that:
 
-```{r dimsel, fig.height = 4}
+```{r dimsel, fig.height = 3}
 plot(sel)
 ```
 
@@ -115,58 +130,121 @@ auxiliary variables and `error_dist_sigma`.
 Time series objects (`ts`, `xts`, `zoo`, `tsibble`) can be used directly, and
 the results are returned in the same format.
 
+The time points of these objects are measured in observation steps (here
+months), as for matrices, so the auxiliary variables are specified in the same
+way for all data formats:
+
 ```{r}
-xt <- ts(x, start = c(2000, 1), frequency = 12)
-tcl <- TCL(xt, n_segments = 30, epochs = 50, verbose = 0, seed = 1)
-class(components(tcl))
-absolute_mean_correlation(tcl$S, src$sources)
+xt <- ts(x, start = c(1800, 1), frequency = 12)
+fit_ts <- iVAE(xt, aux_segments(100), epochs = 50, verbose = 0, seed = 1)
+class(components(fit_ts))
+absolute_mean_correlation(fit_ts$S, src$sources)
 ```
+
+```{r ts-components, fig.height = 3}
+plot(fit_ts)
+```
+
+## A second simulated example: spatio-temporal data
+
+`simulate_sources()` also creates spatio-temporal components, with
+nonstationarity over space and time and, optionally, autoregressive
+dependence. Here three latent components are observed at 60 random locations 
+and at 40 time points, and the three components are mixed
+into five observed variables with a two-layer random mixing function:
+
+```{r st-sim}
+set.seed(1)
+n_s <- 60
+n_t <- 100
+xy <- cbind(lon = runif(n_s), lat = runif(n_s))
+coords <- xy[rep(seq_len(n_s), n_t), ]
+time <- rep(seq_len(n_t), each = n_s)
+src_st <- simulate_sources(3, coords = coords, time = time,
+                           n_segments_space = 6, n_segments_time = 5,
+                           ar_range = c(0.3, 0.9))
+x_st <- mix_data(src_st$sources, n_layers = 2, output_dim = 5)
+dat <- data.frame(x_st, coords, time = time)
+vars_st <- colnames(x_st)
+```
+
+The data frame is used with the names of the coordinate, time and variable
+columns. The radial basis functions of `aux_rbf()` are the auxiliary
+variables. `VAE()` ignores the coordinates and times, `iVAE()` treats the
+observations as independent given the auxiliary variables, and `iVAEar()` also
+models the autoregressive dependence:
+
+```{r st-fit}
+aux <- aux_rbf(spatial_basis = c(2, 9), temporal_basis = c(9, 17))
+fit_st_vae <- VAE(dat[vars_st], latent_dim = 3, epochs = 60, verbose = 0, seed = 1)
+fit_st_ivae <- iVAE(dat, aux, coords = c("lon", "lat"), time = "time",
+                    vars = vars_st, latent_dim = 3, epochs = 60, verbose = 0,
+                    seed = 1)
+fit_st_ar <- iVAEar(dat, aux, coords = c("lon", "lat"), time = "time",
+                    vars = vars_st, latent_dim = 3, epochs = 60, verbose = 0,
+                    seed = 1)
+sapply(list(VAE = fit_st_vae, iVAE = fit_st_ivae, iVAEar = fit_st_ar),
+       function(f) absolute_mean_correlation(f$S, src_st$sources))
+```
+
+The estimated components as a map at the last time point, and as a time
+series at the first location:
+
+```{r st-map, fig.height = 3}
+plot(fit_st_ar)
+```
+
+```{r st-series, fig.height = 4}
+plot(fit_st_ar, type = "series", series = 1)
+```
+
+Since the result is a `ggplot` object, it can be customised with the usual
+ggplot2 functions, for example `plot(fit_st_ar) + ggplot2::ggtitle("iVAEar")`.
 
 ## Spatio-temporal data
 
 The data set `pollution_northern_italy` contains daily air quality
-measurements at 50 stations. We use January to May 2020 for training and
-June 2020 for validation, and keep five stations aside to test spatial
+measurements at 50 stations. Here, the observations from January 2020 to April 2022 
+are used for training,
+May 2022 as forecasting test data. Five stations are set aside to test spatial
 interpolation. The data frame is used with the column names of the
 coordinates, time points and variables.
 
 ```{r}
-P <- subset(pollution_northern_italy, time < as.Date("2020-07-01"))
-stations <- unique(P$AirQualityStation)
+train_subset_time <- subset(pollution_northern_italy, time < as.Date("2022-05-01"))
+stations <- unique(train_subset_time$AirQualityStation)
 set.seed(2)
 test_stations <- sample(stations, 5)
-P_obs <- subset(P, !AirQualityStation %in% test_stations)
-train <- subset(P_obs, time < as.Date("2020-06-01"))
-valid <- subset(P_obs, time >= as.Date("2020-06-01"))
+train_subset <- subset(train_subset_time, !AirQualityStation %in% test_stations)
 vars <- c("mean_O3", "mean_NO2", "mean_PM10")
 ```
 
-`iVAEar()` models the components as nonstationary autoregressive processes.
-The training is monitored on the validation period and stopped when the
-validation loss no longer improves.
+`iVAEar()` models the components as nonstationary autoregressive processes. 
+The model is trained for 30 epochs with RBF auxiliary variables. 
+The temporal RBFs are formed based on the seasonal time point (1 to 365)
+instead of the absolute time point in order to allow the model to generalize better to future.
 
 ```{r}
-fit <- iVAEar(train, aux = aux_rbf(spatial_basis = c(2, 5),
-                                   temporal_basis = c(5, 9, 17)),
+fit <- iVAEar(train_subset, aux = aux_rbf(spatial_basis = c(2, 9),
+                                   temporal_basis = c(9, 17), seasonal_period = 365),
+              aux_hidden_units = c(16),
               coords = c("Longitude", "Latitude"), time = "time", vars = vars,
-              validation_data = valid, epochs = 100, verbose = 0, seed = 1,
-              callbacks = list(keras3::callback_early_stopping(
-                patience = 10, restore_best_weights = TRUE)))
+              epochs = 30, verbose = 0, seed = 1)
 summary(fit)
 ```
 
-```{r history, fig.height = 4}
+```{r history, fig.height = 3}
 plot(fit, type = "history")
 ```
 
 The components can be shown as maps at a given day, or as time series at a
 station:
 
-```{r maps}
-plot(fit, time = as.Date("2020-04-01"))
+```{r maps, fig.height = 3}
+plot(fit, time = as.Date("2022-04-01"))
 ```
 
-```{r series}
+```{r series, fig.height = 4}
 plot(fit, type = "series", series = 1)
 ```
 
@@ -176,37 +254,48 @@ The trend, variance and autoregressive coefficient functions can be
 evaluated anywhere, and the components can be forecast from their last
 values by iterating the autoregressive prior. With `space = "data"` the
 predicted components are decoded to the observed variables. Here we
-forecast the first week of June, one to seven days after the end of the
+forecast the first week of May 2022, one to seven days after the end of the
 training data:
 
 ```{r}
-first_week <- subset(valid, time < as.Date("2020-06-08"))
-fc <- predict(fit, first_week, type = "forecast",
+test_time <- subset(pollution_northern_italy, 
+                     time < as.Date("2022-05-08") & time > as.Date("2022-04-30"))
+pred_time <- predict(fit, test_time, type = "forecast",
               coords = c("Longitude", "Latitude"), time = "time",
               space = "data")
-head(fc)
+head(pred_time)
 ```
 
 The mean absolute error of the ozone forecasts by forecast day, compared
-with the standard deviation of ozone in June:
+with the standard deviation of ozone in the test period:
 
 ```{r}
-err <- abs(fc$mean_O3 - first_week$mean_O3)
-round(tapply(err, first_week$time, mean), 1)
-round(sd(valid$mean_O3), 1)
+round(c(MAE = mean(abs(pred_time$mean_O3 - test_time$mean_O3)),
+        sd = sd(test_time$mean_O3)), 1)
 ```
 
 Spatial interpolation uses the trend function at the locations of the five
 stations not used in fitting:
 
 ```{r}
-test <- subset(P, AirQualityStation %in% test_stations &
-                 time < as.Date("2020-06-01"))
-interp <- predict(fit, test, type = "trend",
+test_space <- subset(train_subset_time, AirQualityStation %in% test_stations)
+pred_space <- predict(fit, test_space, type = "trend",
                   coords = c("Longitude", "Latitude"), time = "time",
                   space = "data")
-round(c(MAE = mean(abs(interp$mean_O3 - test$mean_O3)),
-        sd = sd(test$mean_O3)), 1)
+round(c(MAE = mean(abs(pred_space$mean_O3 - test_space$mean_O3)),
+        sd = sd(test_space$mean_O3)), 1)
+```
+
+The predictions can be made also to future time points of new stations 
+by using the trend function:
+```{r}
+test_space_time <- subset(pollution_northern_italy, AirQualityStation %in% test_stations &
+                          time < as.Date("2022-05-08") & time > as.Date("2022-04-30"))
+pred_space_time <- predict(fit, test_space_time, type = "trend",
+                  coords = c("Longitude", "Latitude"), time = "time",
+                  space = "data")
+round(c(MAE = mean(abs(pred_space_time$mean_O3 - test_space_time$mean_O3)),
+        sd = sd(test_space_time$mean_O3)), 1)              
 ```
 
 ## Interpretation
@@ -222,20 +311,32 @@ ms <- mshap(fit, n_sample = 500, n_background = 50, seed = 1)
 ms
 ```
 
-```{r mshap, fig.height = 4}
+```{r mshap, fig.height = 3}
 plot(ms)
 ```
 
 ## Spatial data formats
 
 With an `sf` or `sftime` object the coordinates and time points are taken
-from the object, and the results are again `sf` objects.
+from the object, and the results are again `sf` objects. For points, the
+coordinates are those of the geometry:
 
-```{r}
-s <- sf::st_as_sf(train, coords = c("Longitude", "Latitude"), crs = 4326)
-fit_sf <- iVAE(s, aux_rbf(c(2, 5), c(5, 9)), time = "time", vars = vars,
-               epochs = 10, verbose = 0, seed = 1)
+```{r sf-points}
+s <- sf::st_as_sf(dat, coords = c("lon", "lat"))
+fit_sf <- iVAEar(s, aux, time = "time", vars = vars_st, latent_dim = 3,
+                 epochs = 60, verbose = 0, seed = 1)
 head(components(fit_sf), 3)
+```
+
+Spatio-temporal objects of the **sp** and **spacetime** packages (`STFDF`)
+are also accepted, and the results are returned as `STFDF` objects:
+
+```{r stfdf, eval = requireNamespace("spacetime", quietly = TRUE) && requireNamespace("sp", quietly = TRUE)}
+sp_pts <- sp::SpatialPoints(xy)
+st <- spacetime::STFDF(sp_pts, as.POSIXct("2020-01-01", tz = "UTC") + 86400 * (seq_len(n_t) - 1),
+                       data.frame(x_st))
+fit_stfdf <- iVAEar(st, aux, latent_dim = 3, epochs = 20, verbose = 0, seed = 1)
+class(components(fit_stfdf))
 ```
 
 ## Large data
@@ -262,12 +363,6 @@ save_nlbss(fit, file)
 fit2 <- load_nlbss(file)
 all.equal(predict(fit2, type = "trend"), predict(fit, type = "trend"))
 ```
-
-## Migrating from version 0.1.0
-
-The specialised functions of version 0.1.0, such as `iVAEar_radial()` and
-`predict_coords_to_IC_ar()`, are replaced by the interface described here.
-The `NEWS.md` file of the package has a table of the old and new calls.
 
 ## References
 

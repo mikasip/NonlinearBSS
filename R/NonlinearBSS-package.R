@@ -62,7 +62,8 @@
 
 #' @importFrom Rdpack reprompt
 #' @importFrom stats predict fitted sd runif rnorm cor
-#' @importFrom graphics par plot lines legend mtext image axis box
+#' @importFrom graphics plot
+#' @importFrom ggplot2 .data
 #' @importFrom grDevices hcl.colors
 #' @importFrom utils globalVariables
 NULL

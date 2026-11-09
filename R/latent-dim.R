@@ -160,18 +160,20 @@ print.latent_dim_selection <- function(x, digits = 4, ...) {
 #' @param x An object returned by [latent_dim_selection()] or
 #'   [select_latent_dim()].
 #' @param which The criterion to plot, `"elbo"` or `"pAIC"`.
-#' @param ... Further graphical parameters passed to [plot()].
-#' @return `x`, invisibly.
+#' @param ... Further arguments passed to [ggplot2::geom_line()].
+#' @return A `ggplot` object.
 #' @export
 plot.latent_dim_selection <- function(x, which = c("elbo", "pAIC"), ...) {
   which <- match.arg(which)
   tab <- x$table
-  y <- tab[[which]]
-  plot(tab$latent_dim, y, type = "b", pch = 19, xaxt = "n",
-       xlab = "Number of latent components",
-       ylab = if (which == "elbo") "ELBO" else "pAIC", ...)
-  axis(1, at = tab$latent_dim)
-  sel <- tab$latent_dim == x$selected
-  graphics::points(tab$latent_dim[sel], y[sel], col = "red", pch = 19, cex = 1.8)
-  invisible(x)
+  d <- data.frame(latent_dim = tab$latent_dim, value = tab[[which]])
+  ggplot2::ggplot(d, ggplot2::aes(.data$latent_dim, .data$value)) +
+    ggplot2::geom_line(colour = "grey40", ...) +
+    ggplot2::geom_point(size = 2.5, colour = "grey40") +
+    ggplot2::geom_point(data = d[d$latent_dim == x$selected, ],
+                        size = 4.5, colour = "#d7301f") +
+    ggplot2::scale_x_continuous(breaks = d$latent_dim) +
+    ggplot2::labs(x = "Number of latent components",
+                  y = if (which == "elbo") "ELBO" else "pAIC") +
+    theme_nlbss()
 }

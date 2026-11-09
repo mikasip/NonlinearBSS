@@ -182,15 +182,18 @@ print.summary.nlbss <- function(x, digits = 3, ...) {
 
 #' Plot a Nonlinear BSS Model
 #'
-#' Plots the estimated latent components or the training history.
+#' Plots the estimated latent components or the training history with
+#' ggplot2.
 #'
 #' @details
 #' `type = "series"` plots the components against time (or the observation
 #' index); for data with several series (locations or groups), the series
 #' given by `series` is shown. `type = "map"` shows the components at the
 #' spatial locations, at the time point given by `time` for spatio-temporal
-#' data. `type = "history"` plots the loss for each epoch. The default
-#' `"auto"` uses a map for spatial data and series otherwise.
+#' data. Polygon data (an `sf` object with areal units, or `STFDF` data with
+#' polygons) are drawn as a choropleth, point data as coloured points.
+#' `type = "history"` plots the loss for each epoch. The default `"auto"`
+#' uses a map for spatial data and series otherwise.
 #'
 #' @param x A fitted model from [iVAE()], [iVAEar()], [VAE()] or [TCL()].
 #' @param type The type of plot, see Details.
@@ -200,15 +203,17 @@ print.summary.nlbss <- function(x, digits = 3, ...) {
 #' @param series For series plots of data with several series, the series
 #'   (location index or group) to show. Defaults to the first one.
 #' @param unscaled Logical. Plot the unstandardised components?
-#' @param ... Further graphical parameters passed to [plot()].
-#' @return `x`, invisibly.
+#' @param ... Further arguments passed to the main geom of the plot
+#'   ([ggplot2::geom_line()], [ggplot2::geom_point()] or [ggplot2::geom_sf()]).
+#' @return A `ggplot` object, which can be modified with the usual ggplot2
+#'   functions.
 #' @export
 plot.nlbss <- function(x, type = c("auto", "series", "map", "history"),
                        which = seq_len(x$latent_dim), time = NULL,
                        series = NULL, unscaled = FALSE, ...) {
   type <- match.arg(type)
   if (type == "auto") type <- if (!is.null(x$data$coords)) "map" else "series"
-  if (type == "history") return(invisible(plot_history(x, ...)))
+  if (type == "history") return(plot_history(x, ...))
   IC <- if (unscaled) x$S_unscaled else x$S
   IC <- IC[, which, drop = FALSE]
   if (type == "map") {
@@ -217,7 +222,6 @@ plot.nlbss <- function(x, type = c("auto", "series", "map", "history"),
   } else {
     plot_series(x, IC, series, ...)
   }
-  invisible(x)
 }
 
 plot_series <- function(x, IC, series, ...) {
@@ -228,54 +232,47 @@ plot_series <- function(x, IC, series, ...) {
   rows <- which(key == series)
   t <- if (is.null(x$data$time_raw)) rows else x$data$time_raw[rows]
   o <- order(t)
-  op <- par(mfrow = c(ncol(IC), 1), mar = c(2, 4, 1, 1), oma = c(2, 0, 0, 0))
-  on.exit(par(op))
-  for (j in seq_len(ncol(IC))) {
-    plot(t[o], IC[rows[o], j], type = "l", xlab = "", ylab = colnames(IC)[j], ...)
-  }
-  mtext(if (is.null(x$data$time_raw)) "Index" else "Time", side = 1,
-        outer = TRUE, line = 0.5)
+  d <- data.frame(time = rep(t[o], ncol(IC)),
+                  value = as.vector(IC[rows[o], , drop = FALSE]),
+                  component = factor(rep(colnames(IC), each = length(rows)),
+                                     levels = colnames(IC)))
+  ggplot2::ggplot(d, ggplot2::aes(.data$time, .data$value)) +
+    ggplot2::geom_line(colour = "#2c7fb8", ...) +
+    ggplot2::facet_wrap(ggplot2::vars(.data$component), ncol = 1,
+                        scales = "free_y", strip.position = "left") +
+    ggplot2::labs(x = if (is.null(x$data$time_raw)) "Index" else "Time",
+                  y = NULL) +
+    theme_nlbss() +
+    ggplot2::theme(strip.placement = "outside")
 }
 
 plot_map <- function(x, IC, time, ...) {
   rows <- seq_len(nrow(IC))
   if (!is.null(x$data$time)) {
-    t <- if (is.null(time)) max(x$data$time) else time_to_numeric(time)
-    rows <- which(x$data$time == t)
+    # a time given by the user is in the units of the original time points
+    rows <- if (is.null(time)) {
+      which(x$data$time == max(x$data$time))
+    } else {
+      raw <- if (is.null(x$data$time_raw)) x$data$time else x$data$time_raw
+      which(time_to_numeric(raw) == time_to_numeric(time))
+    }
     if (length(rows) == 0) stop("No observations at the given time point.", call. = FALSE)
   }
-  xy <- x$data$coords[rows, , drop = FALSE]
-  k <- ncol(IC)
-  nc <- ceiling(sqrt(k))
-  op <- par(mfrow = c(ceiling(k / nc), nc), mar = c(2, 2, 2, 1))
-  on.exit(par(op))
-  cols <- hcl.colors(64, "viridis")
-  for (j in seq_len(k)) {
-    v <- IC[rows, j]
-    r <- range(v)
-    if (diff(r) == 0) r <- r + c(-0.5, 0.5)
-    col_index <- function(u) pmin(64, pmax(1, floor((u - r[1]) / diff(r) * 63) + 1))
-    plot(xy[, 1], xy[, 2], col = cols[col_index(v)], pch = 19, asp = 1,
-         xlab = "", ylab = "", main = colnames(IC)[j], ...)
-    br <- pretty(r, 4)
-    br <- br[br >= r[1] & br <= r[2]]
-    legend("topright", legend = format(br), pch = 19, col = cols[col_index(br)],
-           bg = "white", cex = 0.8)
-  }
+  geometry <- row_geometry(x$data, rows)
+  map_plot(IC[rows, , drop = FALSE], geometry = geometry,
+           xy = x$data$coords[rows, 1:2, drop = FALSE], fill = "value", ...)
 }
 
 plot_history <- function(x, ...) {
   h <- x$history[x$history$metric == "loss", ]
-  tr <- h[h$data == "training", ]
-  va <- h[h$data == "validation", ]
-  ylim <- range(h$value, na.rm = TRUE)
-  plot(tr$epoch, tr$value, type = "l", xlab = "Epoch", ylab = "Loss",
-       ylim = ylim, ...)
-  if (nrow(va)) {
-    lines(va$epoch, va$value, lty = 2)
-    legend("topright", c("training", "validation"), lty = 1:2, bty = "n")
-  }
-  x
+  h$data <- factor(h$data, levels = unique(h$data))
+  p <- ggplot2::ggplot(h, ggplot2::aes(.data$epoch, .data$value,
+                                       linetype = .data$data)) +
+    ggplot2::geom_line(colour = "#2c7fb8", ...) +
+    ggplot2::labs(x = "Epoch", y = "Loss", linetype = NULL) +
+    theme_nlbss()
+  if (nlevels(h$data) < 2L) p <- p + ggplot2::guides(linetype = "none")
+  p
 }
 
 format_graph <- function(g) {

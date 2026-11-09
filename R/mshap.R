@@ -129,29 +129,32 @@ print.mshap <- function(x, digits = 3, ...) {
 #' @param values Logical. Print the values in the cells?
 #' @param digits Number of decimals of the printed values.
 #' @param col Colour palette.
-#' @param ... Further graphical parameters passed to [graphics::image()].
-#' @return `x`, invisibly.
+#' @param ... Further arguments passed to [ggplot2::geom_tile()].
+#' @return A `ggplot` object.
 #' @export
 plot.mshap <- function(x, scaled = TRUE, values = TRUE, digits = 2,
                        col = hcl.colors(50, "YlOrRd", rev = TRUE), ...) {
   M <- if (scaled) x$scaled else x$mshap
-  p <- nrow(M)
-  L <- ncol(M)
-  label_lines <- max(graphics::strwidth(rownames(M), units = "inches")) /
-    par("csi")
-  op <- par(mar = c(4, max(4, label_lines + 1.5), 2, 1))
-  on.exit(par(op))
-  image(seq_len(L), seq_len(p), t(M[p:1, , drop = FALSE]), col = col,
-        axes = FALSE, xlab = "", ylab = "",
-        main = if (scaled) "Scaled MSHAP" else "MSHAP", ...)
-  axis(1, at = seq_len(L), labels = colnames(M), las = 2, tick = FALSE)
-  axis(2, at = seq_len(p), labels = rev(rownames(M)), las = 1, tick = FALSE)
+  d <- data.frame(
+    variable = factor(rep(rownames(M), ncol(M)), levels = rev(rownames(M))),
+    component = factor(rep(colnames(M), each = nrow(M)), levels = colnames(M)),
+    value = as.vector(M))
+  p <- ggplot2::ggplot(d, ggplot2::aes(.data$component, .data$variable,
+                                       fill = .data$value)) +
+    ggplot2::geom_tile(colour = "white", ...) +
+    ggplot2::scale_fill_gradientn(colours = col, name = NULL) +
+    ggplot2::labs(x = NULL, y = NULL,
+                  title = if (scaled) "Scaled MSHAP" else "MSHAP") +
+    ggplot2::coord_fixed() +
+    theme_nlbss() +
+    ggplot2::theme(panel.grid = ggplot2::element_blank())
   if (values) {
-    graphics::text(rep(seq_len(L), each = p), rep(p:1, L),
-                   format(round(as.vector(M), digits), nsmall = digits),
-                   cex = 0.8,
-                   col = ifelse(as.vector(M) > mean(range(M)), "white", "black"))
+    d$label <- format(round(d$value, digits), nsmall = digits)
+    d$light <- d$value > mean(range(M))
+    p <- p + ggplot2::geom_text(
+      data = d, ggplot2::aes(label = .data$label, colour = .data$light),
+      size = 3, show.legend = FALSE) +
+      ggplot2::scale_colour_manual(values = c(`TRUE` = "white", `FALSE` = "black"))
   }
-  box()
-  invisible(x)
+  p
 }
