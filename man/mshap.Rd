@@ -67,12 +67,11 @@ the absolute contributions over the explained observations, see
 \insertCite{marcilio2020explanations;textual}{NonlinearBSS} for SHAP based
 variable importance.
 
-The scaled MSHAP values divide the values of each variable by their sum, so
+The scaled MSHAP values \insertCite{sipila2024spatial}{NonlinearBSS}
+divide the values of each variable by their sum, so
 that they give the relative contributions of the components to the
 variable and sum to one over the components. The components are ordered by
-their average scaled MSHAP over the variables if \code{reorder = TRUE}. This is
-the approach used to interpret the latent components of air pollution and
-weather data by \insertCite{sipila2026interpretable;textual}{NonlinearBSS}.
+their average scaled MSHAP over the variables if \code{reorder = TRUE}.
 
 Kernel SHAP is computationally heavy, so the values are computed for a
 random subsample of \code{n_sample} observations. By default, the background

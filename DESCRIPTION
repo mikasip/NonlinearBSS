@@ -8,29 +8,12 @@ Authors@R: c(
     person("Klaus", "Nordhausen", role = "aut",
            comment = c(ORCID = "0000-0002-3758-8501")),
     person("Sara", "Taskinen", role = "aut",
-           comment = c(ORCID = "0000-0001-9470-7258")))
-Description: Methods for nonlinear blind source separation (nonlinear
-    independent component analysis) based on deep neural networks:
-    time contrastive learning (Hyvärinen and Morioka, 2016,
-    <doi:10.48550/arXiv.1605.06336>), variational autoencoders (Kingma and
-    Welling, 2014, <doi:10.48550/arXiv.1312.6114>), identifiable
-    variational autoencoders (Khemakhem et al., 2020,
-    <doi:10.48550/arXiv.1907.04809>) and their spatial (Sipilä,
-    Nordhausen and Taskinen, 2024, <doi:10.1016/j.ins.2024.120365>),
-    spatio-temporal (Sipilä et al., 2025,
-    <doi:10.1016/j.neunet.2024.106774>) and autoregressive (Sipilä,
-    Nordhausen and Taskinen, 2025, <doi:10.1007/978-3-032-06109-6_21>)
-    extensions, including missing values and covariates (Sipilä et al.,
-    2026, <doi:10.1002/env.70121>), and tools for choosing the number of
-    latent components and interpreting them with Shapley values (Sipilä et
-    al., 2026, <doi:10.1016/j.spasta.2026.101054>). Data can be given as
-    matrices,
-    data frames, multivariate time series ('ts', 'xts', 'zoo', 'tsibble')
-    or spatial and spatio-temporal objects ('sf', 'sftime', 'STFDF').
-    Auxiliary variables such as spatial and temporal segmentations or
-    radial basis functions are constructed automatically, optionally
-    batch-wise inside the network to save memory. Models are fitted with
-    'keras3' and 'TensorFlow'.
+           comment = c(ORCID = "0000-0001-9470-7258")),
+    person("Claudia", "Cappello", role = "aut",
+           comment = c(ORCID = "0000-0002-7905-5068")),
+    person("Sandra", "De Iaco", role = "aut",
+           comment = c(ORCID = "0000-0003-1820-2068")))
+Description: Methods for nonlinear blind source separation (nonlinear independent component analysis) based on deep neural networks: time contrastive learning (Hyvärinen and Morioka, 2016, <doi:10.48550/arXiv.1605.06336>), variational autoencoders (Kingma and Welling, 2014, <doi:10.48550/arXiv.1312.6114>), identifiable variational autoencoders (Khemakhem et al., 2020, <doi:10.48550/arXiv.1907.04809>) and their spatial (Sipilä, Nordhausen and Taskinen, 2024, <doi:10.1016/j.ins.2024.120365>), spatio-temporal (Sipilä et al., 2025, <doi:10.1016/j.neunet.2024.106774>) and autoregressive (Sipilä, Nordhausen and Taskinen, 2025, <doi:10.1007/978-3-032-06109-6_21>) extensions, including missing values and covariates (Sipilä et al., 2026, <doi:10.1002/env.70121>), and tools for choosing the number of latent components and interpreting them with Shapley values (Sipilä et al., 2026, <doi:10.1016/j.spasta.2026.101054>). Data can be given as matrices, data frames, multivariate time series ('ts', 'xts', 'zoo', 'tsibble') or spatial and spatio-temporal objects ('sf', 'sftime', 'STFDF'). Auxiliary variables such as spatial and temporal segmentations or radial basis functions are constructed automatically, optionally batch-wise inside the network to save memory. Models are fitted with 'keras3' and 'TensorFlow'.
 License: GPL (>= 3)
 URL: https://github.com/mikasip/NonlinearBSS
 BugReports: https://github.com/mikasip/NonlinearBSS/issues
@@ -45,7 +28,7 @@ Imports:
     kernelshap,
     RcppHungarian,
     Rdpack,
-    reticulate,
+    reticulate,  
     stats,
     utils
 Suggests:

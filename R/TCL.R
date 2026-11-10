@@ -9,7 +9,7 @@
 #' consists of hidden layers, a linear feature layer with `latent_dim` units,
 #' an absolute value nonlinearity and a multinomial logistic regression
 #' layer. If the latent components have variances that change between the
-#' segments, the feature layer learns the latent components up to
+#' segments, the feature layer can learn the latent components up to
 #' componentwise transformations
 #' \insertCite{HyvarinenMorioka2016}{NonlinearBSS}.
 #'
