@@ -8,3 +8,8 @@
 ^Meta$
 ^vignettes/.*\.orig$
 ^vignettes/precompile\.R$
+^vignettes/NonlinearBSScopy\.Rmd$
+^vignettes/NonlinearBSScopy\.pdf$
+^vignettes/NonlinearBSS\.html$
+^vignettes/figures/sf-areal-.*\.png$
+^data/diseases_usa\.rda$
