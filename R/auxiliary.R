@@ -174,6 +174,47 @@ aux_covariates <- function(x, scale = TRUE) {
   new_aux("covariates", values = x, scale = isTRUE(scale))
 }
 
+#' Auxiliary Data Based on Moran Eigenvector Maps
+#'
+#' Specifies auxiliary variables from Moran's eigenvector maps (MEM), built
+#' from a symmetric spatial neighborhood matrix or adjacency list. This is
+#' intended for areal data where the auxiliary variation is driven by the
+#' connectivity graph rather than by coordinates.
+#'
+#' @param neighborhood A symmetric numeric matrix with one row and column per
+#'   areal unit. The matrix is interpreted as the adjacency/weight matrix and
+#'   is symmetrised internally if needed; do not row-standardise it.
+#' @param adj_list Optional list of neighbor indices with one element per areal
+#'   unit. Each entry should contain 1-based indices of adjacent units.
+#' @param K Number of MEM eigenvectors to retain.
+#' @param positive_only Keep only positive-eigenvalue MEMs? This is the usual
+#'   choice for spatial areal data where positive spatial autocorrelation is
+#'   expected.
+#' @return An object of class `aux_moran`.
+#' @seealso [aux_rbf()], [aux_segments()], [aux_covariates()]
+#' @examples
+#' n <- 10
+#' W <- matrix(0, n, n)
+#' W[cbind(1:n, c(2:n, 1))] <- 1
+#' W[cbind(1:n, c(n, 1:(n - 1)))] <- 1
+#' aux_moran(neighborhood = W, K = 3)
+#' @export
+aux_moran <- function(neighborhood = NULL, adj_list = NULL, K = 10L,
+                      positive_only = TRUE) {
+  if (is.null(neighborhood) && is.null(adj_list)) {
+    stop("Either `neighborhood` or `adj_list` must be supplied.", call. = FALSE)
+  }
+  if (!is.null(neighborhood) && !is.null(adj_list)) {
+    stop("Provide only one of `neighborhood` or `adj_list`.", call. = FALSE)
+  }
+  if (!is.null(neighborhood)) {
+    neighborhood <- as.matrix(neighborhood)
+    storage.mode(neighborhood) <- "double"
+  }
+  new_aux("moran", neighborhood = neighborhood, adj_list = adj_list,
+          K = as.integer(K), positive_only = isTRUE(positive_only))
+}
+
 #' @export
 print.nlbss_aux <- function(x, ...) {
   cat(format(x), sep = "\n")
@@ -192,7 +233,10 @@ format.nlbss_aux <- function(x, ...) {
     coords = "normalised coordinates",
     covariates = paste0("covariates", if (is.character(x$values))
       paste0(" (", paste(x$values, collapse = ", "), ")") else
-        paste0(" (", ncol(x$values), " columns)"))
+        paste0(" (", ncol(x$values), " columns)")),
+    moran = paste0("Moran eigenvector maps (K = ", x$K,")"),
+    laplacian = paste0("graph Laplacian eigenvectors (", length(x$graphs),
+                       " graph(s), K = ", paste(x$K, collapse = ", "), ")")
   )
   extra <- c(
     if (!is.null(x$seasonal_period)) paste0("seasonal period ", x$seasonal_period),
@@ -262,9 +306,27 @@ default_aux <- function(dat) {
 # mode the radial basis functions are not computed here; instead the raw
 # coordinates and time points are passed to the network.
 prepare_aux <- function(aux, dat, batch = FALSE) {
-  specs <- lapply(as_aux_list(aux), fit_aux, dat = dat)
+  specs <- lapply(as_aux_list(aux), function(s) {
+    if (inherits(s, "aux_moran")) {
+      fit_aux.aux_moran(s, dat)
+    } else if (inherits(s, "aux_laplacian")) {
+      fit_aux.aux_laplacian(s, dat)
+    } else {
+      fit_aux(s, dat)
+    }
+  })
   aux_inputs(list(specs = specs, batch = batch), dat, values = NULL,
              training = TRUE)
+}
+
+transform_aux_spec <- function(spec, dat, values, training) {
+  if (inherits(spec, "aux_moran")) {
+    transform_aux.aux_moran(spec, dat, values, training)
+  } else if (inherits(spec, "aux_laplacian")) {
+    transform_aux.aux_laplacian(spec, dat, values, training)
+  } else {
+    transform_aux(spec, dat, values, training)
+  }
 }
 
 aux_inputs <- function(prep, dat, values = NULL, training = FALSE) {
@@ -289,7 +351,7 @@ aux_inputs <- function(prep, dat, values = NULL, training = FALSE) {
     if (batch) {
       as.matrix(aux_raw_block(specs[[i]], dat, get_vals(i), training))
     } else {
-      as.matrix(transform_aux(specs[[i]], dat, get_vals(i), training))
+      as.matrix(transform_aux_spec(specs[[i]], dat, get_vals(i), training))
     }
   })
   raw <- do.call(cbind, blocks)
@@ -474,6 +536,118 @@ safe_range <- function(r) {
   r
 }
 
+adjacency_matrix <- function(adj_list, n = NULL) {
+  if (is.null(adj_list)) {
+    stop("`adj_list` must not be NULL.", call. = FALSE)
+  }
+  if (is.matrix(adj_list) || is.data.frame(adj_list)) {
+    W <- as.matrix(adj_list)
+    storage.mode(W) <- "double"
+    if (nrow(W) != ncol(W)) {
+      stop("The adjacency matrix must be square.", call. = FALSE)
+    }
+    return((W + t(W)) / 2)
+  }
+  if (!is.list(adj_list)) {
+    stop("`adj_list` must be a list or a square matrix.", call. = FALSE)
+  }
+  if (is.null(n)) n <- length(adj_list)
+  rows <- integer(0)
+  cols <- integer(0)
+  for (i in seq_len(n)) {
+    nbrs <- as.integer(adj_list[[i]])
+    if (length(nbrs) == 0L) next
+    if (any(nbrs < 1L | nbrs > n)) {
+      stop("Adjacency indices must be between 1 and the number of areal units.",
+           call. = FALSE)
+    }
+    rows <- c(rows, rep.int(i, length(nbrs)))
+    cols <- c(cols, nbrs)
+  }
+  W <- Matrix::sparseMatrix(i = rows, j = cols, x = 1.0, dims = c(n, n))
+  W <- (W + Matrix::t(W)) / 2
+  as.matrix(W)
+}
+
+compute_MEM_vectors <- function(adj_list, K = 10L, positive_only = TRUE) {
+  W <- adjacency_matrix(adj_list)
+  if (nrow(W) != ncol(W)) {
+    stop("The adjacency matrix must be square.", call. = FALSE)
+  }
+  if (!isSymmetric(W)) {
+    W <- (W + t(W)) / 2
+  }
+  W_tilde <- W - outer(rowMeans(W), rowMeans(W), "+") + mean(W)
+  eig <- eigen(W_tilde, symmetric = TRUE)
+  if (isTRUE(positive_only)) {
+    pos_idx <- which(eig$values > 1e-8)
+    if (length(pos_idx) == 0L) {
+      stop("No MEM vectors with positive eigenvalues were found.", call. = FALSE)
+    }
+    K <- min(as.integer(K), length(pos_idx))
+    sel_idx <- pos_idx[seq_len(K)]
+  } else {
+    ord <- order(abs(eig$values), decreasing = TRUE)
+    K <- min(as.integer(K), max(1L, nrow(W) - 1L))
+    sel_idx <- ord[seq_len(K)]
+  }
+  mem <- eig$vectors[, sel_idx, drop = FALSE]
+  for (k in seq_len(ncol(mem))) {
+    idx <- which.max(abs(mem[, k]))
+    if (mem[idx, k] < 0) mem[, k] <- -mem[, k]
+  }
+  colnames(mem) <- paste0("MEM_", seq_len(ncol(mem)))
+  values <- eig$values[sel_idx]
+  list(
+    mem = mem,
+    values = values,
+    moran_i = values / sum(W),
+    W_tilde = W_tilde
+  )
+}
+
+#' @export
+fit_aux.aux_moran <- function(spec, dat) {
+  if (is.null(spec$neighborhood) && is.null(spec$adj_list)) {
+    stop("The Moran auxiliary data are not fully specified.", call. = FALSE)
+  }
+  W <- if (!is.null(spec$neighborhood)) spec$neighborhood else {
+    adjacency_matrix(spec$adj_list, n = nrow(dat$X))
+  }
+  n_areal <- nrow(W)
+  n_obs <- nrow(dat$X)
+  if (n_obs != n_areal && (n_obs %% n_areal) != 0L) {
+    stop("The Moran neighborhood matrix must have one row and column per areal unit, or a repeated areal-by-time layout.",
+         call. = FALSE)
+  }
+  mem <- compute_MEM_vectors(W, K = spec$K, positive_only = spec$positive_only)
+  spec$mem <- mem$mem
+  spec$values <- mem$values
+  spec$moran_i <- mem$moran_i
+  spec$W_tilde <- mem$W_tilde
+  spec$n_features <- ncol(mem$mem)
+  spec$fitted <- TRUE
+  spec
+}
+
+#' @export
+transform_aux.aux_moran <- function(spec, dat, values, training) {
+  if (is.null(spec$mem)) {
+    stop("The Moran auxiliary variables have not been fitted yet.", call. = FALSE)
+  }
+  n_areal <- nrow(spec$mem)
+  n_obs <- nrow(dat$X)
+  if (n_obs == n_areal) {
+    return(spec$mem)
+  }
+  if (n_obs %% n_areal == 0L) {
+    reps <- n_obs / n_areal
+    return(spec$mem[rep(seq_len(n_areal), times = reps), , drop = FALSE])
+  }
+  stop("The new data must contain the same areal units as the fitted Moran auxiliary data.",
+       call. = FALSE)
+}
+
 # Radial basis functions ---------------------------------------------------
 
 elevation_values <- function(spec, dat, values, training) {
@@ -601,4 +775,157 @@ rbf_features <- function(spec, coords, time, weekday, elevation) {
   M <- do.call(cbind, feats)
   storage.mode(M) <- "double"
   M
+}
+
+# Auxiliary data from graph Laplacian eigenvectors.
+#
+# The eigenvectors are computed once per graph on the graph's own nodes and
+# then copied to the rows of the data according to the graph layout (see
+# graph.R), so a spatial graph of n_s areas and a temporal graph of n_t time
+# points can be combined for n = n_s * n_t rows. Like the Moran auxiliary
+# variables they depend on the whole graph and cannot be computed batch-wise.
+
+#' Auxiliary Data Based on Graph Laplacian Eigenvectors
+#'
+#' Specifies auxiliary variables formed by the `K` smoothest non-trivial
+#' eigenvectors (smallest non-zero Laplacian eigenvalues) of one or several
+#' graphs. Each graph contributes its own block of columns, and its
+#' eigenvectors are mapped to the observations with the layout of the graph,
+#' see [nlbss_graph()].
+#'
+#' @param graphs A graph specification [nlbss_graph()], a list of them, or a
+#'   matrix / adjacency list (one node per row of the data, or repeated over
+#'   the data with the default layout).
+#' @param K Number of eigenvectors: one value, used for every graph, or one
+#'   value per graph.
+#' @details The graph is symmetrised (an edge exists if either direction is
+#'   given). One zero-eigenvalue eigenvector per connected component is
+#'   dropped, since these are constant on components.
+#' @return An object of class `aux_laplacian`.
+#' @seealso [aux_moran()], [nlbss_graph()], [GiVAE()]
+#' @export
+aux_laplacian <- function(graphs, K = 10L) {
+  graphs <- as_graph_list(graphs)
+  K <- as.integer(K)
+  if (length(K) == 1L) K <- rep(K, length(graphs))
+  if (length(K) != length(graphs) || anyNA(K) || any(K < 1L)) {
+    stop("`K` must be a positive integer, or one per graph.", call. = FALSE)
+  }
+  new_aux("laplacian", graphs = graphs, K = K)
+}
+
+# Sparse symmetric binary adjacency matrix without self loops.
+graph_sparse_W <- function(adj) {
+  n <- length(adj)
+  lens <- lengths(adj)
+  W <- Matrix::sparseMatrix(i = rep(seq_len(n), lens), j = unlist(adj, use.names = FALSE),
+                            x = 1, dims = c(n, n))
+  W <- W + Matrix::t(W)
+  W@x[] <- 1
+  Matrix::diag(W) <- 0
+  Matrix::drop0(W)
+}
+
+count_components <- function(W) {
+  n <- nrow(W)
+  adj <- lapply(seq_len(n), function(i) {
+    W@i[W@p[i] + seq_len(W@p[i + 1L] - W@p[i])] + 1L   # empty for isolated nodes
+  })
+  comp <- integer(n)
+  k <- 0L
+  for (s in seq_len(n)) {
+    if (comp[s] != 0L) next
+    k <- k + 1L
+    comp[s] <- k
+    stack <- s
+    while (length(stack)) {
+      v <- stack[length(stack)]
+      stack <- stack[-length(stack)]
+      nb <- adj[[v]]
+      new <- nb[comp[nb] == 0L]
+      comp[new] <- k
+      stack <- c(stack, new)
+    }
+  }
+  k
+}
+
+# Smallest eigenpairs of a sparse Laplacian by shift-and-invert (Lanczos).
+# Returns NULL if RSpectra is missing or does not converge, so that the caller
+# can fall back to a dense eigendecomposition. The shift is tiny so that the
+# wanted (smallest) eigenvalues are well separated after inversion even when
+# they are very close to each other, as on long chains.
+sparse_smallest_eigs <- function(L, k) {
+  n <- nrow(L)
+  if (!requireNamespace("RSpectra", quietly = TRUE)) return(NULL)
+  # RSpectra has methods for general sparse matrices (dgCMatrix) but not for
+  # every symmetric class, so convert explicitly
+  Lg <- methods::as(methods::as(L, "generalMatrix"), "CsparseMatrix")
+  res <- tryCatch(
+    RSpectra::eigs_sym(Lg, k = k, sigma = -1e-6,
+                       opts = list(ncv = min(n, max(2L * k + 1L, 40L)),
+                                   maxitr = 5000L)),
+    error = function(e) NULL)
+  if (is.null(res) || length(res$values) < k || anyNA(res$values)) return(NULL)
+  list(values = res$values, vectors = res$vectors)
+}
+
+# `dense_max`: graphs up to this size use base eigen() directly.
+compute_laplacian_eigenvectors <- function(adj_list, K = 10L, dense_max = 1000L) {
+  W <- methods::as(graph_sparse_W(adj_list), "generalMatrix")
+  W <- methods::as(W, "CsparseMatrix")
+  n <- nrow(W)
+  n_comp <- count_components(W)
+  K <- min(as.integer(K), n - n_comp)
+  if (K < 1L) stop("The graph has too few nodes for the requested K.", call. = FALSE)
+  L <- Matrix::Diagonal(n, x = Matrix::rowSums(W)) - W
+  eig <- if (n > dense_max) sparse_smallest_eigs(L, K + n_comp)
+  if (is.null(eig)) {
+    if (n > 5000L) {
+      stop("The sparse eigensolver is not available or did not converge for a ",
+           "graph with ", n, " nodes. Install 'RSpectra' or supply the ",
+           "auxiliary variables as a matrix.", call. = FALSE)
+    }
+    if (n > dense_max) {
+      message("Using a dense eigendecomposition for a graph with ", n, " nodes.")
+    }
+    eig <- eigen(as.matrix(L), symmetric = TRUE)
+  }
+  ord <- order(eig$values)
+  vals <- eig$values[ord]
+  vecs <- eig$vectors[, ord, drop = FALSE]
+  keep <- n_comp + seq_len(K)
+  phi <- vecs[, keep, drop = FALSE]
+  for (k in seq_len(ncol(phi))) {
+    if (phi[which.max(abs(phi[, k])), k] < 0) phi[, k] <- -phi[, k]
+  }
+  list(phi = phi, lambda = vals[keep], n_components = n_comp)
+}
+
+#' @export
+fit_aux.aux_laplacian <- function(spec, dat) {
+  n <- nrow(dat$X)
+  res <- Map(function(g, k) compute_laplacian_eigenvectors(g$adj_list, k),
+             spec$graphs, spec$K)
+  for (g in spec$graphs) graph_layout(g, n)    # checks that the layout fits the data
+  for (g in seq_along(res)) {
+    colnames(res[[g]]$phi) <- paste0("LAP", g, "_", seq_len(ncol(res[[g]]$phi)))
+  }
+  spec$phi <- lapply(res, `[[`, "phi")
+  spec$lambda <- lapply(res, `[[`, "lambda")   # not `values`: that name is used by covariates
+  spec$n_components <- vapply(res, `[[`, integer(1), "n_components")
+  spec$n_features <- sum(vapply(spec$phi, ncol, integer(1)))
+  spec$fitted <- TRUE
+  spec
+}
+
+#' @export
+transform_aux.aux_laplacian <- function(spec, dat, values, training) {
+  if (is.null(spec$phi)) {
+    stop("The Laplacian auxiliary variables have not been fitted yet.", call. = FALSE)
+  }
+  n <- nrow(dat$X)
+  blocks <- Map(function(g, phi) phi[graph_layout(g, n)$node, , drop = FALSE],
+                spec$graphs, spec$phi)
+  do.call(cbind, blocks)
 }

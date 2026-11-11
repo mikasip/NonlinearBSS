@@ -34,6 +34,8 @@ variables, including time series, spatial
 \item{\code{\link[=iVAEar]{iVAEar()}}}{iVAE with nonstationary autoregressive latent
 components \insertCite{sipila2025ivaear}{NonlinearBSS} for time series,
 spatio-temporal and other data with a time component.}
+\item{\code{\link[=GiVAE]{GiVAE()}}}{Graph identifiable variational autoencoder for data
+with spatial, temporal or network neighbourhoods.}
 }
 }
 
@@ -54,6 +56,7 @@ matrix or created from the spatial and temporal locations by
 Several of them can be combined in a list. Radial basis functions can also
 be computed batch-wise inside the network (\code{batch_aux = TRUE}), which
 avoids storing a large auxiliary matrix.
+Graph and areal data can also use \code{\link[=aux_laplacian]{aux_laplacian()}} and \code{\link[=aux_moran]{aux_moran()}}.
 }
 
 \section{Interpretation}{

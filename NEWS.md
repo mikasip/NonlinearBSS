@@ -84,7 +84,6 @@ Other changes to be aware of:
 * For spatial data only, the Gaussian radial basis functions are no longer
   set to zero beyond distance one, so they are the same as for
   spatio-temporal data.
-* `GiVAE()` is not part of this release.
 
 ## Bug fixes compared to 0.1.0
 

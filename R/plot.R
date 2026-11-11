@@ -58,6 +58,48 @@ map_plot <- function(values, geometry = NULL, xy = NULL, labels = NULL,
                    panel.grid = ggplot2::element_blank())
 }
 
+#' Plot Values on Areal Units
+#'
+#' Draws one or several variables (for example simulated sources or estimated
+#' components) as a choropleth map of the areal units, one panel per column.
+#'
+#' @param areal Output of [generate_areal_units()] (needs the `sf` package), or
+#'   an `sf` object with polygons.
+#' @param values A vector with one value per areal unit, or a matrix with one
+#'   column per panel.
+#' @param labels Panel titles. Defaults to the column names.
+#' @param fill Title of the colour legend.
+#' @param ncol Number of panel columns.
+#' @param palette Viridis palette option, see [ggplot2::scale_fill_viridis_c()].
+#' @param ... Further arguments passed to [ggplot2::geom_sf()].
+#' @return A `ggplot` object.
+#' @examples
+#' \donttest{
+#' if (requireNamespace("sf", quietly = TRUE)) {
+#'   areal <- generate_areal_units(30, n_fine = 300, seed = 1)
+#'   src <- simulate_sources_areal(2, areal = areal, n_time = 5, seed = 1)
+#'   plot_areal(areal, src$sources[src$time == 1, ])
+#' }
+#' }
+#' @export
+plot_areal <- function(areal, values, labels = NULL, fill = "value",
+                       ncol = NULL, palette = "viridis", ...) {
+  require_pkg("sf")
+  geometry <- if (inherits(areal, c("sf", "sfc"))) sf::st_geometry(areal) else areal$areas_sf
+  if (is.null(geometry)) {
+    stop("`areal` has no polygons; the `sf` and `deldir` packages are needed.",
+         call. = FALSE)
+  }
+  geometry <- sf::st_geometry(geometry)
+  values <- as.matrix(values)
+  if (nrow(values) != length(geometry)) {
+    stop("`values` must have one row per areal unit (", length(geometry), ").",
+         call. = FALSE)
+  }
+  map_plot(values, geometry = geometry, labels = labels, fill = fill,
+           ncol = ncol, palette = palette, ...)
+}
+
 # Geometry of the data rows for map plots: polygons or points of sf data,
 # or the sp geometry of STFDF data, NULL for plain coordinates.
 row_geometry <- function(data, rows) {

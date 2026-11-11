@@ -1,0 +1,376 @@
+# Graph specifications for graph-based methods (GiVAE, aux_laplacian).
+#
+# A graph lives on `n_nodes` nodes, but the data have n observations. The
+# layout says which node each observation sits on, and which observations
+# are "in the same context" (same position in all the *other* dimensions of
+# the data, e.g. the same time point for a spatial graph). Neighbours of an
+# observation are the observations in the same context that sit on
+# neighbouring nodes.
+#
+# Layout by `each`: the observations are a regular grid in which the nodes of
+# this graph change every `each` rows and cycle through 1..n_nodes. Then
+#   node(r)    = ((r - 1) %/% each) %% n_nodes + 1
+#   context(r) = (r - 1) %% each + each * ((r - 1) %/% (each * n_nodes)) + 1
+# and n must be divisible by n_nodes * each. Examples, rows ordered with the
+# spatial unit fastest within time (n = n_s * n_t):
+#   spatial  graph (n_s nodes): each = 1    (whole graph repeated n_t times)
+#   temporal graph (n_t nodes): each = n_s  (every node repeated n_s times)
+#   general graph over all n observations: n_nodes = n, each = 1
+#   middle factor of a three-way grid (a fastest, b, c slowest): each = n_a
+#
+# Layout by `node` (and `context`): explicit integer vectors of length n, for
+# unsorted rows or unbalanced data (missing cells simply have fewer
+# neighbours). The pair (node, context) must identify an observation.
+
+#' Graph Specification
+#'
+#' Describes one graph and how its nodes map to the rows of the data. Used by
+#' [GiVAE()] and [aux_laplacian()].
+#'
+#' @param neighborhood A square matrix (nonzero entries of row `i` are the
+#'   neighbours of node `i`) or an adjacency list of 1-based neighbour indices,
+#'   one element per node. The graph may be directed for the GiVAE prior; the
+#'   Laplacian auxiliary variables use the symmetrised graph.
+#' @param each Number of consecutive rows sharing a node, see Details. The
+#'   default `1` repeats the whole graph over the remaining dimensions.
+#' @param node,context Optional integer vectors with one value per row that
+#'   give the node of each row and the context (e.g. the time point) in which
+#'   neighbours are searched. They replace `each`.
+#' @param name Optional label.
+#' @details With `each`, the data must form a regular grid: `nrow(x)` is a
+#'   multiple of `n_nodes * each`. A spatial graph of `n_s` areas for data
+#'   stacked over `n_t` time points uses `each = 1`; a temporal graph of `n_t`
+#'   time points for the same data uses `each = n_s`. A graph with one node
+#'   per observation uses `each = 1` and no repetition.
+#' @return An object of class `nlbss_graph`.
+#' @examples
+#' n_s <- 4; n_t <- 3
+#' W_space <- matrix(0, n_s, n_s); W_space[cbind(1:3, 2:4)] <- 1
+#' W_time <- matrix(0, n_t, n_t); W_time[cbind(1:2, 2:3)] <- 1
+#' W_space <- pmax(W_space, t(W_space)); W_time <- pmax(W_time, t(W_time))
+#' g_space <- nlbss_graph(W_space, name = "space")
+#' g_time  <- nlbss_graph(W_time, each = n_s, name = "time")
+#' @export
+nlbss_graph <- function(neighborhood, each = 1L, node = NULL, context = NULL,
+                        name = NULL) {
+  adj <- as_adj_list(neighborhood)
+  each <- as.integer(each)
+  if (length(each) != 1L || is.na(each) || each < 1L) {
+    stop("`each` must be a positive integer.", call. = FALSE)
+  }
+  if (!is.null(context) && is.null(node)) {
+    stop("`context` can only be given together with `node`.", call. = FALSE)
+  }
+  if (!is.null(node)) {
+    node <- as.integer(node)
+    if (anyNA(node) || any(node < 1L | node > length(adj))) {
+      stop("`node` must contain values between 1 and the number of nodes.",
+           call. = FALSE)
+    }
+    if (!is.null(context) && length(context) != length(node)) {
+      stop("`context` and `node` must have the same length.", call. = FALSE)
+    }
+  }
+  structure(list(adj_list = adj, n_nodes = length(adj), each = each,
+                 node = node, context = context, name = name),
+            class = "nlbss_graph")
+}
+
+#' @export
+print.nlbss_graph <- function(x, ...) {
+  deg <- lengths(x$adj_list)
+  cat("Graph ", if (!is.null(x$name)) paste0("'", x$name, "' "), "with ",
+      x$n_nodes, " nodes (mean degree ", format(mean(deg), digits = 3),
+      ", max ", max(deg), "); ",
+      if (is.null(x$node)) paste0("each = ", x$each) else "explicit node layout",
+      "\n", sep = "")
+  invisible(x)
+}
+
+#' Acyclic (Directed) Version of a Graph
+#'
+#' Keeps, for every node, only the neighbours that come *before* it in a given
+#' order, so that all edges point from earlier to later nodes. A GiVAE prior
+#' built on such graphs is a proper autoregressive (Bayesian network, or
+#' Vecchia-type) model: the matrix of the simultaneous system is triangular
+#' with unit diagonal, so its determinant is 1 and the joint density is
+#' exactly the product of the conditional densities. This holds whatever the
+#' (also negative) coupling coefficients are, and for any number of graphs as
+#' long as all graphs respect the same order of the observations, e.g. time
+#' first, then the order of the areas.
+#'
+#' @param neighborhood A square matrix or an adjacency list, see
+#'   [nlbss_graph()].
+#' @param order Optional numeric vector with one value per node giving the
+#'   order, e.g. a coordinate. Nodes with a smaller value come first. Defaults
+#'   to the node numbering.
+#' @inheritParams nlbss_graph
+#' @return An object of class `nlbss_graph` with directed edges.
+#' @examples
+#' W <- matrix(0, 4, 4); W[cbind(1:3, 2:4)] <- 1; W <- pmax(W, t(W))
+#' nlbss_dag(W, order = c(2, 1, 4, 3))
+#' @export
+nlbss_dag <- function(neighborhood, order = NULL, each = 1L, node = NULL,
+                      context = NULL, name = NULL) {
+  adj <- as_adj_list(neighborhood)
+  n <- length(adj)
+  if (!is.null(order) && length(order) != n) {
+    stop("`order` must have one value per node.", call. = FALSE)
+  }
+  pos <- if (is.null(order)) seq_len(n) else rank(order, ties.method = "first")
+  adj <- lapply(seq_len(n), function(i) adj[[i]][pos[adj[[i]]] < pos[i]])
+  nlbss_graph(adj, each = each, node = node, context = context, name = name)
+}
+
+#' Temporal Graph
+#'
+#' Convenience constructor for the graph of a time axis: time point `t` has the
+#' previous `lags` time points as neighbours, so the GiVAE prior mean of a row
+#' is built from the same unit's earlier encodings, as in an autoregressive
+#' model. The first time points have fewer neighbours (none for `t = 1`).
+#'
+#' @param n_time Number of distinct time points (nodes).
+#' @param each Number of consecutive rows sharing a time point. For data
+#'   stacked as `n_s` units within each time point this is `n_s`.
+#' @param lags Number of previous time points used as neighbours.
+#' @param node,context Optional explicit layout for unsorted data: the time
+#'   point of each row and, as context, the unit it belongs to. See
+#'   [nlbss_graph()].
+#' @param name Optional label.
+#' @param directed If `FALSE` the following time points are neighbours too.
+#'   The Laplacian auxiliary variables use the symmetrised graph either way.
+#' @return An object of class `nlbss_graph`.
+#' @examples
+#' nlbss_time_graph(100, each = 20)   # 20 areas observed at 100 time points
+#' @export
+nlbss_time_graph <- function(n_time, each = 1L, lags = 1L, directed = TRUE,
+                             node = NULL, context = NULL, name = "time") {
+  lags <- as.integer(lags)
+  if (length(lags) != 1L || is.na(lags) || lags < 1L) {
+    stop("`lags` must be a positive integer.", call. = FALSE)
+  }
+  adj <- lapply(seq_len(n_time), function(t) {
+    nb <- t - seq_len(lags)
+    if (!directed) nb <- c(nb, t + seq_len(lags))
+    nb[nb >= 1L & nb <= n_time]
+  })
+  nlbss_graph(adj, each = each, node = node, context = context, name = name)
+}
+
+#' Spatial Graph for Geostatistical Data
+#'
+#' Builds a graph over continuous point locations, either from a Delaunay
+#' triangulation or from distances. Each location is a node.
+#'
+#' @param coords An `n x 2` matrix (or data frame) of locations.
+#' @param method `"triangulation"` (Delaunay triangulation, needs the
+#'   `deldir` package) or `"distance"`.
+#' @param order For `method = "triangulation"`: neighbours of order `1` share
+#'   a triangulation edge, order `2` also include the neighbours of neighbours
+#'   (reachable in at most 2 edges), and so on.
+#' @param dist For `method = "distance"`: two locations are neighbours when
+#'   their Euclidean distance is at most `dist`.
+#' @inheritParams nlbss_graph
+#' @param name Optional label.
+#' @return An undirected object of class `nlbss_graph`. Use [nlbss_dag()] on
+#'   `x$adj_list` for an acyclic version.
+#' @examples
+#' xy <- cbind(runif(50), runif(50))
+#' nlbss_space_graph(xy, "distance", dist = 0.2)
+#' if (requireNamespace("deldir", quietly = TRUE)) {
+#'   nlbss_space_graph(xy, "triangulation", order = 2)
+#' }
+#' @export
+nlbss_space_graph <- function(coords, method = c("triangulation", "distance"),
+                              order = 1L, dist = NULL, each = 1L,
+                              node = NULL, context = NULL, name = "space") {
+  method <- match.arg(method)
+  coords <- as.matrix(coords)
+  if (ncol(coords) != 2L || !is.numeric(coords) || anyNA(coords)) {
+    stop("`coords` must be a numeric n x 2 matrix without missing values.",
+         call. = FALSE)
+  }
+  n <- nrow(coords)
+  if (n < 2L) stop("At least two locations are needed.", call. = FALSE)
+
+  if (method == "distance") {
+    if (is.null(dist) || length(dist) != 1L || !is.finite(dist) || dist <= 0) {
+      stop("`dist` must be a single positive number for method = \"distance\".",
+           call. = FALSE)
+    }
+    D <- as.matrix(stats::dist(coords))
+    A <- D <= dist
+    diag(A) <- FALSE
+  } else {
+    order <- as.integer(order)
+    if (length(order) != 1L || is.na(order) || order < 1L) {
+      stop("`order` must be a positive integer.", call. = FALSE)
+    }
+    if (n < 3L) stop("At least three locations are needed for a triangulation.",
+                     call. = FALSE)
+    if (anyDuplicated(coords)) {
+      stop("`coords` contains duplicated locations.", call. = FALSE)
+    }
+    if (!requireNamespace("deldir", quietly = TRUE)) {
+      stop("The `deldir` package is required for method = \"triangulation\".",
+           call. = FALSE)
+    }
+    del <- deldir::deldir(coords[, 1], coords[, 2], suppressMsge = TRUE)
+    A1 <- matrix(FALSE, n, n)
+    A1[cbind(del$delsgs$ind1, del$delsgs$ind2)] <- TRUE
+    A1 <- A1 | t(A1)
+    A <- A1
+    reach <- A1
+    for (k in seq_len(order - 1L)) {
+      reach <- (reach %*% A1 > 0) | reach
+      if (identical(reach, A)) break
+      A <- reach
+    }
+    diag(A) <- FALSE
+  }
+  adj <- lapply(seq_len(n), function(i) which(A[i, ]))
+  nlbss_graph(adj, each = each, node = node, context = context, name = name)
+}
+
+as_adj_list <- function(g) {
+  if (is.list(g) && !is.data.frame(g)) {
+    adj <- lapply(g, function(v) as.integer(v))
+  } else {
+    W <- as.matrix(g)
+    if (nrow(W) != ncol(W)) stop("A graph matrix must be square.", call. = FALSE)
+    adj <- lapply(seq_len(nrow(W)), function(i) {
+      nb <- which(W[i, ] != 0)
+      as.integer(nb[nb != i])
+    })
+  }
+  n <- length(adj)
+  if (n < 2L) stop("A graph needs at least two nodes.", call. = FALSE)
+  if (all(lengths(adj) == 0L)) stop("The graph has no edges.", call. = FALSE)
+  for (i in seq_len(n)) {
+    nb <- adj[[i]]
+    if (anyNA(nb) || any(nb < 1L | nb > n)) {
+      stop("Neighbour indices must be between 1 and the number of nodes.",
+           call. = FALSE)
+    }
+    adj[[i]] <- unique(nb[nb != i])
+  }
+  adj
+}
+
+# One graph, a list of graphs, or a matrix / adjacency list (-> one graph with
+# the default layout) -> list of nlbss_graph objects.
+as_graph_list <- function(x) {
+  if (inherits(x, "nlbss_graph")) return(list(x))
+  if (is.matrix(x) || inherits(x, "Matrix")) return(list(nlbss_graph(x)))
+  if (is.list(x) && length(x) > 0L) {
+    first <- x[[1]]
+    # an adjacency list has integer vectors as elements; a list of graphs has
+    # graph objects, matrices or adjacency lists
+    multiple <- inherits(first, "nlbss_graph") || is.matrix(first) ||
+      inherits(first, "Matrix") || is.list(first)
+    if (multiple) {
+      return(lapply(x, function(g) if (inherits(g, "nlbss_graph")) g else nlbss_graph(g)))
+    }
+    return(list(nlbss_graph(x)))
+  }
+  stop("`graphs` must be a graph specification, a matrix, an adjacency list ",
+       "or a list of these.", call. = FALSE)
+}
+
+# Node and context of each of the n rows: list(node, context, n_context).
+graph_layout <- function(graph, n) {
+  n_g <- graph$n_nodes
+  if (!is.null(graph$node)) {
+    if (length(graph$node) != n) {
+      stop("The explicit `node` layout has length ", length(graph$node),
+           " but the data have ", n, " rows.", call. = FALSE)
+    }
+    node <- graph$node
+    context <- if (is.null(graph$context)) rep(1L, n) else {
+      match(graph$context, unique(graph$context))
+    }
+    if (anyDuplicated(cbind(node, context))) {
+      stop("Several rows have the same node and context. Give `context` ",
+           "(for example the time point) so that each row is identified.",
+           call. = FALSE)
+    }
+  } else {
+    e <- graph$each
+    if (n %% (n_g * e) != 0L) {
+      stop("The number of rows (", n, ") must be a multiple of the number of ",
+           "nodes times `each` (", n_g, " x ", e, ") for graph ",
+           if (!is.null(graph$name)) paste0("'", graph$name, "'") else "",
+           ".", call. = FALSE)
+    }
+    r <- seq_len(n) - 1L
+    node <- (r %/% e) %% n_g + 1L
+    context <- r %% e + e * (r %/% (e * n_g)) + 1L
+  }
+  list(node = as.integer(node), context = as.integer(context),
+       n_context = max(context))
+}
+
+# Row indices (observations) of the neighbours of every observation.
+graph_neighbors <- function(graph, n) {
+  lay <- graph_layout(graph, n)
+  n_g <- graph$n_nodes
+  row_of <- integer(n_g * lay$n_context)
+  row_of[(lay$context - 1L) * n_g + lay$node] <- seq_len(n)
+  adj <- graph$adj_list
+  lapply(seq_len(n), function(i) {
+    nb <- adj[[lay$node[i]]]
+    if (length(nb) == 0L) return(integer(0))
+    r <- row_of[(lay$context[i] - 1L) * n_g + nb]
+    r[r > 0L]
+  })
+}
+
+# Padded neighbour index of all graphs: an n x (G * M) integer matrix (graph g
+# occupies columns (g - 1) * M + 1, ..., g * M; NA = no neighbour).
+build_neighbor_index <- function(graphs, n, max_neighbors = NULL) {
+  nbs <- lapply(graphs, graph_neighbors, n = n)
+  if (!is.null(max_neighbors)) {
+    cap <- as.integer(max_neighbors)
+    nbs <- lapply(nbs, function(nb) {
+      lapply(nb, function(v) if (length(v) > cap) sort(sample(v, cap)) else v)
+    })
+  }
+  G <- length(graphs)
+  M <- max(1L, max(vapply(nbs, function(nb) max(lengths(nb)), integer(1))))
+  index <- matrix(NA_integer_, n, G * M)
+  for (g in seq_len(G)) {
+    lens <- lengths(nbs[[g]])
+    if (sum(lens) == 0L) next
+    index[cbind(rep(seq_len(n), lens), (g - 1L) * M + sequence(lens))] <-
+      unlist(nbs[[g]], use.names = FALSE)
+  }
+  list(index = index, G = G, M = M,
+       degree = vapply(nbs, function(nb) lengths(nb), integer(n)))
+}
+
+# Prior mean of the graph prior, computed from the encoder means Z, for every
+# latent component l (prior$rho: n x L, prior$beta: n x G x L):
+#   tau_l(u_i) + rho_max * rho_l(u_i) * sum_g beta_{g,l}(u_i) * mean_{j in N_g(i)} (z_jl - tau_jl)
+# (the trend tau, prior$mean, is optional)
+graph_prior_mean <- function(prior, Z, neigh, rho_max) {
+  n <- nrow(Z)
+  L <- ncol(Z)
+  beta <- array(prior$beta, c(n, neigh$G, L))
+  rho <- matrix(prior$rho, n, L)
+  if (!is.null(prior$mean)) Z <- Z - prior$mean   # neighbours centred at their trend
+  agg <- matrix(0, n, L)
+  for (g in seq_len(neigh$G)) {
+    num <- matrix(0, n, ncol(Z))
+    cnt <- numeric(n)
+    for (k in seq_len(neigh$M)) {
+      j <- neigh$index[, (g - 1L) * neigh$M + k]
+      ok <- which(!is.na(j))
+      num[ok, ] <- num[ok, , drop = FALSE] + Z[j[ok], , drop = FALSE]
+      cnt[ok] <- cnt[ok] + 1
+    }
+    agg <- agg + matrix(beta[, g, ], n, L) * num / pmax(cnt, 1)
+  }
+  out <- rho_max * rho * agg
+  if (!is.null(prior$mean)) out <- out + prior$mean
+  out
+}

@@ -12,6 +12,7 @@ independent latent components `z`. The package estimates the components with
 | `VAE()`    | Variational autoencoder (not identifiable, a baseline) | i.i.d. data |
 | `iVAE()`   | Identifiable variational autoencoder | any data with auxiliary variables: time series, spatial, spatio-temporal |
 | `iVAEar()` | iVAE with nonstationary autoregressive components | time series, spatio-temporal and other data with a time component |
+| `GiVAE()` | Graph identifiable variational autoencoder | areal data and networks |
 
 ## Installation
 

@@ -20,21 +20,27 @@ BugReports: https://github.com/mikasip/NonlinearBSS/issues
 Depends:
     R (>= 4.1.0)
 Imports:
+    deldir,
     generics,
     ggplot2,
     graphics,
     grDevices,
+    igraph,
     keras3 (>= 1.2.0),
     kernelshap,
+    Matrix,
+    methods,
     RcppHungarian,
     Rdpack,
     reticulate,  
     stats,
+    tensorflow,
     utils
 Suggests:
     ICS,
     knitr,
     rmarkdown,
+    RSpectra,
     sf,
     sftime,
     sp,

@@ -3,7 +3,8 @@ method_title <- function(method) {
     TCL = "Time contrastive learning (TCL)",
     VAE = "Variational autoencoder (VAE)",
     iVAE = "Identifiable variational autoencoder (iVAE)",
-    iVAEar = "Identifiable variational autoencoder with autoregressive components (iVAEar)"
+    iVAEar = "Identifiable variational autoencoder with autoregressive components (iVAEar)",
+    GiVAE = "Graph identifiable variational autoencoder (GiVAE)"
   )
 }
 
@@ -65,7 +66,17 @@ print.nlbss <- function(x, ...) {
       " variables, format ", x$data$format, ")\n", sep = "")
   cat("Latent components: ", x$latent_dim, if (x$ar_order > 0)
     paste0(", autoregressive order ", x$ar_order), "\n", sep = "")
-  if (x$method %in% c("iVAE", "iVAEar")) {
+  if (x$method == "GiVAE") {
+    for (g in x$graphs) cat("  ", format_graph(g), "\n", sep = "")
+    cat("  Neighbour slots per graph: ", x$neighbors$M, ", rho_max: ", x$rho_max, "\n", sep = "")
+    if (!is.null(x$jacobian) && x$jacobian$mode != "none") {
+      cat("  Jacobian term: ", x$jacobian$mode, " (", x$jacobian$components,
+          " components, largest ", x$jacobian$largest, ")\n", sep = "")
+    } else {
+      cat("  Jacobian term: none\n")
+    }
+  }
+  if (x$method %in% c("iVAE", "iVAEar", "GiVAE")) {
     for (s in x$aux$specs) cat(format(s), "\n", sep = "")
     if (isTRUE(x$aux$batch)) cat("Auxiliary variables computed batch-wise\n")
   }

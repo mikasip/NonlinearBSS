@@ -27,6 +27,8 @@
 #'   \item{[iVAEar()]}{iVAE with nonstationary autoregressive latent
 #'   components \insertCite{sipila2025ivaear}{NonlinearBSS} for time series,
 #'   spatio-temporal and other data with a time component.}
+#'   \item{[GiVAE()]}{Graph identifiable variational autoencoder for data
+#'   with spatial, temporal or network neighbourhoods.}
 #' }
 #'
 #' @section Data formats:
@@ -43,6 +45,7 @@
 #' Several of them can be combined in a list. Radial basis functions can also
 #' be computed batch-wise inside the network (`batch_aux = TRUE`), which
 #' avoids storing a large auxiliary matrix.
+#' Graph and areal data can also use [aux_laplacian()] and [aux_moran()].
 #'
 #' @section Interpretation:
 #' [mshap()] computes mean absolute SHAP values of the decoder, which show
